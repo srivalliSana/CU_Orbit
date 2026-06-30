@@ -21,7 +21,7 @@ console.log(`DB_NAME: ${dbConfig.name}`);
 console.log(`DB_USER: ${dbConfig.user}`);
 console.log(`DB_HOST: ${dbConfig.host}`);
 console.log(`DB_PORT: ${dbConfig.port}`);
-console.log(`DB_PASS: ${dbConfig.pass ? '********' : '(not set)'}`);
+console.log(`DB_PASS: ${dbConfig.pass ? '********' + (process.env.DB_PASS ? ' (from .env)' : ' (using default)') : '(not set)'}`);
 console.log('------------------------------');
 
 const sequelize = new Sequelize(

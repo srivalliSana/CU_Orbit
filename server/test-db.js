@@ -13,6 +13,7 @@ async function testConnection() {
 
     console.log(`Target: ${config.user}@${config.host}:${config.port}`);
     console.log(`Database: ${config.database}`);
+    console.log(`Password: ${config.password ? '********' + (process.env.DB_PASS ? ' (from .env)' : ' (using default)') : '(not set)'}`);
 
     try {
         const connection = await mysql.createConnection(config);
