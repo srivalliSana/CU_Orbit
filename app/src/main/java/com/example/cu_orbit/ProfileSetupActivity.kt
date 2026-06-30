@@ -2,6 +2,7 @@ package com.example.cu_orbit
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -30,10 +31,19 @@ class ProfileSetupActivity : AppCompatActivity() {
             val dept = editDept.text.toString().trim()
 
             if (name.isNotEmpty() && email.isNotEmpty()) {
+                hideKeyboard()
                 registerUser(phone, name, email, dept)
             } else {
                 Toast.makeText(this, "Please fill in all required fields", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    private fun hideKeyboard() {
+        val view = this.currentFocus
+        if (view != null) {
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.hideSoftInputFromWindow(view.windowToken, 0)
         }
     }
 

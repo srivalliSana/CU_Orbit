@@ -2,6 +2,7 @@ package com.example.cu_orbit
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -25,6 +26,7 @@ class LoginActivity : AppCompatActivity() {
         buttonContinue.setOnClickListener {
             val phone = editPhone.text.toString().trim()
             if (phone.length == 10) {
+                hideKeyboard()
                 buttonContinue.isEnabled = false // Prevent multiple clicks
                 sendOtp(phone, buttonContinue)
             } else {
@@ -34,6 +36,14 @@ class LoginActivity : AppCompatActivity() {
 
         buttonGoogle.setOnClickListener {
             Toast.makeText(this, "Continue with Google clicked", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun hideKeyboard() {
+        val view = this.currentFocus
+        if (view != null) {
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.hideSoftInputFromWindow(view.windowToken, 0)
         }
     }
 

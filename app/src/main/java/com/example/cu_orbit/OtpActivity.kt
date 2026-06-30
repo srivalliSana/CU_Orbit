@@ -3,6 +3,7 @@ package com.example.cu_orbit
 import android.Manifest
 import android.content.Intent
 import android.os.Bundle
+import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.ImageButton
 import android.widget.TextView
@@ -32,10 +33,19 @@ class OtpActivity : AppCompatActivity() {
         buttonVerify.setOnClickListener {
             val otp = editOtp.text.toString().trim()
             if (otp.length == 6) {
+                hideKeyboard()
                 verifyOtp(phone, otp)
             } else {
                 Toast.makeText(this, "Please enter 6-digit OTP", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    private fun hideKeyboard() {
+        val view = this.currentFocus
+        if (view != null) {
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.hideSoftInputFromWindow(view.windowToken, 0)
         }
     }
 

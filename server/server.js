@@ -8,21 +8,73 @@ app.use(express.json());
 app.use(cors());
 
 // MYSQL CONNECTION
+const dbConfig = {
+    name: process.env.DB_NAME || 'cu_orbit',
+    user: process.env.DB_USER || 'root',
+    pass: process.env.DB_PASS || '@123456Valli',
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 3306
+};
+
+console.log('--- Database Configuration ---');
+console.log(`DB_NAME: ${dbConfig.name}`);
+console.log(`DB_USER: ${dbConfig.user}`);
+console.log(`DB_HOST: ${dbConfig.host}`);
+console.log(`DB_PORT: ${dbConfig.port}`);
+console.log(`DB_PASS: ${dbConfig.pass ? '********' : '(not set)'}`);
+console.log('------------------------------');
+
 const sequelize = new Sequelize(
-    process.env.DB_NAME || 'cu_orbit',
-    process.env.DB_USER || 'root',
-    process.env.DB_PASS || '@123456Valli',
+    dbConfig.name,
+    dbConfig.user,
+    dbConfig.pass,
     {
-        host: process.env.DB_HOST || 'localhost',
+        host: dbConfig.host,
+        port: dbConfig.port,
         dialect: 'mysql',
-        logging: false
+        logging: false,
+        pool: {
+            max: 5,
+            min: 0,
+            acquire: 30000,
+            idle: 10000
+        }
     }
 );
 
 // Test connection
 sequelize.authenticate()
-    .then(() => console.log('✅ MySQL Connected Successfully'))
-    .catch(err => console.error('❌ MySQL Connection Error:', err));
+    .then(() => {
+        console.log('✅ MySQL Connected Successfully');
+        // Sync database after successful authentication
+        return sequelize.sync({ alter: true });
+    })
+    .then(() => console.log('✅ Database Synced & Models Ready'))
+    .catch(err => {
+        console.error('❌ MySQL Initialization Error:');
+        console.error('Message:', err.message);
+        if (err.name === 'SequelizeAccessDeniedError') {
+            console.error('👉 Tip: Check your DB_USER and DB_PASS in .env file.');
+        }
+    });
+
+// Health check route
+app.get('/api/health', async (req, res) => {
+    try {
+        await sequelize.authenticate();
+        res.json({ 
+            status: 'online', 
+            database: 'connected',
+            server_time: new Date().toISOString()
+        });
+    } catch (err) {
+        res.status(503).json({ 
+            status: 'online', 
+            database: 'disconnected', 
+            error: err.message 
+        });
+    }
+});
 
 // MODELS
 const User = sequelize.define('User', {
@@ -85,10 +137,6 @@ const Otp = sequelize.define('Otp', {
     createdAt: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 });
 
-// Sync database
-sequelize.sync({ alter: true })
-    .then(() => console.log('✅ Database Synced'))
-    .catch(err => console.error('❌ Sync Error:', err));
 
 // AUTH ROUTES
 app.post('/api/auth/send-otp', async (req, res) => {
