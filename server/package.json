@@ -1,6 +1,6 @@
 {
   "name": "cu-orbit-server",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Backend for CU Orbit Slack Clone",
   "main": "server.js",
   "scripts": {

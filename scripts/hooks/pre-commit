@@ -1,0 +1,4 @@
+#!/bin/sh
+echo "Running pre-commit hook: Incrementing versions..."
+powershell.exe -ExecutionPolicy Bypass -File scripts/increment_version.ps1
+git add app/build.gradle.kts server/package.json
