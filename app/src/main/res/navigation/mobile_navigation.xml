@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/mobile_navigation"
+    app:startDestination="@id/navigation_home">
+
+    <fragment
+        android:id="@+id/navigation_home"
+        android:name="com.example.cu_orbit.ui.home.HomeFragment"
+        android:label="@string/title_home"
+        tools:layout="@layout/fragment_home" />
+
+    <fragment
+        android:id="@+id/navigation_dms"
+        android:name="com.example.cu_orbit.ui.dms.DmsFragment"
+        android:label="@string/title_dms"
+        tools:layout="@layout/fragment_dms" />
+
+    <fragment
+        android:id="@+id/navigation_activity"
+        android:name="com.example.cu_orbit.ui.mentions.MentionsFragment"
+        android:label="@string/title_activity"
+        tools:layout="@layout/fragment_mentions" />
+
+    <fragment
+        android:id="@+id/navigation_more"
+        android:name="com.example.cu_orbit.ui.search.SearchFragment"
+        android:label="@string/title_more"
+        tools:layout="@layout/fragment_search" />
+
+    <fragment
+        android:id="@+id/navigation_profile"
+        android:name="com.example.cu_orbit.ui.you.YouFragment"
+        android:label="@string/title_profile"
+        tools:layout="@layout/fragment_you" />
+
+    <fragment
+        android:id="@+id/navigation_chat"
+        android:name="com.example.cu_orbit.ui.chat.ChatFragment"
+        android:label="Chat">
+        <argument
+            android:name="channelName"
+            app:argType="string" />
+        <argument
+            android:name="channelId"
+            app:argType="string" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_create_channel"
+        android:name="com.example.cu_orbit.ui.home.CreateChannelFragment"
+        android:label="Create Channel" />
+
+    <fragment
+        android:id="@+id/navigation_settings"
+        android:name="com.example.cu_orbit.ui.you.SettingsFragment"
+        android:label="Preferences" />
+
+    <fragment
+        android:id="@+id/navigation_select_contact"
+        android:name="com.example.cu_orbit.ui.dms.SelectContactFragment"
+        android:label="Select Contact" />
+
+    <fragment
+        android:id="@+id/navigation_thread"
+        android:name="com.example.cu_orbit.ui.chat.ThreadFragment"
+        android:label="Thread">
+        <argument
+            android:name="parentMessage"
+            app:argType="string" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_contact_info"
+        android:name="com.example.cu_orbit.ui.chat.ContactInfoFragment"
+        android:label="Contact Info">
+        <argument
+            android:name="userId"
+            app:argType="string" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_edit_profile"
+        android:name="com.example.cu_orbit.ui.you.EditProfileFragment"
+        android:label="Edit Profile" />
+</navigation>

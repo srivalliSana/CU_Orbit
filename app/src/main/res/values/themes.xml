@@ -1,0 +1,32 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Base.Theme.CU_Orbit" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Customize your light theme here. -->
+        <item name="colorPrimary">@color/orbit_primary</item>
+        <item name="colorSecondary">@color/orbit_accent</item>
+        <item name="android:windowBackground">@color/orbit_background</item>
+        <item name="android:statusBarColor">@color/orbit_surface</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="colorSurface">@color/orbit_surface</item>
+        <item name="android:navigationBarColor">@color/orbit_surface</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
+    </style>
+
+    <style name="Theme.CU_Orbit" parent="Base.Theme.CU_Orbit" />
+
+    <style name="CircleImage" parent="">
+        <item name="cornerSize">50%</item>
+    </style>
+    <style name="ProfileOption" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:paddingTop">16dp</item>
+        <item name="android:paddingBottom">16dp</item>
+        <item name="android:paddingLeft">20dp</item>
+        <item name="android:paddingRight">20dp</item>
+        <item name="android:textColor">@color/orbit_text_primary</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:drawablePadding">16dp</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+    </style>
+</resources>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="white">#FF0F172A</color>
+    <color name="black">#FFFFFFFF</color>
+
+    <!-- Neutrals -->
+    <color name="orbit_background">#0F172A</color>
+    <color name="orbit_surface">#1E293B</color>
+    <color name="orbit_text_primary">#F8FAFC</color>
+    <color name="orbit_text_secondary">#94A3B8</color>
+    <color name="orbit_border">#334155</color>
+
+    <!-- Functional Colors for Night Mode -->
+    <color name="orbit_primary">#38BDF8</color>
+    <color name="orbit_accent">#38BDF8</color>
+    <color name="orbit_success">#10B981</color>
+    <color name="orbit_warning">#F59E0B</color>
+    <color name="orbit_error">#EF4444</color>
+
+    <!-- Dark backgrounds for options -->
+    <color name="orbit_purple_bg">#3B0764</color>
+    <color name="orbit_blue_bg">#172554</color>
+    <color name="orbit_green_bg">#052E16</color>
+
+    <!-- Slack Mapping for Compatibility -->
+    <color name="slack_primary">@color/orbit_primary</color>
+    <color name="slack_background">@color/orbit_background</color>
+    <color name="slack_text_primary">@color/orbit_text_primary</color>
+    <color name="slack_text_secondary">@color/orbit_text_secondary</color>
+    <color name="slack_border">@color/orbit_border</color>
+    <color name="slack_online">@color/orbit_success</color>
+    <color name="slack_away">@color/orbit_warning</color>
+    <color name="slack_dnd">@color/orbit_error</color>
+    <color name="slack_offline">@color/orbit_text_secondary</color>
+    <color name="slack_unread">@color/orbit_accent</color>
+</resources>

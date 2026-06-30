@@ -1,0 +1,49 @@
+<resources>
+    <string name="app_name">CU Orbit</string>
+    <string name="title_home">Home</string>
+    <string name="title_dms">DMs</string>
+    <string name="title_activity">Activity</string>
+    <string name="title_more">More</string>
+    <string name="title_profile">You</string>
+
+    <!-- Login & Auth -->
+    <string name="sign_in_title">Sign in to CU Orbit</string>
+    <string name="phone_hint">Phone Number</string>
+    <string name="button_continue">Continue</string>
+    <string name="or_text">OR</string>
+    <string name="google_sign_in">Continue with Google</string>
+    <string name="verify_title">Verify your number</string>
+    <string name="otp_sent_text">We\'ve sent a 6-digit code to +91 %1$s</string>
+    <string name="otp_hint">6-Digit OTP</string>
+    <string name="button_verify">Verify &amp; Continue</string>
+    <string name="resend_text">Didn\'t receive the code? Resend</string>
+
+    <!-- Create Channel -->
+    <string name="create_channel_title">Create a channel</string>
+    <string name="create_channel_desc">Channels are where your team communicates. They’re best when organized around a topic — like #marketing.</string>
+    <string name="name_hint">Name</string>
+    <string name="desc_hint">Description (optional)</string>
+    <string name="make_private">Make private</string>
+    <string name="private_desc">When a channel is set to private, it can only be viewed or joined by invitation.</string>
+    <string name="button_create">Create</string>
+
+    <!-- Profile -->
+    <string name="status_meeting">In a meeting</string>
+    <string name="pause_text">Pause</string>
+    <string name="set_status_text">Set Status</string>
+    <string name="edit_profile_text">Edit Profile</string>
+    <string name="notifications_text">Notifications</string>
+    <string name="preferences_text">Preferences</string>
+    <string name="saved_items_text">Saved Items</string>
+
+    <!-- Edit Profile -->
+    <string name="edit_profile_title">Edit Profile</string>
+    <string name="save_text">Save</string>
+    <string name="name_label">Name</string>
+    <string name="about_label">About</string>
+    <string name="bio_hint">Write a short bio...</string>
+    <string name="status_available">Available</string>
+    <string name="status_busy">Busy</string>
+    <string name="status_at_work">At Work</string>
+    <string name="status_in_meeting">In a Meeting</string>
+</resources>

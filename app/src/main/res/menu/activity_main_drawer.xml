@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item android:title="Your Workspaces">
+        <menu>
+            <group android:checkableBehavior="single">
+                <item
+                    android:id="@+id/nav_workspace_1"
+                    android:icon="@drawable/ic_home"
+                    android:title="CU Orbit" />
+                <item
+                    android:id="@+id/nav_workspace_2"
+                    android:icon="@drawable/ic_home"
+                    android:title="Computer Science" />
+            </group>
+
+            <item
+                android:id="@+id/nav_add_workspace"
+                android:icon="@android:drawable/ic_menu_add"
+                android:title="Add a Workspace" />
+        </menu>
+    </item>
+
+    <item android:title="Settings">
+        <menu>
+            <item
+                android:id="@+id/navigation_settings"
+                android:icon="@android:drawable/ic_menu_preferences"
+                android:title="Preferences" />
+            <item
+                android:id="@+id/nav_help"
+                android:icon="@android:drawable/ic_menu_help"
+                android:title="Help &amp; Feedback" />
+        </menu>
+    </item>
+
+</menu>
