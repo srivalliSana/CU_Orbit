@@ -11,6 +11,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.cu_orbit.network.RetrofitClient
+import com.example.cu_orbit.utils.AppUtils
 import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.launch
 
@@ -69,7 +70,8 @@ class OtpActivity : AppCompatActivity() {
                     Toast.makeText(this@OtpActivity, "Invalid OTP", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                Toast.makeText(this@OtpActivity, "Invalid OTP or Server Error", Toast.LENGTH_SHORT).show()
+                e.printStackTrace()
+                Toast.makeText(this@OtpActivity, AppUtils.getErrorMessage(e), Toast.LENGTH_LONG).show()
             }
         }
     }

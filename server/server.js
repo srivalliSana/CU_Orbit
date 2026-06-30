@@ -1,18 +1,23 @@
 const express = require('express');
 const { Sequelize, DataTypes } = require('sequelize');
 const cors = require('cors');
+require('dotenv').config();
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
 // MYSQL CONNECTION
-// Format: 'mysql://user:password@localhost:3306/database_name'
-const sequelize = new Sequelize('cu_orbit', 'root', '@123456Valli', {
-    host: 'localhost',
-    dialect: 'mysql',
-    logging: false
-});
+const sequelize = new Sequelize(
+    process.env.DB_NAME || 'cu_orbit',
+    process.env.DB_USER || 'root',
+    process.env.DB_PASS || '@123456Valli',
+    {
+        host: process.env.DB_HOST || 'localhost',
+        dialect: 'mysql',
+        logging: false
+    }
+);
 
 // Test connection
 sequelize.authenticate()
@@ -293,8 +298,8 @@ app.get('/api/users', async (req, res) => {
     }
 });
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 CU Orbit Server ready at http://localhost:${PORT}`);
+    console.log(`🚀 CU Orbit Server ready at https://cumessenger.thegttech.com`);
     console.log(`📡 MySQL migration complete.`);
 });

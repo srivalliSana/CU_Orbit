@@ -57,7 +57,7 @@ class MainActivity : AppCompatActivity() {
         
         appBarConfiguration = AppBarConfiguration(
             setOf(
-                R.id.navigation_home, R.id.navigation_dms, R.id.navigation_activity, R.id.navigation_more, R.id.navigation_profile
+                R.id.navigation_home, R.id.navigation_dms, R.id.navigation_status, R.id.navigation_calls, R.id.navigation_profile
             ), drawerLayout
         )
         setupActionBarWithNavController(navController, appBarConfiguration)

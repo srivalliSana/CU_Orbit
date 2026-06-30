@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.cu_orbit.network.RetrofitClient
+import com.example.cu_orbit.utils.AppUtils
 import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.launch
 
@@ -62,7 +63,8 @@ class ProfileSetupActivity : AppCompatActivity() {
                     finish()
                 }
             } catch (e: Exception) {
-                Toast.makeText(this@ProfileSetupActivity, "Error saving profile", Toast.LENGTH_SHORT).show()
+                e.printStackTrace()
+                Toast.makeText(this@ProfileSetupActivity, AppUtils.getErrorMessage(e), Toast.LENGTH_LONG).show()
             }
         }
     }

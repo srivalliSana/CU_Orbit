@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.cu_orbit.network.RetrofitClient
+import com.example.cu_orbit.utils.AppUtils
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.launch
@@ -49,7 +50,7 @@ class LoginActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                Toast.makeText(this@LoginActivity, "Error connecting to server. Check your IP and connection.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@LoginActivity, AppUtils.getErrorMessage(e), Toast.LENGTH_LONG).show()
             } finally {
                 button.isEnabled = true
             }

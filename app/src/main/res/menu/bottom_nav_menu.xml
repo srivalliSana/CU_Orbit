@@ -9,13 +9,13 @@
         android:icon="@drawable/ic_chat"
         android:title="DMs" />
     <item
-        android:id="@+id/navigation_activity"
-        android:icon="@drawable/ic_notifications"
-        android:title="Activity" />
+        android:id="@+id/navigation_status"
+        android:icon="@android:drawable/ic_menu_camera"
+        android:title="Status" />
     <item
-        android:id="@+id/navigation_more"
-        android:icon="@drawable/ic_search"
-        android:title="More" />
+        android:id="@+id/navigation_calls"
+        android:icon="@android:drawable/ic_menu_call"
+        android:title="Calls" />
     <item
         android:id="@+id/navigation_profile"
         android:icon="@drawable/ic_person"

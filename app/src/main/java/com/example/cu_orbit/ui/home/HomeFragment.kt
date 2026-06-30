@@ -117,7 +117,7 @@ class HomeFragment : Fragment() {
     private fun setupSearch(root: View) {
         val searchBar: com.google.android.material.search.SearchBar = root.findViewById(R.id.search_bar)
         searchBar.setOnClickListener {
-            findNavController().navigate(R.id.navigation_more)
+            findNavController().navigate(R.id.navigation_profile)
         }
     }
 }

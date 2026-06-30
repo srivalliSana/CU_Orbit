@@ -18,16 +18,16 @@
         tools:layout="@layout/fragment_dms" />
 
     <fragment
-        android:id="@+id/navigation_activity"
-        android:name="com.example.cu_orbit.ui.mentions.MentionsFragment"
-        android:label="@string/title_activity"
-        tools:layout="@layout/fragment_mentions" />
+        android:id="@+id/navigation_status"
+        android:name="com.example.cu_orbit.ui.status.StatusFragment"
+        android:label="Status"
+        tools:layout="@layout/fragment_status" />
 
     <fragment
-        android:id="@+id/navigation_more"
-        android:name="com.example.cu_orbit.ui.search.SearchFragment"
-        android:label="@string/title_more"
-        tools:layout="@layout/fragment_search" />
+        android:id="@+id/navigation_calls"
+        android:name="com.example.cu_orbit.ui.calls.CallsFragment"
+        android:label="Calls"
+        tools:layout="@layout/fragment_calls" />
 
     <fragment
         android:id="@+id/navigation_profile"

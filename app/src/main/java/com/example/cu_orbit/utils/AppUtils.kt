@@ -49,11 +49,25 @@ object AppUtils {
         try {
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 data = Uri.parse("sms:$phoneNumber")
-                putExtra("sms_body", "Hey! Join me on CU Orbit. It's a great app for university communication. Download it here: https://cuorbit.example.com")
+                putExtra("sms_body", "Hey! Join me on CU Orbit. It's a great app for university communication. Download it here: https://cumessenger.thegttech.com")
             }
             context.startActivity(intent)
         } catch (e: Exception) {
             Toast.makeText(context, "Could not open SMS app", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun getErrorMessage(e: Exception): String {
+        return if (e is retrofit2.HttpException) {
+            try {
+                val errorJson = e.response()?.errorBody()?.string()
+                val errorMap = com.google.gson.Gson().fromJson(errorJson, Map::class.java)
+                errorMap["message"]?.toString() ?: "Server error: ${e.code()}"
+            } catch (ex: Exception) {
+                "Server error: ${e.code()}"
+            }
+        } else {
+            "Connection error. Please check your network."
         }
     }
 }
