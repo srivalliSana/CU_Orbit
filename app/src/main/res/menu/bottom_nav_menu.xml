@@ -13,10 +13,6 @@
         android:icon="@android:drawable/ic_menu_camera"
         android:title="Status" />
     <item
-        android:id="@+id/navigation_calls"
-        android:icon="@android:drawable/ic_menu_call"
-        android:title="Calls" />
-    <item
         android:id="@+id/navigation_profile"
         android:icon="@drawable/ic_person"
         android:title="You" />

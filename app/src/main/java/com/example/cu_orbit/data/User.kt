@@ -9,9 +9,9 @@ data class User(
     val email: String = "",
     val avatarUrl: String = "",
     val status: String = "online",
-    val statusEmoji: String = "",
-    val bio: String = "Hey there! I am using CU Orbit.",
-    val lastMessagePreview: String = "",
-    val lastMessageTime: String = "",
+    val statusEmoji: String? = "",
+    val bio: String? = "Hey there! I am using CU Orbit.",
+    val lastMessagePreview: String? = "",
+    val lastMessageTime: String? = "",
     val unreadCount: Int = 0
 )

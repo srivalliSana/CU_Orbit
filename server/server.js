@@ -1,11 +1,33 @@
 const express = require('express');
-const { Sequelize, DataTypes } = require('sequelize');
+const { Sequelize, DataTypes, Op } = require('sequelize');
 const cors = require('cors');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
 require('dotenv').config();
 
 const app = express();
 app.use(express.json());
 app.use(cors());
+
+// TRAFFIC LOGGER
+app.use((req, res, next) => {
+    console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${req.url}`);
+    next();
+});
+
+// STATIC FOLDERS
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
+app.use('/uploads', express.static(uploadDir));
+
+// FILE UPLOAD SETUP
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, uploadDir),
+    filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
+});
+const upload = multer({ storage: storage });
 
 // MYSQL CONNECTION
 const dbConfig = {
@@ -16,64 +38,13 @@ const dbConfig = {
     port: process.env.DB_PORT || 3306
 };
 
-console.log('--- Database Configuration ---');
-console.log(`DB_NAME: ${dbConfig.name}`);
-console.log(`DB_USER: ${dbConfig.user}`);
-console.log(`DB_HOST: ${dbConfig.host}`);
-console.log(`DB_PORT: ${dbConfig.port}`);
-console.log(`DB_PASS: ${dbConfig.pass ? '********' + (process.env.DB_PASS ? ' (from .env)' : ' (using default)') : '(not set)'}`);
-console.log('------------------------------');
-
-const sequelize = new Sequelize(
-    dbConfig.name,
-    dbConfig.user,
-    dbConfig.pass,
-    {
-        host: dbConfig.host,
-        port: dbConfig.port,
-        dialect: 'mysql',
-        logging: false,
-        pool: {
-            max: 5,
-            min: 0,
-            acquire: 30000,
-            idle: 10000
-        }
-    }
-);
-
-// Test connection
-sequelize.authenticate()
-    .then(() => {
-        console.log('✅ MySQL Connected Successfully');
-        // Sync database after successful authentication
-        return sequelize.sync({ alter: true });
-    })
-    .then(() => console.log('✅ Database Synced & Models Ready'))
-    .catch(err => {
-        console.error('❌ MySQL Initialization Error:');
-        console.error('Message:', err.message);
-        if (err.name === 'SequelizeAccessDeniedError') {
-            console.error('👉 Tip: Check your DB_USER and DB_PASS in .env file.');
-        }
-    });
-
-// Health check route
-app.get('/api/health', async (req, res) => {
-    try {
-        await sequelize.authenticate();
-        res.json({ 
-            status: 'online', 
-            database: 'connected',
-            server_time: new Date().toISOString()
-        });
-    } catch (err) {
-        res.status(503).json({ 
-            status: 'online', 
-            database: 'disconnected', 
-            error: err.message 
-        });
-    }
+const sequelize = new Sequelize(dbConfig.name, dbConfig.user, dbConfig.pass, {
+    host: dbConfig.host,
+    port: dbConfig.port,
+    dialect: 'mysql',
+    logging: false,
+    dialectOptions: { connectTimeout: 10000 },
+    pool: { max: 10, min: 0, acquire: 30000, idle: 10000 }
 });
 
 // MODELS
@@ -82,40 +53,45 @@ const User = sequelize.define('User', {
     phone: { type: DataTypes.STRING, unique: true },
     name: DataTypes.STRING,
     email: DataTypes.STRING,
-    department: DataTypes.STRING,
+    avatarUrl: { type: DataTypes.STRING, defaultValue: '' },
     status: { type: DataTypes.STRING, defaultValue: 'online' },
-    avatarUrl: DataTypes.STRING
+    bio: { type: DataTypes.TEXT, defaultValue: 'Hey there! I am using CU Orbit.' }
+});
+
+const Workspace = sequelize.define('Workspace', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    name: { type: DataTypes.STRING, allowNull: false },
+    description: { type: DataTypes.TEXT, defaultValue: '' }
 });
 
 const Channel = sequelize.define('Channel', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-    name: DataTypes.STRING,
+    workspaceId: { type: DataTypes.UUID, allowNull: true },
+    name: { type: DataTypes.STRING, allowNull: false },
     isPrivate: { type: DataTypes.BOOLEAN, defaultValue: false },
-    description: DataTypes.TEXT
-});
-
-const ChannelMember = sequelize.define('ChannelMember', {
-    channelId: { type: DataTypes.UUID, allowNull: false },
-    userId: { type: DataTypes.STRING, allowNull: false }
+    memberCount: { type: DataTypes.INTEGER, defaultValue: 0 }
 });
 
 const Message = sequelize.define('Message', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     senderId: DataTypes.STRING,
     senderName: DataTypes.STRING,
+    senderAvatarUrl: DataTypes.STRING,
     body: DataTypes.TEXT,
     channelId: DataTypes.STRING,
-    parentMessageId: { type: DataTypes.UUID, allowNull: true }, // For threading
     type: { type: DataTypes.STRING, defaultValue: 'text' },
     mediaUrl: DataTypes.STRING,
+    status: { type: DataTypes.STRING, defaultValue: 'sent' },
     timestamp: { type: DataTypes.BIGINT, defaultValue: () => Date.now() }
 });
 
-const Reaction = sequelize.define('Reaction', {
-    messageId: { type: DataTypes.UUID, allowNull: false }, // Must match Message.id type
+const Status = sequelize.define('Status', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     userId: { type: DataTypes.STRING, allowNull: false },
     userName: DataTypes.STRING,
-    emoji: { type: DataTypes.STRING, allowNull: false }
+    mediaUrl: { type: DataTypes.STRING, allowNull: false },
+    caption: DataTypes.TEXT,
+    expiresAt: { type: DataTypes.DATE }
 });
 
 const TypingStatus = sequelize.define('TypingStatus', {
@@ -125,229 +101,158 @@ const TypingStatus = sequelize.define('TypingStatus', {
     lastTypedAt: { type: DataTypes.BIGINT }
 });
 
-// Relationships
-Message.hasMany(Reaction, { as: 'reactions', foreignKey: 'messageId' });
-Reaction.belongsTo(Message, { foreignKey: 'messageId' });
-Channel.hasMany(ChannelMember, { as: 'members', foreignKey: 'channelId' });
-ChannelMember.belongsTo(Channel, { foreignKey: 'channelId' });
+Workspace.hasMany(Channel, { foreignKey: 'workspaceId', as: 'channels' });
+Channel.belongsTo(Workspace, { foreignKey: 'workspaceId' });
 
-const Otp = sequelize.define('Otp', {
-    phone: { type: DataTypes.STRING, primaryKey: true },
-    otp: DataTypes.STRING,
-    createdAt: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
-});
+// SYNC
+sequelize.authenticate()
+    .then(async () => {
+        await sequelize.sync({ alter: true });
+        console.log('✅ MySQL Connected');
+        const [ws] = await Workspace.findOrCreate({ where: { name: 'CU Orbit' } });
+        await Channel.findOrCreate({ where: { name: 'general', workspaceId: ws.id } });
+    })
+    .catch(err => console.error('❌ MySQL Error:', err.message));
 
+// --- ROUTES ---
 
-// AUTH ROUTES
-app.post('/api/auth/send-otp', async (req, res) => {
+// 1. AUTH & USER PROFILE
+app.post('/api/auth/login', async (req, res) => {
     try {
-        const { phone } = req.body;
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-        // Use upsert behavior
-        await Otp.upsert({ phone, otp });
-
-        console.log(`[AUTH] OTP for ${phone}: ${otp}`);
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
-});
-
-app.post('/api/auth/verify-otp', async (req, res) => {
-    try {
-        const { phone, otp } = req.body;
-        const record = await Otp.findOne({ where: { phone, otp } });
-
-        if (record) {
-            await Otp.destroy({ where: { phone } });
-            const user = await User.findOne({ where: { phone } });
-            res.json({ success: true, isNewUser: !user, user });
-        } else {
-            res.status(400).json({ success: false, message: "Invalid OTP" });
-        }
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
+        const user = await User.findOne({ where: { phone: req.body.phone } });
+        res.json({ success: true, isNewUser: !user, user });
+    } catch (e) { res.status(500).json(e); }
 });
 
 app.post('/api/auth/register', async (req, res) => {
     try {
         const user = await User.create(req.body);
         res.json({ success: true, user });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+    } catch (err) { res.status(500).json(err); }
+});
+
+app.get('/api/users', async (req, res) => {
+    try { res.json(await User.findAll()); } catch (e) { res.json([]); }
+});
+
+// Update Profile Route
+app.put('/api/users/:phone', async (req, res) => {
+    try {
+        console.log(`[USER] Updating profile for phone: ${req.params.phone}`, req.body);
+        const [updated] = await User.update(req.body, { where: { phone: req.params.phone } });
+        const user = await User.findOne({ where: { phone: req.params.phone } });
+        res.json({ success: true, user });
+    } catch (e) {
+        console.error('[USER] Update error:', e.message);
+        res.status(500).json({ error: e.message });
     }
 });
 
-// CHANNEL ROUTES
-app.get('/api/channels', async (req, res) => {
+// 2. INBOX ROUTE (Optimized)
+app.get('/api/inbox/:userId', async (req, res) => {
     try {
-        const channels = await Channel.findAll({
-            include: [{ model: ChannelMember, as: 'members' }]
-        });
-        const channelsWithCount = channels.map(c => {
-            const data = c.toJSON();
+        const currentUserId = req.params.userId;
+        const users = await User.findAll({ where: { phone: { [Op.ne]: currentUserId } } });
+        const inbox = await Promise.all(users.map(async (user) => {
+            const dmId = currentUserId < user.phone ? `${currentUserId}_${user.phone}` : `${user.phone}_${currentUserId}`;
+            const lastMsg = await Message.findOne({ where: { channelId: dmId }, order: [['timestamp', 'DESC']] });
             return {
-                ...data,
-                memberCount: data.members ? data.members.length : 0
+                ...user.toJSON(),
+                lastMessagePreview: lastMsg ? lastMsg.body : '',
+                lastMessageTime: lastMsg ? lastMsg.timestamp : 0,
+                unreadCount: await Message.count({ where: { channelId: dmId, senderId: { [Op.ne]: currentUserId }, status: { [Op.ne]: 'read' } } })
             };
-        });
-        res.json(channelsWithCount);
-    } catch (err) {
-        res.status(500).json(err);
-    }
-});
-
-app.post('/api/channels/:id/members', async (req, res) => {
-    try {
-        const { userId } = req.body;
-        await ChannelMember.create({ channelId: req.params.id, userId });
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json(err);
-    }
-});
-
-app.post('/api/channels', async (req, res) => {
-    try {
-        const channel = await Channel.create(req.body);
-        console.log(`[CHANNEL] Created: #${channel.name}`);
-        res.json(channel);
-    } catch (err) {
-        res.status(500).json(err);
-    }
-});
-
-// MESSAGE ROUTES
-app.get('/api/channels/:channelId/messages', async (req, res) => {
-    try {
-        const messages = await Message.findAll({
-            where: {
-                channelId: req.params.channelId,
-                parentMessageId: null // Only top-level messages
-            },
-            include: [{ model: Reaction, as: 'reactions' }],
-            order: [['timestamp', 'ASC']]
-        });
-
-        // Count replies for each message
-        const messagesWithCounts = await Promise.all(messages.map(async (msg) => {
-            const replyCount = await Message.count({ where: { parentMessageId: msg.id } });
-            return { ...msg.toJSON(), replyCount };
         }));
-
-        res.json(messagesWithCounts);
-    } catch (err) {
-        res.status(500).json(err);
-    }
+        res.json(inbox);
+    } catch (e) { res.json([]); }
 });
 
-app.get('/api/messages/:id/replies', async (req, res) => {
-    try {
-        const replies = await Message.findAll({
-            where: { parentMessageId: req.params.id },
-            include: [{ model: Reaction, as: 'reactions' }],
-            order: [['timestamp', 'ASC']]
-        });
-        res.json(replies);
-    } catch (err) {
-        res.status(500).json(err);
-    }
+// 3. WORKSPACES & CHANNELS
+app.get('/api/workspaces', async (req, res) => {
+    try { res.json(await Workspace.findAll({ include: [{ model: Channel, as: 'channels' }] })); } catch (e) { res.json([]); }
 });
 
-app.delete('/api/messages/:id', async (req, res) => {
+app.post('/api/workspaces', async (req, res) => {
     try {
-        await Message.destroy({ where: { id: req.params.id } });
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json(err);
-    }
+        const ws = await Workspace.create(req.body);
+        await Channel.create({ name: 'general', workspaceId: ws.id });
+        res.json(ws);
+    } catch (e) { res.status(500).json(e); }
 });
 
-app.put('/api/messages/:id', async (req, res) => {
-    try {
-        await Message.update({ body: req.body.body }, { where: { id: req.params.id } });
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json(err);
-    }
+app.get('/api/workspaces/:id/channels', async (req, res) => {
+    try { res.json(await Channel.findAll({ where: { workspaceId: req.params.id } })); } catch (e) { res.json([]); }
+});
+
+app.post('/api/workspaces/:id/channels', async (req, res) => {
+    try { res.json(await Channel.create({ ...req.body, workspaceId: req.params.id })); } catch (e) { res.status(500).json(e); }
+});
+
+app.get('/api/channels/:id', async (req, res) => {
+    try { res.json(await Channel.findByPk(req.params.id)); } catch (e) { res.status(404).json(e); }
+});
+
+// 4. MESSAGES
+app.get('/api/channels/:channelId/messages', async (req, res) => {
+    try { res.json(await Message.findAll({ where: { channelId: req.params.channelId }, order: [['timestamp', 'ASC']] })); } catch (e) { res.json([]); }
 });
 
 app.post('/api/messages', async (req, res) => {
     try {
-        const { senderId, body, channelId, type, mediaUrl, parentMessageId } = req.body;
-        const user = await User.findOne({ where: { phone: senderId } });
-        const newMessage = await Message.create({
-            senderId,
-            senderName: user ? user.name : "Unknown",
-            body,
-            channelId,
-            parentMessageId,
-            type: type || 'text',
-            mediaUrl: mediaUrl,
-            timestamp: Date.now()
-        });
-        console.log(`[CHAT] ${newMessage.senderName} (${newMessage.type}): ${body || ''}`);
-        res.json(newMessage);
-    } catch (err) {
-        res.status(500).json(err);
-    }
+        if (!req.body.senderAvatarUrl && req.body.senderId) {
+            const user = await User.findOne({ where: { phone: req.body.senderId } });
+            if (user) req.body.senderAvatarUrl = user.avatarUrl;
+        }
+        res.json(await Message.create(req.body));
+    } catch (e) { res.status(500).json(e); }
 });
 
-// REACTION ROUTES
-app.post('/api/messages/:id/react', async (req, res) => {
+app.put('/api/messages/:id', async (req, res) => {
     try {
-        const { userId, emoji, userName } = req.body;
-        const [reaction, created] = await Reaction.findOrCreate({
-            where: { messageId: req.params.id, userId, emoji },
-            defaults: { userName }
-        });
-        if (!created) await reaction.destroy(); // Toggle reaction
+        await Message.update(req.body, { where: { id: req.params.id } });
         res.json({ success: true });
-    } catch (err) {
-        res.status(500).json(err);
-    }
+    } catch (e) { res.status(500).json(e); }
 });
 
-// TYPING STATUS ROUTES
+// 5. STATUS & UPLOAD
+app.get('/api/status', async (req, res) => {
+    try { res.json(await Status.findAll({ order: [['createdAt', 'DESC']] })); } catch (err) { res.json([]); }
+});
+
+app.post('/api/status', async (req, res) => {
+    try { res.json(await Status.create({ ...req.body, expiresAt: new Date(Date.now() + 24 * 3600000) })); } catch (err) { res.status(500).json(err); }
+});
+
+app.post('/api/upload', upload.single('file'), (req, res) => {
+    if (!req.file) return res.status(400).send('No file uploaded.');
+    res.json({ url: `/uploads/${req.file.filename}` });
+});
+
+// 6. TYPING
 app.post('/api/channels/:id/typing', async (req, res) => {
     try {
-        const { userId, userName } = req.body;
-        await TypingStatus.upsert({ channelId: req.params.id, userId, userName, lastTypedAt: Date.now() });
+        await TypingStatus.upsert({ channelId: req.params.id, userId: req.body.userId, userName: req.body.userName, lastTypedAt: Date.now() });
         res.json({ success: true });
-    } catch (err) {
-        res.status(500).json(err);
-    }
+    } catch (err) { res.json({ success: true }); }
 });
 
 app.get('/api/channels/:id/typing', async (req, res) => {
     try {
-        const fiveSecondsAgo = Date.now() - 5000;
-        const typing = await TypingStatus.findAll({
-            where: {
-                channelId: req.params.id,
-                lastTypedAt: { [Sequelize.Op.gt]: fiveSecondsAgo }
-            }
-        });
+        const typing = await TypingStatus.findAll({ where: { channelId: req.params.id, lastTypedAt: { [Sequelize.Op.gt]: Date.now() - 5000 } } });
         res.json(typing);
-    } catch (err) {
-        res.status(500).json(err);
-    }
+    } catch (err) { res.json([]); }
 });
 
-// USER ROUTES
-app.get('/api/users', async (req, res) => {
-    try {
-        const users = await User.findAll();
-        res.json(users);
-    } catch (err) {
-        res.status(500).json(err);
-    }
-});
-
-const PORT = process.env.PORT || 3000;
+// START SERVER
+const PORT = 3000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 CU Orbit Server ready at https://cumessenger.thegttech.com`);
-    console.log(`📡 MySQL migration complete.`);
+    console.log(`🚀 CU Orbit Server ready on port ${PORT}`);
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const net of interfaces[name]) {
+            if (net.family === 'IPv4' && !net.internal) {
+                console.log(`👉 ON YOUR PHONE, USE THIS IP: http://${net.address}:3000/api/`);
+            }
+        }
+    }
 });

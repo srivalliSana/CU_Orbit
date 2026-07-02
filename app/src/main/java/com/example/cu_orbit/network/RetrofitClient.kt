@@ -7,30 +7,42 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
-    /**
-     * BASE_URL Configuration:
-     * - Using production domain: https://cumessenger.thegttech.com/api/
-     */
-    private const val BASE_URL = "https://cumessenger.thegttech.com/api/"
+    var baseUrl = "http://192.168.29.195:3000/api/"
+        private set
 
-    private val logging = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+    private var _instance: ApiService? = null
+
+    val instance: ApiService
+        get() {
+            if (_instance == null) {
+                _instance = createService()
+            }
+            return _instance!!
+        }
+
+    fun updateBaseUrl(ip: String) {
+        baseUrl = if (ip.startsWith("http")) ip else "http://$ip:3000/api/"
+        _instance = createService()
     }
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .addInterceptor(logging)
-        .build()
+    private fun createService(): ApiService {
+        val logging = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BODY
+        }
 
-    val instance: ApiService by lazy {
+        val client = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .addInterceptor(logging)
+            .build()
+
         val retrofit = Retrofit.Builder()
-            .baseUrl(BASE_URL)
+            .baseUrl(baseUrl)
             .addConverterFactory(GsonConverterFactory.create())
             .client(client)
             .build()
 
-        retrofit.create(ApiService::class.java)
+        return retrofit.create(ApiService::class.java)
     }
 }

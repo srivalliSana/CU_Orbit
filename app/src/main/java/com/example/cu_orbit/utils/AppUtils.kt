@@ -49,7 +49,7 @@ object AppUtils {
         try {
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 data = Uri.parse("sms:$phoneNumber")
-                putExtra("sms_body", "Hey! Join me on CU Orbit. It's a great app for university communication. Download it here: https://cumessenger.thegttech.com")
+                putExtra("sms_body", "Hey! Join me on CU Orbit. It's a great app for university communication. Download it here: http://10.0.2.2:3000")
             }
             context.startActivity(intent)
         } catch (e: Exception) {

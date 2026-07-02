@@ -49,11 +49,12 @@ class CreateChannelFragment : Fragment() {
     private fun createChannel(name: String, isPrivate: Boolean, description: String) {
         lifecycleScope.launch {
             try {
-                repository.createChannel(name, isPrivate, description)
-                Toast.makeText(context, "Channel #$name created!", Toast.LENGTH_SHORT).show()
+                val channel = repository.createChannel(name, isPrivate, description)
+                Toast.makeText(context, "Workspace #${channel.name} created!", Toast.LENGTH_SHORT).show()
                 findNavController().navigateUp()
             } catch (e: Exception) {
-                Toast.makeText(context, "Error creating channel: ${e.message}", Toast.LENGTH_SHORT).show()
+                e.printStackTrace()
+                Toast.makeText(context, "Could not create workspace. Please check server.", Toast.LENGTH_LONG).show()
             }
         }
     }

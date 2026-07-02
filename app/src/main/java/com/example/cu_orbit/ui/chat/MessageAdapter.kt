@@ -43,6 +43,11 @@ class MessageAdapter(
         val userName: TextView = view.findViewById(R.id.text_user_name)
         val timestamp: TextView = view.findViewById(R.id.text_timestamp)
         val body: TextView = view.findViewById(R.id.text_message_body)
+        
+        init {
+            body.movementMethod = android.text.method.LinkMovementMethod.getInstance()
+        }
+
         val profileImage: ShapeableImageView = view.findViewById(R.id.image_profile)
         val threadIndicator: View = view.findViewById(R.id.layout_thread_indicator)
         val threadCount: TextView = view.findViewById(R.id.text_thread_count)
@@ -77,16 +82,20 @@ class MessageAdapter(
 
         if (showHeader) {
             holder.headerLayout.visibility = View.VISIBLE
-            holder.userName.text = message.senderName
+            holder.userName.text = message.senderName ?: "Student"
             holder.timestamp.text = timeFormatter.format(Date(message.timestamp))
             
-            val avatarUri = if (message.mediaUrl != null && message.senderId == "shree") {
-                 // Mocking some logic or using a real field if we had one for avatar
-                 R.drawable.ic_person
+            // Try to resolve sender avatar
+            val avatarUrl = message.senderAvatarUrl 
+            if (avatarUrl != null && avatarUrl.isNotEmpty()) {
+                holder.profileImage.load(avatarUrl) {
+                    crossfade(true)
+                    placeholder(R.drawable.ic_person)
+                    error(R.drawable.ic_person)
+                }
             } else {
-                R.drawable.ic_person
+                holder.profileImage.setImageResource(R.drawable.ic_person)
             }
-            holder.profileImage.setImageResource(avatarUri)
         } else {
             holder.headerLayout.visibility = View.GONE
         }
@@ -135,7 +144,10 @@ class MessageAdapter(
                     }
                     
                     holder.cardImage.setOnClickListener {
-                        openMedia(holder.itemView.context, imageUri, "image/*")
+                        val intent = android.content.Intent(holder.itemView.context, FullImageActivity::class.java).apply {
+                            putExtra("IMAGE_URL", url)
+                        }
+                        holder.itemView.context.startActivity(intent)
                     }
                 }
             }
@@ -165,11 +177,19 @@ class MessageAdapter(
                 holder.layoutFile.setOnClickListener {
                     message.mediaUrl?.let { url ->
                         val fileUri = when {
+                            url.startsWith("http") -> android.net.Uri.parse(url)
                             url.startsWith("content://") -> android.net.Uri.parse(url)
                             url.startsWith("/") -> android.net.Uri.fromFile(java.io.File(url))
                             else -> android.net.Uri.parse(url)
                         }
-                        openMedia(holder.itemView.context, fileUri, "*/*")
+                        
+                        if (url.startsWith("http")) {
+                            // Open in browser for cloud files
+                            val browserIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, fileUri)
+                            holder.itemView.context.startActivity(browserIntent)
+                        } else {
+                            openMedia(holder.itemView.context, fileUri, "*/*")
+                        }
                     }
                 }
             }
@@ -177,7 +197,7 @@ class MessageAdapter(
 
         // Reactions
         holder.reactionGroup.removeAllViews()
-        if (message.reactions.isNotEmpty()) {
+        if (message.reactions?.isNotEmpty() == true) {
             holder.reactionGroup.visibility = View.VISIBLE
             val reactionCounts = message.reactions.groupBy { it.emoji }
             reactionCounts.forEach { (emoji, list) ->
@@ -208,13 +228,16 @@ class MessageAdapter(
 
         mediaPlayer = android.media.MediaPlayer().apply {
             try {
-                val audioUri = when {
-                    url.startsWith("content://") -> android.net.Uri.parse(url)
-                    url.startsWith("/") -> android.net.Uri.fromFile(java.io.File(url))
-                    else -> android.net.Uri.parse(url)
+                if (url.startsWith("http")) {
+                    setDataSource(url)
+                } else {
+                    val audioUri = when {
+                        url.startsWith("content://") -> android.net.Uri.parse(url)
+                        url.startsWith("/") -> android.net.Uri.fromFile(java.io.File(url))
+                        else -> android.net.Uri.parse(url)
+                    }
+                    setDataSource(holder.itemView.context, audioUri)
                 }
-                
-                setDataSource(holder.itemView.context, audioUri)
                 prepare()
                 start()
                 playingMessageId = message.id

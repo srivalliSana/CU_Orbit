@@ -32,6 +32,7 @@ import com.example.cu_orbit.repository.MainRepository
 import com.example.cu_orbit.utils.ContactUtils
 import com.google.gson.Gson
 import androidx.core.widget.addTextChangedListener
+import coil.load
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
@@ -62,9 +63,23 @@ class ChatFragment : Fragment() {
     }
 
     private var photoUri: Uri? = null
+    private var capturedFile: File? = null
     private val takePictureLauncher = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success) {
-            photoUri?.let { sendMessage("", "image", it.toString()) }
+            capturedFile?.let { file ->
+                lifecycleScope.launch {
+                    try {
+                        val serverUrl = repository.uploadFile(file)
+                        if (serverUrl.isNotEmpty()) {
+                            sendMessage("", "image", serverUrl)
+                        } else {
+                            Toast.makeText(context, "Server error: Empty URL returned", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Upload failed: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
         }
     }
 
@@ -73,7 +88,24 @@ class ChatFragment : Fragment() {
             val fileName = getFileName(it)
             val type = if (requireContext().contentResolver.getType(it)?.startsWith("image") == true) "image" else "file"
             val localFile = saveUriToLocalFile(it, fileName)
-            sendMessage(fileName, type, localFile?.absolutePath ?: it.toString())
+            if (localFile != null) {
+                lifecycleScope.launch {
+                    try {
+                        val serverUrl = repository.uploadFile(localFile)
+                        sendMessage(fileName, type, serverUrl)
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Upload failed", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    private val pickBackgroundLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let {
+            val prefs = requireContext().getSharedPreferences("CU_ORBIT_BG", android.content.Context.MODE_PRIVATE)
+            prefs.edit().putString("bg_uri_$channelId", it.toString()).remove("bg_$channelId").apply()
+            applyChatBackground(requireView())
         }
     }
 
@@ -110,8 +142,16 @@ class ChatFragment : Fragment() {
         root.findViewById<ImageButton>(R.id.button_back).setOnClickListener { findNavController().navigateUp() }
 
         root.findViewById<View>(R.id.layout_chat_header_info).setOnClickListener {
-            val bundle = Bundle().apply { putString("userId", arguments?.getString("channelId") ?: channelId) }
-            findNavController().navigate(R.id.navigation_contact_info, bundle)
+            val options = arrayOf("Contact/Channel Info", "Change Background")
+            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setItems(options) { _, which ->
+                    if (which == 0) {
+                        val bundle = Bundle().apply { putString("userId", arguments?.getString("channelId") ?: channelId) }
+                        findNavController().navigate(R.id.navigation_contact_info, bundle)
+                    } else {
+                        showBackgroundPicker()
+                    }
+                }.show()
         }
 
         val recyclerView: RecyclerView = root.findViewById(R.id.recycler_messages)
@@ -126,6 +166,7 @@ class ChatFragment : Fragment() {
         adapter.setCurrentUserId(currentUserId)
         recyclerView.adapter = adapter
 
+        applyChatBackground(root)
         observeViewModel(root)
         viewModel.startPolling(channelId, currentUserId)
         setupInputArea(root)
@@ -163,12 +204,11 @@ class ChatFragment : Fragment() {
             
             lifecycleScope.launch {
                 try {
-                    val channels = repository.getChannels()
-                    val currentChannel = channels.find { it.id == channelId }
-                    val count = currentChannel?.memberCount ?: 0
-                    subtitleText.text = "$count members"
+                    val channel = repository.getChannel(channelId)
+                    val count = channel.memberCount ?: 0
+                    subtitleText.text = if (count > 0) "$count members" else "0 members"
                 } catch (e: Exception) {
-                    subtitleText.text = "Error loading members"
+                    subtitleText.text = ""
                 }
             }
         }
@@ -269,18 +309,10 @@ class ChatFragment : Fragment() {
 
         root.findViewById<ImageView>(R.id.button_camera).setOnClickListener {
             handleFeatureWithPermission(Manifest.permission.CAMERA) {
-                val photoFile = File(requireContext().getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES), "camera_photo_${System.currentTimeMillis()}.jpg")
-                photoUri = androidx.core.content.FileProvider.getUriForFile(requireContext(), "com.example.cu_orbit.fileprovider", photoFile)
+                capturedFile = File(requireContext().getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES), "camera_photo_${System.currentTimeMillis()}.jpg")
+                photoUri = androidx.core.content.FileProvider.getUriForFile(requireContext(), "com.example.cu_orbit.fileprovider", capturedFile!!)
                 takePictureLauncher.launch(photoUri)
             }
-        }
-
-        root.findViewById<ImageView>(R.id.button_call_voice).setOnClickListener {
-            Toast.makeText(context, "Voice call feature coming soon!", Toast.LENGTH_SHORT).show()
-        }
-
-        root.findViewById<ImageView>(R.id.button_call_video).setOnClickListener {
-            Toast.makeText(context, "Video call feature coming soon!", Toast.LENGTH_SHORT).show()
         }
 
         root.findViewById<ImageView>(R.id.button_search_chat).setOnClickListener {
@@ -288,7 +320,10 @@ class ChatFragment : Fragment() {
         }
     }
 
+    private var recordingStartTime = 0L
+
     private fun startRecording() {
+        recordingStartTime = System.currentTimeMillis()
         val fileName = "voice_msg_${System.currentTimeMillis()}.mp4"
         audioFile = File(requireContext().getExternalFilesDir(null), fileName)
         mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(requireContext()) else @Suppress("DEPRECATION") MediaRecorder()
@@ -310,15 +345,75 @@ class ChatFragment : Fragment() {
 
     private fun stopRecording() {
         try {
+            if (System.currentTimeMillis() - recordingStartTime < 1000) {
+                // If recording is too short, just cancel it
+                mediaRecorder?.apply { stop(); release() }
+                mediaRecorder = null
+                isRecording = false
+                return
+            }
             mediaRecorder?.apply { stop(); release() }
             mediaRecorder = null
             isRecording = false
-            sendMessage("Voice Message", "voice", audioFile?.absolutePath)
+            
+            val fileToUpload = audioFile
+            if (fileToUpload != null && fileToUpload.exists()) {
+                lifecycleScope.launch {
+                    try {
+                        val serverUrl = repository.uploadFile(fileToUpload)
+                        sendMessage("Voice Message", "voice", serverUrl)
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Voice upload failed", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
         } catch (e: Exception) { e.printStackTrace() }
     }
 
     private fun sendMessage(text: String, type: String = "text", mediaUrl: String? = null) {
-        viewModel.sendMessage(currentUserId, currentUserName, text, channelId, type, mediaUrl)
+        val prefs = requireContext().getSharedPreferences("CU_ORBIT_PREFS", android.content.Context.MODE_PRIVATE)
+        val avatarUrl = prefs.getString("USER_AVATAR", "")
+        viewModel.sendMessage(currentUserId, currentUserName, text, channelId, type, mediaUrl, senderAvatarUrl = avatarUrl)
+    }
+
+    private fun applyChatBackground(root: View) {
+        val prefs = requireContext().getSharedPreferences("CU_ORBIT_BG", android.content.Context.MODE_PRIVATE)
+        val color = prefs.getInt("bg_$channelId", -1)
+        val uriString = prefs.getString("bg_uri_$channelId", null)
+        val bgImage: ImageView = root.findViewById(R.id.image_chat_background)
+        val recyclerView: RecyclerView = root.findViewById(R.id.recycler_messages)
+
+        // Reset
+        bgImage.setImageDrawable(null)
+        recyclerView.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+
+        if (uriString != null) {
+            bgImage.load(uriString)
+        } else if (color != -1) {
+            recyclerView.setBackgroundColor(color)
+        }
+    }
+
+    private fun showBackgroundPicker() {
+        val colors = arrayOf("Default", "Pick from Gallery", "Light Blue", "Light Green", "Soft Pink", "Dark Grey")
+        val colorValues = intArrayOf(-1, 0, 0xFFE3F2FD.toInt(), 0xFFE8F5E9.toInt(), 0xFFFCE4EC.toInt(), 0xFF263238.toInt())
+        
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Pick Background")
+            .setItems(colors) { _, which ->
+                val prefs = requireContext().getSharedPreferences("CU_ORBIT_BG", android.content.Context.MODE_PRIVATE)
+                when (which) {
+                    0 -> {
+                        prefs.edit().remove("bg_$channelId").remove("bg_uri_$channelId").apply()
+                        applyChatBackground(requireView())
+                    }
+                    1 -> pickBackgroundLauncher.launch("image/*")
+                    else -> {
+                        prefs.edit().putInt("bg_$channelId", colorValues[which]).remove("bg_uri_$channelId").apply()
+                        applyChatBackground(requireView())
+                    }
+                }
+            }.show()
     }
 
     private fun handleFeatureWithPermission(permission: String, action: () -> Unit) {

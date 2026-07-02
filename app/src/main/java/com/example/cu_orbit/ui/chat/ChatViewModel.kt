@@ -103,10 +103,10 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    fun sendMessage(senderId: String, senderName: String, body: String, channelId: String, type: String = "text", mediaUrl: String? = null, parentMessageId: String? = null) {
+    fun sendMessage(senderId: String, senderName: String, body: String, channelId: String, type: String = "text", mediaUrl: String? = null, parentMessageId: String? = null, senderAvatarUrl: String? = null) {
         viewModelScope.launch {
             try {
-                val request = MessageRequest(senderId, body, channelId, type, mediaUrl, parentMessageId)
+                val request = MessageRequest(senderId, senderName, body, channelId, type, mediaUrl, parentMessageId, senderAvatarUrl)
                 repository.sendMessage(request)
                 loadMessages(channelId)
             } catch (e: Exception) {

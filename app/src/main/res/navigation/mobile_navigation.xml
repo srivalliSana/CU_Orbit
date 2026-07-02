@@ -23,17 +23,24 @@
         android:label="Status"
         tools:layout="@layout/fragment_status" />
 
-    <fragment
-        android:id="@+id/navigation_calls"
-        android:name="com.example.cu_orbit.ui.calls.CallsFragment"
-        android:label="Calls"
-        tools:layout="@layout/fragment_calls" />
 
     <fragment
         android:id="@+id/navigation_profile"
         android:name="com.example.cu_orbit.ui.you.YouFragment"
         android:label="@string/title_profile"
         tools:layout="@layout/fragment_you" />
+
+    <fragment
+        android:id="@+id/navigation_workspace_channels"
+        android:name="com.example.cu_orbit.ui.workspace.WorkspaceChannelsFragment"
+        android:label="Channels">
+        <argument
+            android:name="workspaceName"
+            app:argType="string" />
+        <argument
+            android:name="workspaceId"
+            app:argType="string" />
+    </fragment>
 
     <fragment
         android:id="@+id/navigation_chat"

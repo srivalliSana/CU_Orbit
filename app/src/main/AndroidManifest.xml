@@ -3,6 +3,20 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="image/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="http" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
@@ -36,11 +50,6 @@
         </activity>
 
         <activity
-            android:name=".OtpActivity"
-            android:exported="false"
-            android:windowSoftInputMode="adjustResize" />
-
-        <activity
             android:name=".ProfileSetupActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
@@ -49,6 +58,16 @@
             android:name=".MainActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".ui.status.StatusViewActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CU_Orbit" />
+
+        <activity
+            android:name=".ui.chat.FullImageActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CU_Orbit" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

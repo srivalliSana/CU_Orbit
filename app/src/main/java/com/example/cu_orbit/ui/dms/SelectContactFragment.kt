@@ -16,8 +16,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.cu_orbit.R
 import com.example.cu_orbit.data.User
+import com.example.cu_orbit.data.Workspace
 import com.example.cu_orbit.repository.MainRepository
-import com.example.cu_orbit.ui.home.DmAdapter
+import com.example.cu_orbit.ui.home.HomeAdapter
 import kotlinx.coroutines.launch
 
 class SelectContactFragment : Fragment() {
@@ -75,17 +76,19 @@ class SelectContactFragment : Fragment() {
                 
                 // 2. Get all local contacts
                 val localContacts = mutableListOf<User>()
-                val cursor = requireContext().contentResolver.query(
-                    android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                    null, null, null, null
-                )
-                cursor?.use {
-                    val nameIdx = it.getColumnIndex(android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
-                    val phoneIdx = it.getColumnIndex(android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER)
-                    while (it.moveToNext()) {
-                        val name = it.getString(nameIdx)
-                        val phone = it.getString(phoneIdx).replace(" ", "").replace("-", "")
-                        localContacts.add(User(id = phone, phone = phone, name = name))
+                if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+                    val cursor = requireContext().contentResolver.query(
+                        android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                        null, null, null, null
+                    )
+                    cursor?.use {
+                        val nameIdx = it.getColumnIndex(android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                        val phoneIdx = it.getColumnIndex(android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER)
+                        while (it.moveToNext()) {
+                            val name = it.getString(nameIdx)
+                            val phone = it.getString(phoneIdx).replace(" ", "").replace("-", "")
+                            localContacts.add(User(id = phone, phone = phone, name = name))
+                        }
                     }
                 }
 
@@ -111,8 +114,8 @@ class SelectContactFragment : Fragment() {
     }
 
     private fun setupRecyclerView(items: List<Any>) {
-        recyclerView.adapter = com.example.cu_orbit.ui.home.HomeAdapter(
-            onChannelClick = {},
+        recyclerView.adapter = HomeAdapter(
+            onWorkspaceClick = { _ -> },
             onUserClick = { user ->
                 val bundle = Bundle().apply {
                     putString("channelName", user.name)
@@ -120,9 +123,7 @@ class SelectContactFragment : Fragment() {
                 }
                 findNavController().navigate(R.id.navigation_chat, bundle)
             },
-            onActionClick = { title ->
-                // If it's an 'Invite' section click or similar
-            }
+            onActionClick = { _ -> }
         ).apply { submitList(items) }
     }
 }

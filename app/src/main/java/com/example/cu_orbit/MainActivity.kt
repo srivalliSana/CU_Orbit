@@ -18,6 +18,10 @@ import com.google.android.material.navigation.NavigationView
 import androidx.appcompat.app.AppCompatDelegate
 import android.content.Context
 import android.widget.Toast
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import coil.load
+import com.google.android.material.imageview.ShapeableImageView
 
 class MainActivity : AppCompatActivity() {
     private lateinit var appBarConfiguration: AppBarConfiguration
@@ -46,6 +50,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         val drawerLayout: DrawerLayout = findViewById(R.id.drawer_layout)
+        drawerLayout.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
+            override fun onDrawerOpened(drawerView: android.view.View) {
+                loadWorkspacesInDrawer(findViewById(R.id.nav_drawer_view))
+            }
+        })
         val navView: BottomNavigationView = findViewById(R.id.nav_view)
         val navigationView: NavigationView = findViewById(R.id.nav_drawer_view)
 
@@ -57,7 +66,7 @@ class MainActivity : AppCompatActivity() {
         
         appBarConfiguration = AppBarConfiguration(
             setOf(
-                R.id.navigation_home, R.id.navigation_dms, R.id.navigation_status, R.id.navigation_calls, R.id.navigation_profile
+                R.id.navigation_home, R.id.navigation_dms, R.id.navigation_status, R.id.navigation_profile
             ), drawerLayout
         )
         setupActionBarWithNavController(navController, appBarConfiguration)
@@ -77,10 +86,13 @@ class MainActivity : AppCompatActivity() {
         navigationView.setNavigationItemSelectedListener { menuItem ->
             when (menuItem.itemId) {
                 R.id.nav_workspace_1 -> {
-                    Toast.makeText(this, "Switched to CU Orbit", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Welcome back to CU Orbit", Toast.LENGTH_SHORT).show()
                 }
                 R.id.nav_workspace_2 -> {
                     Toast.makeText(this, "Switched to Computer Science", Toast.LENGTH_SHORT).show()
+                }
+                R.id.nav_add_workspace -> {
+                    navController.navigate(R.id.navigation_create_channel)
                 }
                 R.id.navigation_settings -> {
                     navController.navigate(R.id.navigation_settings)
@@ -91,15 +103,58 @@ class MainActivity : AppCompatActivity() {
         }
 
         updateNavHeader(navigationView)
+        loadWorkspacesInDrawer(navigationView)
+    }
+
+    private fun loadWorkspacesInDrawer(navigationView: NavigationView) {
+        val menu = navigationView.menu
+        val workspaceSubMenu = menu.findItem(R.id.nav_workspace_group)?.subMenu ?: return
+        
+        lifecycleScope.launch {
+            try {
+                val workspaces = com.example.cu_orbit.network.RetrofitClient.instance.getWorkspaces()
+                workspaceSubMenu.clear()
+                workspaces.forEach { ws ->
+                    workspaceSubMenu.add(0, android.view.View.generateViewId(), 0, ws.name).apply {
+                        setIcon(R.drawable.ic_home)
+                        setOnMenuItemClickListener {
+                            val navController = (supportFragmentManager.findFragmentById(R.id.nav_host_fragment_activity_main) as NavHostFragment).navController
+                            val bundle = Bundle().apply {
+                                putString("workspaceName", ws.name)
+                                putString("workspaceId", ws.id)
+                            }
+                            navController.navigate(R.id.navigation_workspace_channels, bundle)
+                            findViewById<DrawerLayout>(R.id.drawer_layout).closeDrawers()
+                            true
+                        }
+                    }
+                }
+                workspaceSubMenu.add(0, R.id.nav_add_workspace, 99, "Add a Workspace").apply {
+                    setIcon(android.R.drawable.ic_menu_add)
+                }
+            } catch (e: Exception) {
+                // Silently fail or show error in log
+            }
+        }
     }
 
     private fun updateNavHeader(navigationView: NavigationView) {
         val headerView = navigationView.getHeaderView(0)
         val prefs = getSharedPreferences("CU_ORBIT_PREFS", Context.MODE_PRIVATE)
         val name = prefs.getString("USER_NAME", "User")
+        val avatarUrl = prefs.getString("USER_AVATAR", "")
         
         headerView.findViewById<android.widget.TextView>(R.id.nav_header_name).text = name
         headerView.findViewById<android.widget.TextView>(R.id.nav_header_status).text = "Active"
+        
+        val headerImage = headerView.findViewById<ShapeableImageView>(R.id.nav_header_avatar)
+        if (avatarUrl != null && avatarUrl.isNotEmpty()) {
+            headerImage.load(avatarUrl) {
+                crossfade(true)
+                placeholder(R.drawable.ic_person)
+                error(R.drawable.ic_person)
+            }
+        }
     }
 
     override fun onSupportNavigateUp(): Boolean {

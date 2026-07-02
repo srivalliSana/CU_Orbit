@@ -11,7 +11,7 @@ import com.example.cu_orbit.data.Channel
 import com.example.cu_orbit.data.User
 
 class HomeAdapter(
-    private val onChannelClick: (Channel) -> Unit, 
+    private val onWorkspaceClick: (com.example.cu_orbit.data.Workspace) -> Unit,
     private val onUserClick: (User) -> Unit,
     private val onActionClick: (String) -> Unit
 ) :
@@ -34,7 +34,7 @@ class HomeAdapter(
     override fun getItemViewType(position: Int): Int {
         return when (items[position]) {
             is String -> TYPE_HEADER
-            is Channel -> TYPE_CHANNEL
+            is com.example.cu_orbit.data.Workspace -> TYPE_CHANNEL
             is User -> TYPE_DM
             else -> throw IllegalArgumentException("Invalid type")
         }
@@ -67,26 +67,37 @@ class HomeAdapter(
                 holder.action.setOnClickListener { onActionClick(title) }
             }
             is ChannelViewHolder -> {
-                val channel = item as Channel
-                holder.name.text = channel.name
-                holder.prefix.text = if (channel.isPrivate) "🔒" else "#"
+                val workspace = item as com.example.cu_orbit.data.Workspace
+                holder.name.text = workspace.name
+                holder.prefix.text = "🏢"
                 
-                // Add preview and time if we add them to layout later, but for now focus on DM
-                holder.itemView.setOnClickListener { onChannelClick(channel) }
+                holder.itemView.setOnClickListener { onWorkspaceClick(workspace) }
             }
             is DmViewHolder -> {
                 val user = item as User
                 
-                // Name resolution (from contact utils)
-                val contactName = com.example.cu_orbit.utils.ContactUtils.getContactName(holder.itemView.context, user.phone)
+                // Name resolution (safely handled by ContactUtils)
+                val contactName = try {
+                    com.example.cu_orbit.utils.ContactUtils.getContactName(holder.itemView.context, user.phone)
+                } catch (e: Exception) { null }
+
                 holder.name.text = contactName ?: user.name
                 
-                holder.time.text = user.lastMessageTime
-                holder.preview.text = user.lastMessagePreview
+                val previewText = user.lastMessagePreview
+                val rawTime = user.lastMessageTime ?: ""
+                holder.time.text = if (rawTime.isNotEmpty() && rawTime.all { it.isDigit() }) {
+                    try {
+                        val timestamp = rawTime.toLong()
+                        if (timestamp > 0) {
+                            java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault()).format(java.util.Date(timestamp))
+                        } else ""
+                    } catch (e: Exception) { "" }
+                } else rawTime
+
+                holder.preview.text = previewText ?: ""
                 
                 // Show delivery status for the last message if it was sent by me
-                // In a real app, we'd check lastMessageSenderId. For now, let's mock it.
-                holder.lastStatus.visibility = if (user.lastMessagePreview.isNotEmpty()) View.VISIBLE else View.GONE
+                holder.lastStatus.visibility = if (previewText != null && previewText.isNotEmpty()) View.VISIBLE else View.GONE
                 
                 if (user.unreadCount > 0) {
                     holder.unread.visibility = View.VISIBLE

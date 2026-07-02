@@ -5,18 +5,25 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.cu_orbit.R
+import com.example.cu_orbit.repository.MainRepository
+import kotlinx.coroutines.launch
+import java.io.File
 
 class StatusFragment : Fragment() {
 
-    private val pickStatusLauncher = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+    private lateinit var viewModel: StatusViewModel
+    private val repository = MainRepository()
+
+    private val pickStatusLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
-            Toast.makeText(context, "Status update posted!", Toast.LENGTH_SHORT).show()
+            uploadStatus(it)
         }
     }
 
@@ -27,30 +34,66 @@ class StatusFragment : Fragment() {
     ): View {
         val root = inflater.inflate(R.layout.fragment_status, container, false)
 
+        viewModel = ViewModelProvider(this)[StatusViewModel::class.java]
+
+        val recyclerView: RecyclerView = root.findViewById(R.id.recycler_status)
+        recyclerView.layoutManager = LinearLayoutManager(context)
+
+        viewModel.statuses.observe(viewLifecycleOwner) { statuses ->
+            recyclerView.adapter = StatusAdapter(statuses) { status ->
+                val intent = android.content.Intent(context, StatusViewActivity::class.java).apply {
+                    putExtra("USER_NAME", status.userName)
+                    putExtra("MEDIA_URL", status.mediaUrl)
+                    putExtra("CAPTION", status.caption)
+                }
+                startActivity(intent)
+            }
+        }
+
         root.findViewById<View>(R.id.layout_my_status).setOnClickListener {
-            pickStatusLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+            pickStatusLauncher.launch("image/*")
         }
 
         root.findViewById<View>(R.id.fab_status_camera).setOnClickListener {
             Toast.makeText(context, "Camera status coming soon!", Toast.LENGTH_SHORT).show()
         }
 
-        setupRecyclerView(root)
+        viewModel.loadStatuses()
 
         return root
     }
 
-    private fun setupRecyclerView(root: View) {
-        val recyclerView: RecyclerView = root.findViewById(R.id.recycler_status)
-        recyclerView.layoutManager = LinearLayoutManager(context)
-        
-        val mockUpdates = listOf(
-            StatusUpdate("Alice Smith", "10 minutes ago"),
-            StatusUpdate("Bob Jones", "1 hour ago"),
-            StatusUpdate("Charlie Brown", "3 hours ago"),
-            StatusUpdate("Diana Prince", "Yesterday")
-        )
-        
-        recyclerView.adapter = StatusAdapter(mockUpdates)
+    override fun onResume() {
+        super.onResume()
+        viewModel.loadStatuses()
+    }
+
+    private fun uploadStatus(uri: android.net.Uri) {
+        lifecycleScope.launch {
+            try {
+                val prefs = repository.getPrefs(requireContext())
+                val userId = prefs.getString("USER_ID", "anonymous") ?: "anonymous"
+                val userName = prefs.getString("USER_NAME", "User") ?: "User"
+
+                val file = File(requireContext().cacheDir, "status_${System.currentTimeMillis()}.jpg")
+                requireContext().contentResolver.openInputStream(uri)?.use { input ->
+                    file.outputStream().use { output -> input.copyTo(output) }
+                }
+
+                Toast.makeText(context, "Uploading status...", Toast.LENGTH_SHORT).show()
+                val serverUrl = repository.uploadFile(file)
+                
+                if (serverUrl.isNotEmpty()) {
+                    viewModel.postStatus(userId, userName, "image", serverUrl, null)
+                    Toast.makeText(context, "Status update posted!", Toast.LENGTH_SHORT).show()
+                    viewModel.loadStatuses() // Refresh list
+                } else {
+                    Toast.makeText(context, "Server did not return a valid URL", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("StatusFragment", "Upload error: ${e.message}", e)
+                Toast.makeText(context, "Failed to post status: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 }

@@ -1,6 +1,6 @@
 {
   "name": "cu-orbit-server",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Backend for CU Orbit Slack Clone",
   "main": "server.js",
   "scripts": {
@@ -13,6 +13,7 @@
     "sequelize": "^6.33.0",
     "mysql2": "^3.6.1",
     "cors": "^2.8.5",
+    "multer": "^1.4.5-lts.1",
     "dotenv": "^16.3.1"
   }
 }

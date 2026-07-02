@@ -52,7 +52,7 @@
                     android:id="@+id/text_chat_subtitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="42 members"
+                    android:text=""
                     android:textColor="@color/orbit_text_secondary"
                     android:textSize="12sp" />
             </LinearLayout>
@@ -66,22 +66,6 @@
                 app:tint="@color/orbit_primary" />
 
             <ImageView
-                android:id="@+id/button_call_voice"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:padding="10dp"
-                android:src="@android:drawable/ic_menu_call"
-                app:tint="@color/orbit_primary" />
-
-            <ImageView
-                android:id="@+id/button_call_video"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:padding="10dp"
-                android:src="@android:drawable/ic_menu_camera"
-                app:tint="@color/orbit_primary" />
-
-            <ImageView
                 android:id="@+id/button_search_chat"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
@@ -90,6 +74,16 @@
                 app:tint="@color/orbit_text_secondary" />
         </LinearLayout>
     </com.google.android.material.appbar.AppBarLayout>
+
+    <ImageView
+        android:id="@+id/image_chat_background"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:scaleType="centerCrop"
+        app:layout_constraintBottom_toTopOf="@id/text_typing_indicator"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/chat_app_bar" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler_messages"

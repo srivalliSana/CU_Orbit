@@ -8,6 +8,8 @@ import android.widget.TextView
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import com.example.cu_orbit.R
+import coil.load
+import com.google.android.material.imageview.ShapeableImageView
 
 class YouFragment : Fragment() {
 
@@ -39,9 +41,19 @@ class YouFragment : Fragment() {
         val name = prefs.getString("USER_NAME", "User")
         val phone = prefs.getString("USER_ID", "")
         val email = prefs.getString("USER_EMAIL", "No email provided")
+        val avatarUrl = prefs.getString("USER_AVATAR", "")
         
         root.findViewById<TextView>(R.id.profile_name).text = name
         root.findViewById<TextView>(R.id.profile_handle).text = "@${name?.lowercase()?.replace(" ", "_")}"
+        
+        val profileImage = root.findViewById<ShapeableImageView>(R.id.profile_avatar)
+        if (avatarUrl != null && avatarUrl.isNotEmpty()) {
+            profileImage.load(avatarUrl) {
+                crossfade(true)
+                placeholder(R.drawable.ic_person)
+                error(R.drawable.ic_person)
+            }
+        }
         
         android.util.Log.d("YouFragment", "Profile: $name, $phone, $email")
     }

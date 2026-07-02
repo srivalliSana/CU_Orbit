@@ -57,7 +57,7 @@ class HomeFragment : Fragment() {
     }
 
     private fun observeViewModel() {
-        viewModel.channels.observe(viewLifecycleOwner) {
+        viewModel.workspaces.observe(viewLifecycleOwner) {
             updateUI()
         }
         viewModel.users.observe(viewLifecycleOwner) {
@@ -68,14 +68,14 @@ class HomeFragment : Fragment() {
     private fun updateUI() {
         val displayList = mutableListOf<Any>()
         
-        val channels = viewModel.channels.value ?: emptyList()
+        val workspaces = viewModel.workspaces.value ?: emptyList()
         val users = viewModel.users.value ?: emptyList()
 
-        displayList.add("Channels")
-        if (channels.isEmpty()) {
-            // Optional: add a placeholder if no channels exist
+        displayList.add("Workspaces")
+        if (workspaces.isEmpty()) {
+            displayList.add("No workspaces found. Tap to create.")
         } else {
-            displayList.addAll(channels)
+            displayList.addAll(workspaces)
         }
         
         displayList.add("Direct Messages")
@@ -89,12 +89,12 @@ class HomeFragment : Fragment() {
         recyclerView.layoutManager = LinearLayoutManager(context)
         
         homeAdapter = HomeAdapter(
-            onChannelClick = { channel ->
+            onWorkspaceClick = { workspace ->
                 val bundle = Bundle().apply {
-                    putString("channelName", channel.name)
-                    putString("channelId", channel.id)
+                    putString("workspaceName", workspace.name)
+                    putString("workspaceId", workspace.id)
                 }
-                findNavController().navigate(R.id.navigation_chat, bundle)
+                findNavController().navigate(R.id.navigation_workspace_channels, bundle)
             },
             onUserClick = { user ->
                 val bundle = Bundle().apply {
@@ -104,7 +104,7 @@ class HomeFragment : Fragment() {
                 findNavController().navigate(R.id.navigation_chat, bundle)
             },
             onActionClick = { section ->
-                if (section == "Channels") {
+                if (section == "Workspaces" || section.contains("create")) {
                     findNavController().navigate(R.id.navigation_create_channel)
                 } else {
                     findNavController().navigate(R.id.navigation_select_contact)

@@ -11,8 +11,9 @@ data class Message(
     val channelId: String,
     val parentMessageId: String? = null,
     val replyCount: Int = 0,
-    val reactions: List<Reaction> = emptyList(),
+    val reactions: List<Reaction>? = emptyList(),
     val type: String? = "text",
     val mediaUrl: String? = null,
-    val status: String = "sent"
+    val status: String = "sent",
+    val senderAvatarUrl: String? = null
 )

@@ -6,28 +6,53 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.example.cu_orbit.R
+import com.example.cu_orbit.data.Status
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
-data class StatusUpdate(val userName: String, val time: String)
+class StatusAdapter(private val statuses: List<Status>, private val onClick: (Status) -> Unit) :
+    RecyclerView.Adapter<StatusAdapter.StatusViewHolder>() {
 
-class StatusAdapter(private val updates: List<StatusUpdate>) :
-    RecyclerView.Adapter<StatusAdapter.ViewHolder>() {
-
-    class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        val name: TextView = view.findViewById(R.id.text_status_user)
+    class StatusViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val name: TextView = view.findViewById(R.id.text_user_name)
         val time: TextView = view.findViewById(R.id.text_status_time)
+        val ring: View = view.findViewById(R.id.view_status_ring)
     }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_status, parent, false)
-        return ViewHolder(view)
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): StatusViewHolder {
+        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_status, parent, false)
+        return StatusViewHolder(view)
     }
 
-    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val update = updates[position]
-        holder.name.text = update.userName
-        holder.time.text = update.time
+    override fun onBindViewHolder(holder: StatusViewHolder, position: Int) {
+        val status = statuses[position]
+        holder.name.text = status.userName
+        
+        // Format time
+        try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+            val date = sdf.parse(status.createdAt)
+            val now = Date()
+            if (date != null) {
+                val diff = now.time - date.time
+                val hours = diff / (1000 * 60 * 60)
+                val minutes = diff / (1000 * 60)
+                
+                holder.time.text = when {
+                    minutes < 1 -> "Just now"
+                    minutes < 60 -> "$minutes minutes ago"
+                    else -> "$hours hours ago"
+                }
+            } else {
+                holder.time.text = "Recently"
+            }
+        } catch (e: Exception) {
+            holder.time.text = "Recently"
+        }
+
+        holder.itemView.setOnClickListener { onClick(status) }
     }
 
-    override fun getItemCount() = updates.size
+    override fun getItemCount() = statuses.size
 }

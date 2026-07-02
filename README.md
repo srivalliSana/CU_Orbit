@@ -46,5 +46,5 @@ This error means the server cannot connect to MySQL with the provided password.
 
 ### Checking Server Health
 You can check if the server and database are correctly connected by visiting:
-`https://cumessenger.thegttech.com/api/health`
+`http://localhost:3000/api/health`
 (or `http://localhost:3000/api/health` if running locally)

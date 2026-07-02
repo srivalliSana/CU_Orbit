@@ -4,6 +4,7 @@ import com.example.cu_orbit.data.Channel
 import com.example.cu_orbit.data.ChannelRequest
 import com.example.cu_orbit.data.Message
 import com.example.cu_orbit.data.MessageRequest
+import com.example.cu_orbit.data.Status
 import com.example.cu_orbit.data.TypingStatus
 import com.example.cu_orbit.data.User
 import retrofit2.http.Body
@@ -15,6 +16,9 @@ import retrofit2.http.Path
 
 interface ApiService {
     // AUTH
+    @POST("auth/login")
+    suspend fun login(@Body body: Map<String, String>): Map<String, Any>
+
     @POST("auth/send-otp")
     suspend fun sendOtp(@Body body: Map<String, String>): Map<String, Any>
 
@@ -31,6 +35,9 @@ interface ApiService {
     @POST("channels")
     suspend fun createChannel(@Body body: ChannelRequest): Channel
 
+    @GET("channels/{id}")
+    suspend fun getChannel(@Path("id") id: String): Channel
+
     @POST("channels/{id}/members")
     suspend fun addChannelMember(@Path("id") channelId: String, @Body body: Map<String, String>): Map<String, Any>
 
@@ -39,6 +46,31 @@ interface ApiService {
 
     @GET("channels/{id}/typing")
     suspend fun getTyping(@Path("id") channelId: String): List<TypingStatus>
+
+    // WORKSPACES
+    @GET("workspaces")
+    suspend fun getWorkspaces(): List<com.example.cu_orbit.data.Workspace>
+
+    @POST("workspaces")
+    suspend fun createWorkspace(@Body body: com.example.cu_orbit.data.ChannelRequest): com.example.cu_orbit.data.Workspace
+
+    @GET("workspaces/{id}/channels")
+    suspend fun getWorkspaceChannels(@Path("id") workspaceId: String): List<Channel>
+
+    @POST("workspaces/{id}/channels")
+    suspend fun createWorkspaceChannel(@Path("id") workspaceId: String, @Body body: ChannelRequest): Channel
+
+    // STATUS
+    @GET("status")
+    suspend fun getStatuses(): List<Status>
+
+    @POST("status")
+    suspend fun postStatus(@Body body: Map<String, String?>): Status
+
+    // UPLOAD
+    @retrofit2.http.Multipart
+    @POST("upload")
+    suspend fun uploadFile(@retrofit2.http.Part file: okhttp3.MultipartBody.Part): Map<String, String>
 
     // MESSAGES
     @GET("channels/{channelId}/messages")
@@ -62,7 +94,13 @@ interface ApiService {
     // USERS
     @GET("users")
     suspend fun getUsers(): List<User>
+
+    @GET("inbox/{userId}")
+    suspend fun getInbox(@Path("userId") userId: String): List<User>
     
+    @PUT("users/{phone}")
+    suspend fun updateUser(@Path("phone") phone: String, @Body body: Map<String, String?>): Map<String, Any>
+
     @GET("users/{userId}")
     suspend fun getUser(@Path("userId") userId: String): User
 }
