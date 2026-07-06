@@ -1,41 +1,79 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="?attr/selectableItemBackground"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:paddingHorizontal="20dp"
-    android:paddingVertical="12dp">
+    android:paddingHorizontal="14dp"
+    android:paddingVertical="9dp">
 
     <TextView
         android:id="@+id/text_channel_prefix"
-        android:layout_width="28dp"
-        android:layout_height="28dp"
-        android:background="@drawable/bg_prefix_circle"
+        android:layout_width="16dp"
+        android:layout_height="wrap_content"
         android:gravity="center"
         android:text="#"
-        android:textColor="@color/orbit_primary"
-        android:textSize="16sp"
-        android:textStyle="bold" />
+        android:textColor="@color/text_muted"
+        android:textSize="16sp" />
 
-    <TextView
-        android:id="@+id/text_channel_name"
+    <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
+        android:layout_marginStart="10dp"
         android:layout_weight="1"
-        android:textColor="@color/orbit_text_primary"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        tools:text="general" />
+        android:orientation="vertical">
 
-    <View
-        android:id="@+id/unread_indicator"
-        android:layout_width="8dp"
-        android:layout_height="8dp"
-        android:background="@drawable/unread_dot"
-        android:visibility="gone" />
+        <TextView
+            android:id="@+id/text_channel_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp"
+            tools:text="general" />
+
+        <TextView
+            android:id="@+id/text_channel_preview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/text_muted"
+            android:textSize="12sp"
+            tools:text="Lavanya: sending report now" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="end"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/text_channel_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_muted"
+            android:textSize="11sp"
+            tools:text="9:41" />
+
+        <TextView
+            android:id="@+id/text_channel_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_badge_accent"
+            android:minWidth="16dp"
+            android:paddingHorizontal="5dp"
+            android:paddingVertical="1dp"
+            android:textColor="@color/white"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            tools:text="4"
+            tools:visibility="visible" />
+    </LinearLayout>
 
 </LinearLayout>

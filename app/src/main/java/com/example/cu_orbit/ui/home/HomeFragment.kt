@@ -4,14 +4,18 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
+import android.widget.TextView
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.cu_orbit.R
-import com.example.cu_orbit.data.Channel
-import com.example.cu_orbit.data.User
+import com.example.cu_orbit.data.*
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import coil.load
 
 class HomeFragment : Fragment() {
 
@@ -27,24 +31,19 @@ class HomeFragment : Fragment() {
         
         viewModel = ViewModelProvider(this)[HomeViewModel::class.java]
         
-        root.findViewById<View>(R.id.button_new_dm).setOnClickListener {
-            findNavController().navigate(R.id.navigation_select_contact)
+        setupTopBar(root)
+        setupRecyclerView(root)
+        observeViewModel(root)
+        
+        root.findViewById<View>(R.id.search_trigger).setOnClickListener {
+            val bundle = Bundle().apply {
+                putString("workspaceId", viewModel.activeWorkspace.value?.id)
+            }
+            findNavController().navigate(R.id.navigation_search, bundle)
         }
 
-        setupRecyclerView(root)
-        setupSearch(root)
-        observeViewModel()
-        
-        root.findViewById<View>(R.id.image_workspace).setOnClickListener {
-            // Open the navigation drawer from MainActivity
-            (activity as? androidx.drawerlayout.widget.DrawerLayout.DrawerListener)?.let {
-                // This might not be the direct way, let's find the drawer layout
-            }
-            activity?.findViewById<androidx.drawerlayout.widget.DrawerLayout>(R.id.drawer_layout)?.open()
-        }
-        
-        root.findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.fab_create).setOnClickListener {
-            findNavController().navigate(R.id.navigation_create_channel)
+        root.findViewById<View>(R.id.fab_create).setOnClickListener {
+            findNavController().navigate(R.id.navigation_channels)
         }
         
         return root
@@ -52,36 +51,37 @@ class HomeFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        // Refresh data whenever we return to this screen (e.g., after creating a channel)
-        viewModel.loadData()
+        viewModel.loadHomeFeed()
     }
 
-    private fun observeViewModel() {
-        viewModel.workspaces.observe(viewLifecycleOwner) {
-            updateUI()
+    private fun setupTopBar(root: View) {
+        root.findViewById<View>(R.id.layout_workspace_switcher).setOnClickListener {
+            showWorkspaceSwitcher()
         }
-        viewModel.users.observe(viewLifecycleOwner) {
-            updateUI()
+        
+        root.findViewById<View>(R.id.button_compose).setOnClickListener {
+            findNavController().navigate(R.id.navigation_select_contact)
+        }
+        
+        root.findViewById<View>(R.id.button_search_top).setOnClickListener {
+            Toast.makeText(context, "Search coming soon", Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun updateUI() {
-        val displayList = mutableListOf<Any>()
-        
-        val workspaces = viewModel.workspaces.value ?: emptyList()
-        val users = viewModel.users.value ?: emptyList()
+    private fun observeViewModel(root: View) {
+        val wsName: TextView = root.findViewById(R.id.text_workspace_name)
+        val wsInitials: TextView = root.findViewById(R.id.text_workspace_initials)
 
-        displayList.add("Workspaces")
-        if (workspaces.isEmpty()) {
-            displayList.add("No workspaces found. Tap to create.")
-        } else {
-            displayList.addAll(workspaces)
+        viewModel.activeWorkspace.observe(viewLifecycleOwner) { ws ->
+            ws?.let {
+                wsName.text = it.name
+                wsInitials.text = if (it.name.length >= 2) it.name.substring(0, 2).uppercase() else it.name.uppercase()
+            }
         }
-        
-        displayList.add("Direct Messages")
-        displayList.addAll(users)
-        
-        homeAdapter.submitList(displayList)
+
+        viewModel.displayItems.observe(viewLifecycleOwner) { items ->
+            homeAdapter.submitList(items)
+        }
     }
 
     private fun setupRecyclerView(root: View) {
@@ -89,35 +89,77 @@ class HomeFragment : Fragment() {
         recyclerView.layoutManager = LinearLayoutManager(context)
         
         homeAdapter = HomeAdapter(
-            onWorkspaceClick = { workspace ->
+            onWorkspaceClick = { /* Handled in switcher */ },
+            onChannelClick = { channel ->
                 val bundle = Bundle().apply {
-                    putString("workspaceName", workspace.name)
-                    putString("workspaceId", workspace.id)
-                }
-                findNavController().navigate(R.id.navigation_workspace_channels, bundle)
-            },
-            onUserClick = { user ->
-                val bundle = Bundle().apply {
-                    putString("channelName", user.name)
-                    putString("channelId", user.phone) // Using phone for 1-on-1 shared room logic
+                    putString("channelName", channel.name)
+                    putString("channelId", channel.id)
                 }
                 findNavController().navigate(R.id.navigation_chat, bundle)
             },
-            onActionClick = { section ->
-                if (section == "Workspaces" || section.contains("create")) {
-                    findNavController().navigate(R.id.navigation_create_channel)
-                } else {
-                    findNavController().navigate(R.id.navigation_select_contact)
+            onUserClick = { dm ->
+                val bundle = Bundle().apply {
+                    putString("channelName", dm.otherUserName)
+                    putString("channelId", dm.id) // Using DM ID
+                }
+                findNavController().navigate(R.id.navigation_chat, bundle)
+            },
+            onActionClick = { id ->
+                when (id) {
+                    "CHANNELS" -> findNavController().navigate(R.id.navigation_channels)
+                    "DIRECT MESSAGES", "DMS" -> findNavController().navigate(R.id.navigation_select_contact)
+                    "threads" -> Toast.makeText(context, "Threads clicked", Toast.LENGTH_SHORT).show()
+                    "mentions" -> findNavController().navigate(R.id.navigation_mentions)
                 }
             }
         )
         recyclerView.adapter = homeAdapter
     }
 
-    private fun setupSearch(root: View) {
-        val searchBar: com.google.android.material.search.SearchBar = root.findViewById(R.id.search_bar)
-        searchBar.setOnClickListener {
-            findNavController().navigate(R.id.navigation_profile)
+    private fun showWorkspaceSwitcher() {
+        val dialog = BottomSheetDialog(requireContext())
+        val view = layoutInflater.inflate(R.layout.layout_workspace_switcher, null)
+        
+        val recycler: RecyclerView = view.findViewById(R.id.recycler_workspaces)
+        recycler.layoutManager = LinearLayoutManager(context)
+        
+        val adapter = WorkspaceSwitcherAdapter(viewModel.workspaces.value ?: emptyList()) { ws ->
+            viewModel.switchWorkspace(ws)
+            dialog.dismiss()
         }
+        recycler.adapter = adapter
+        
+        view.findViewById<View>(R.id.layout_add_workspace).setOnClickListener {
+            // New workspace flow
+            dialog.dismiss()
+        }
+        
+        dialog.setContentView(view)
+        dialog.show()
     }
+}
+
+// Minimal adapter for the switcher
+class WorkspaceSwitcherAdapter(
+    private val workspaces: List<Workspace>,
+    private val onClick: (Workspace) -> Unit
+) : RecyclerView.Adapter<WorkspaceSwitcherAdapter.ViewHolder>() {
+
+    class ViewHolder(v: View) : RecyclerView.ViewHolder(v) {
+        val icon: ImageView = v.findViewById(R.id.image_ws_icon)
+        val name: TextView = v.findViewById(R.id.text_ws_name)
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+        val v = LayoutInflater.from(parent.context).inflate(R.layout.item_workspace_row, parent, false)
+        return ViewHolder(v)
+    }
+
+    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+        val ws = workspaces[position]
+        holder.name.text = ws.name
+        holder.itemView.setOnClickListener { onClick(ws) }
+    }
+
+    override fun getItemCount() = workspaces.size
 }

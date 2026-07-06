@@ -35,19 +35,22 @@ class DmsFragment : Fragment() {
                 val inbox = repository.getInbox(currentUserId)
                 val adapter = HomeAdapter(
                     onWorkspaceClick = {},
-                    onUserClick = { user ->
+                    onChannelClick = {},
+                    onUserClick = { dm ->
                         val bundle = Bundle().apply {
-                            putString("channelName", user.name)
-                            putString("channelId", user.phone)
+                            putString("channelName", dm.otherUserName)
+                            putString("channelId", dm.id)
                         }
                         findNavController().navigate(R.id.navigation_chat, bundle)
                     },
                     onActionClick = {}
                 )
                 recyclerView.adapter = adapter
+                // Note: inbox is List<User>, HomeAdapter expects List<DirectMessage> etc.
+                // This fragment is largely replaced by the unified Home, but fixing build here.
                 adapter.submitList(inbox)
             } catch (e: Exception) {
-                // handle error silently
+                e.printStackTrace()
             }
         }
 

@@ -47,9 +47,10 @@ class CreateChannelFragment : Fragment() {
     }
 
     private fun createChannel(name: String, isPrivate: Boolean, description: String) {
+        val userId = repository.getPrefs(requireContext()).getString("USER_ID", "")
         lifecycleScope.launch {
             try {
-                val channel = repository.createChannel(name, isPrivate, description)
+                val channel = repository.createChannel(name, isPrivate, description, userId)
                 Toast.makeText(context, "Workspace #${channel.name} created!", Toast.LENGTH_SHORT).show()
                 findNavController().navigateUp()
             } catch (e: Exception) {

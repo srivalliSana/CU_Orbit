@@ -5,6 +5,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import coil.load
 import com.example.cu_orbit.R
 import com.example.cu_orbit.data.Status
 import java.text.SimpleDateFormat
@@ -18,6 +19,7 @@ class StatusAdapter(private val statuses: List<Status>, private val onClick: (St
         val name: TextView = view.findViewById(R.id.text_user_name)
         val time: TextView = view.findViewById(R.id.text_status_time)
         val ring: View = view.findViewById(R.id.view_status_ring)
+        val avatar: android.widget.ImageView = view.findViewById(R.id.image_avatar)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): StatusViewHolder {
@@ -49,6 +51,14 @@ class StatusAdapter(private val statuses: List<Status>, private val onClick: (St
             }
         } catch (e: Exception) {
             holder.time.text = "Recently"
+        }
+
+        val absoluteUrl = com.example.cu_orbit.network.RetrofitClient.getAbsoluteUrl(status.mediaUrl)
+        if (absoluteUrl != null) {
+            holder.avatar.load(absoluteUrl) {
+                crossfade(true)
+                placeholder(R.drawable.ic_person)
+            }
         }
 
         holder.itemView.setOnClickListener { onClick(status) }

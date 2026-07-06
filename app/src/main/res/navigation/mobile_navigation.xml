@@ -12,10 +12,9 @@
         tools:layout="@layout/fragment_home" />
 
     <fragment
-        android:id="@+id/navigation_dms"
-        android:name="com.example.cu_orbit.ui.dms.DmsFragment"
-        android:label="@string/title_dms"
-        tools:layout="@layout/fragment_dms" />
+        android:id="@+id/navigation_activity"
+        android:name="com.example.cu_orbit.ui.activity.ActivityFragment"
+        android:label="Activity" />
 
     <fragment
         android:id="@+id/navigation_status"
@@ -43,6 +42,11 @@
     </fragment>
 
     <fragment
+        android:id="@+id/navigation_search"
+        android:name="com.example.cu_orbit.ui.activity.SearchFragment"
+        android:label="Search" />
+
+    <fragment
         android:id="@+id/navigation_chat"
         android:name="com.example.cu_orbit.ui.chat.ChatFragment"
         android:label="Chat">
@@ -55,9 +59,9 @@
     </fragment>
 
     <fragment
-        android:id="@+id/navigation_create_channel"
-        android:name="com.example.cu_orbit.ui.home.CreateChannelFragment"
-        android:label="Create Channel" />
+        android:id="@+id/navigation_channels"
+        android:name="com.example.cu_orbit.ui.home.ChannelTabsFragment"
+        android:label="Channels" />
 
     <fragment
         android:id="@+id/navigation_settings"
@@ -91,4 +95,9 @@
         android:id="@+id/navigation_edit_profile"
         android:name="com.example.cu_orbit.ui.you.EditProfileFragment"
         android:label="Edit Profile" />
+
+    <fragment
+        android:id="@+id/navigation_mentions"
+        android:name="com.example.cu_orbit.ui.activity.MentionsFragment"
+        android:label="Mentions" />
 </navigation>

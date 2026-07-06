@@ -1,14 +1,13 @@
 package com.example.cu_orbit.ui.home
 
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
-import com.example.cu_orbit.data.User
-import com.example.cu_orbit.data.Workspace
+import com.example.cu_orbit.data.*
 import com.example.cu_orbit.repository.MainRepository
 import kotlinx.coroutines.launch
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = MainRepository()
@@ -16,32 +15,82 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _workspaces = MutableLiveData<List<Workspace>>()
     val workspaces: LiveData<List<Workspace>> = _workspaces
 
-    private val _users = MutableLiveData<List<User>>()
-    val users: LiveData<List<User>> = _users
+    private val _activeWorkspace = MutableLiveData<Workspace?>()
+    val activeWorkspace: LiveData<Workspace?> = _activeWorkspace
 
-    fun loadData() {
-        val prefs = repository.getPrefs(getApplication<Application>().applicationContext)
-        val currentUserId = prefs.getString("USER_ID", "") ?: ""
+    private val _displayItems = MutableLiveData<List<Any>>()
+    val displayItems: LiveData<List<Any>> = _displayItems
 
-        // Load Workspaces
+    private val _quickAccess = MutableLiveData<QuickAccessResponse>()
+    
+    init {
+        loadInitialData()
+    }
+
+    private fun loadInitialData() {
         viewModelScope.launch {
             try {
-                val fetched = repository.getWorkspaces()
-                _workspaces.postValue(fetched)
+                val wsList = repository.getWorkspaces()
+                _workspaces.postValue(wsList)
+                if (wsList.isNotEmpty()) {
+                    val active = wsList.find { it.isActive } ?: wsList[0]
+                    _activeWorkspace.postValue(active)
+                    loadHomeFeed(active.id)
+                }
             } catch (e: Exception) {
-                _workspaces.postValue(emptyList())
+                e.printStackTrace()
             }
         }
+    }
 
-        // Load DMs
-        if (currentUserId.isNotEmpty()) {
-            viewModelScope.launch {
-                try {
-                    val inbox = repository.getInbox(currentUserId)
-                    _users.postValue(inbox)
-                } catch (e: Exception) {
-                    _users.postValue(emptyList())
+    fun switchWorkspace(workspace: Workspace) {
+        _activeWorkspace.postValue(workspace)
+        loadHomeFeed(workspace.id)
+    }
+
+    fun loadHomeFeed(workspaceId: String? = _activeWorkspace.value?.id) {
+        val prefs = repository.getPrefs(getApplication<Application>().applicationContext)
+        val userId = prefs.getString("USER_ID", "") ?: ""
+        
+        if (workspaceId == null) return
+
+        viewModelScope.launch {
+            try {
+                // 1. Get quick access counts
+                val quick = try { repository.getQuickAccessCounts(userId) } catch(e: Exception) { QuickAccessResponse(0,0,0) }
+                _quickAccess.postValue(quick)
+
+                // 2. Get Home Feed (Channels + DMs)
+                val feed = repository.getHomeFeed(userId, workspaceId)
+                
+                // 3. Assemble Display List
+                val items = mutableListOf<Any>()
+                
+                // Quick Access Section (3.3)
+                items.add(QuickAccessItem("threads", "Threads", com.example.cu_orbit.R.drawable.ic_threads, quick.threads, quick.threads > 0))
+                items.add(QuickAccessItem("mentions", "Mentions", com.example.cu_orbit.R.drawable.ic_mentions, quick.mentions, quick.mentions > 0))
+
+                // Channels Section (3.4)
+                items.add("CHANNELS")
+                if (feed.channels.isEmpty()) {
+                    items.add(EmptyStateItem("channels", "You haven't joined any channels yet.", android.R.drawable.ic_menu_send))
+                } else {
+                    items.addAll(feed.channels.sortedByDescending { it.lastMessagePreview?.sentAt ?: 0 })
                 }
+
+                // DMs Section (3.5)
+                items.add("DIRECT MESSAGES")
+                if (feed.dms.isEmpty()) {
+                    items.add(EmptyStateItem("dms", "No conversations yet.", android.R.drawable.stat_notify_chat))
+                } else {
+                    items.addAll(feed.dms.sortedByDescending { it.lastMessagePreview?.sentAt ?: 0 })
+                }
+
+                _displayItems.postValue(items)
+
+            } catch (e: Exception) {
+                android.util.Log.e("HomeViewModel", "Error loading feed", e)
+                _displayItems.postValue(listOf("CHANNELS", "Server connection failed.", "DIRECT MESSAGES", "Check your settings."))
             }
         }
     }

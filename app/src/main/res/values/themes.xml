@@ -1,7 +1,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Base.Theme.CU_Orbit" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
+        <!-- Support both light and dark modes -->
         <item name="colorPrimary">@color/orbit_primary</item>
         <item name="colorSecondary">@color/orbit_accent</item>
         <item name="android:windowBackground">@color/orbit_background</item>
@@ -16,6 +16,9 @@
 
     <style name="CircleImage" parent="">
         <item name="cornerSize">50%</item>
+    </style>
+    <style name="RoundedSquare" parent="">
+        <item name="cornerSize">8dp</item>
     </style>
     <style name="ProfileOption" parent="">
         <item name="android:layout_width">match_parent</item>

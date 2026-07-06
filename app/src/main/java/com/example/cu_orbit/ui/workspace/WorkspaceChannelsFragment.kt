@@ -32,7 +32,6 @@ class WorkspaceChannelsFragment : Fragment() {
         workspaceId = arguments?.getString("workspaceId") ?: ""
         workspaceName = arguments?.getString("workspaceName") ?: "Workspace"
 
-        // Using standard toolbar from fragment_dms layout or just a toast
         Toast.makeText(context, "Welcome to $workspaceName", Toast.LENGTH_SHORT).show()
 
         val recyclerView: RecyclerView = root.findViewById(R.id.recycler_dms_only)
@@ -41,7 +40,6 @@ class WorkspaceChannelsFragment : Fragment() {
         loadChannels(recyclerView)
 
         root.findViewById<View>(R.id.fab_new_dm).setOnClickListener {
-            // Repurpose this to create a channel in this workspace
             showCreateChannelDialog()
         }
 
@@ -49,9 +47,10 @@ class WorkspaceChannelsFragment : Fragment() {
     }
 
     private fun loadChannels(recyclerView: RecyclerView) {
+        val userId = repository.getPrefs(requireContext()).getString("USER_ID", "")
         lifecycleScope.launch {
             try {
-                val channels = repository.getWorkspaceChannels(workspaceId)
+                val channels = repository.getWorkspaceChannels(workspaceId, userId)
                 recyclerView.adapter = ChannelAdapter(channels) { channel ->
                     val bundle = Bundle().apply {
                         putString("channelName", channel.name)
@@ -72,10 +71,11 @@ class WorkspaceChannelsFragment : Fragment() {
             .setView(input)
             .setPositiveButton("Create") { _, _ ->
                 val name = input.text.toString().trim()
+                val userId = repository.getPrefs(requireContext()).getString("USER_ID", "")
                 if (name.isNotEmpty()) {
                     lifecycleScope.launch {
                         try {
-                            repository.createWorkspaceChannel(workspaceId, name, false, "")
+                            repository.createWorkspaceChannel(workspaceId, name, false, "", userId)
                             Toast.makeText(context, "#$name created!", Toast.LENGTH_SHORT).show()
                             loadChannels(requireView().findViewById(R.id.recycler_dms_only))
                         } catch (e: Exception) {
@@ -105,7 +105,7 @@ class ChannelAdapter(private val channels: List<Channel>, private val onClick: (
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val channel = channels[position]
         holder.name.text = channel.name
-        holder.prefix.text = if (channel.isPrivate) "🔒" else "#"
+        holder.prefix.text = if (channel.type == "private") "L" else "#"
         holder.itemView.setOnClickListener { onClick(channel) }
     }
 

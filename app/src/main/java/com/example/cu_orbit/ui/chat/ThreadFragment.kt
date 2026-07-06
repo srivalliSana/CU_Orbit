@@ -68,7 +68,8 @@ class ThreadFragment : Fragment() {
                 val userId = prefs.getString("USER_ID", "anonymous") ?: "anonymous"
                 val userName = prefs.getString("USER_NAME", "Me") ?: "Me"
                 
-                viewModel.sendMessage(userId, userName, text, parent.channelId, "text", null, parent.id)
+                val containerId = parent.channelId ?: parent.dmId ?: ""
+                viewModel.sendMessage(userId, userName, text, containerId, "text", null, parent.id)
                 editMessage.setText("")
             }
         }

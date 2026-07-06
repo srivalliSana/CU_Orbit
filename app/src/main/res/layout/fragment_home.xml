@@ -4,67 +4,123 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/orbit_background">
+    android:background="@color/surface_0">
 
     <com.google.android.material.appbar.AppBarLayout
         android:id="@+id/app_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/orbit_surface"
-        android:fitsSystemWindows="true"
+        android:background="@color/surface_1"
         app:elevation="0dp">
 
+        <!-- Top Bar (3.1) -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
+            android:layout_height="52dp"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingHorizontal="16dp">
+            android:paddingHorizontal="14dp">
 
-            <com.google.android.material.imageview.ShapeableImageView
-                android:id="@+id/image_workspace"
+            <LinearLayout
+                android:id="@+id/layout_workspace_switcher"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true">
+
+                <FrameLayout
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:background="@drawable/bg_workspace_icon">
+                    <TextView
+                        android:id="@+id/text_workspace_initials"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:text="CU"
+                        android:textColor="@color/white"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </FrameLayout>
+
+                <TextView
+                    android:id="@+id/text_workspace_name"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:text="CU Orbit"
+                    android:textColor="@color/text_primary"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginStart="4dp"
+                    android:src="@android:drawable/arrow_down_float"
+                    app:tint="@color/text_muted" />
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/button_compose"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
-                android:background="@color/orbit_primary"
-                android:padding="6dp"
-                android:src="@drawable/ic_home"
-                app:shapeAppearanceOverlay="@style/CircleImage"
-                app:tint="@color/white" />
-
-            <TextView
-                android:id="@+id/text_workspace_name"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:layout_weight="1"
-                android:text="CU Orbit"
-                android:textColor="@color/orbit_text_primary"
-                android:textSize="22sp"
-                android:textStyle="bold" />
-
-            <ImageView
-                android:id="@+id/button_new_dm"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_marginEnd="8dp"
+                android:padding="8dp"
                 android:src="@android:drawable/ic_menu_edit"
-                app:tint="@color/orbit_text_primary" />
+                app:tint="@color/text_primary" />
 
             <ImageView
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:src="@drawable/ic_search"
-                app:tint="@color/orbit_text_primary" />
+                android:id="@+id/button_search_top"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:padding="8dp"
+                android:src="@android:drawable/ic_menu_search"
+                app:tint="@color/text_primary" />
         </LinearLayout>
 
-        <com.google.android.material.search.SearchBar
-            android:id="@+id/search_bar"
+        <View
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="16dp"
-            android:layout_marginBottom="16dp"
-            android:hint="Jump to..."
-            app:backgroundTint="@color/orbit_background" />
+            android:layout_height="0.5dp"
+            android:background="@color/border" />
+
+        <!-- Search bar trigger (3.2) -->
+        <FrameLayout
+            android:id="@+id/search_trigger"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_marginHorizontal="14dp"
+            android:layout_marginVertical="10dp"
+            android:background="@drawable/bg_search_trigger"
+            android:clickable="true"
+            android:focusable="true">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical"
+                android:layout_marginStart="12dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:src="@android:drawable/ic_menu_search"
+                    app:tint="@color/text_muted" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="Jump to a channel, DM, or file"
+                    android:textColor="@color/text_muted"
+                    android:textSize="14sp" />
+            </LinearLayout>
+        </FrameLayout>
 
     </com.google.android.material.appbar.AppBarLayout>
 
@@ -72,18 +128,16 @@
         android:id="@+id/recycler_home"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:clipToPadding="false"
-        android:paddingBottom="88dp"
         app:layout_behavior="@string/appbar_scrolling_view_behavior"
-        tools:listitem="@layout/item_channel" />
+        android:clipToPadding="false"
+        android:paddingBottom="16dp" />
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fab_create"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_margin="20dp"
-        android:contentDescription="Create"
+        android:layout_margin="16dp"
         app:backgroundTint="@color/orbit_primary"
         app:srcCompat="@android:drawable/ic_input_add"
         app:tint="@color/white" />

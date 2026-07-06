@@ -24,7 +24,7 @@ class ChannelAdapter(private val channels: List<Channel>, private val onClick: (
     override fun onBindViewHolder(holder: ChannelViewHolder, position: Int) {
         val channel = channels[position]
         holder.name.text = channel.name
-        holder.prefix.text = if (channel.isPrivate) "🔒" else "#"
+        holder.prefix.text = if (channel.type == "private") "🔒" else "#"
         holder.itemView.setOnClickListener { onClick(channel) }
     }
 

@@ -47,8 +47,9 @@ class YouFragment : Fragment() {
         root.findViewById<TextView>(R.id.profile_handle).text = "@${name?.lowercase()?.replace(" ", "_")}"
         
         val profileImage = root.findViewById<ShapeableImageView>(R.id.profile_avatar)
-        if (avatarUrl != null && avatarUrl.isNotEmpty()) {
-            profileImage.load(avatarUrl) {
+        val absoluteAvatarUrl = com.example.cu_orbit.network.RetrofitClient.getAbsoluteUrl(avatarUrl)
+        if (absoluteAvatarUrl != null && absoluteAvatarUrl.isNotEmpty()) {
+            profileImage.load(absoluteAvatarUrl) {
                 crossfade(true)
                 placeholder(R.drawable.ic_person)
                 error(R.drawable.ic_person)

@@ -4,30 +4,30 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
-    android:paddingHorizontal="16dp"
-    android:paddingTop="24dp"
+    android:gravity="center_vertical"
+    android:paddingHorizontal="14dp"
+    android:paddingTop="20dp"
     android:paddingBottom="8dp"
-    android:gravity="center_vertical">
+    android:background="@color/surface_0">
 
     <TextView
         android:id="@+id/text_section_title"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:textAllCaps="true"
-        android:textColor="@color/slack_text_secondary"
-        android:textSize="12sp"
+        android:text="CHANNELS"
+        android:textColor="@color/text_secondary"
+        android:textSize="11sp"
         android:textStyle="bold"
-        android:letterSpacing="0.05" />
+        android:letterSpacing="0.02"
+        android:textAllCaps="true" />
 
     <ImageView
         android:id="@+id/image_section_action"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:src="@android:drawable/ic_input_add"
         android:padding="2dp"
-        android:src="@android:drawable/ic_menu_add"
-        android:contentDescription="Add"
-        app:tint="@color/slack_text_secondary" />
+        app:tint="@color/text_muted" />
 
 </LinearLayout>

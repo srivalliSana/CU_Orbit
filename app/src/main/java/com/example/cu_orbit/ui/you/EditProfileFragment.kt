@@ -101,7 +101,8 @@ class EditProfileFragment : Fragment() {
         bioEdit.setText(initialBio)
         
         if (initialAvatar.isNotEmpty()) {
-            avatarImage.load(initialAvatar) {
+            val absoluteAvatar = com.example.cu_orbit.network.RetrofitClient.getAbsoluteUrl(initialAvatar)
+            avatarImage.load(absoluteAvatar) {
                 crossfade(true)
                 placeholder(R.drawable.ic_person)
                 error(R.drawable.ic_person)
@@ -225,7 +226,8 @@ class EditProfileFragment : Fragment() {
                 val url = repository.uploadFile(file)
                 if (url.isNotEmpty()) {
                     currentAvatarUrl = url
-                    avatarImage.load(url) {
+                    val absoluteAvatar = com.example.cu_orbit.network.RetrofitClient.getAbsoluteUrl(url)
+                    avatarImage.load(absoluteAvatar) {
                         crossfade(true)
                         placeholder(R.drawable.ic_person)
                         error(R.drawable.ic_person)

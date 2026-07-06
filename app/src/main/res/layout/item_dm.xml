@@ -1,95 +1,98 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="?attr/selectableItemBackground"
-    android:paddingHorizontal="16dp"
-    android:paddingVertical="8dp">
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="14dp"
+    android:paddingVertical="9dp">
 
-    <com.google.android.material.imageview.ShapeableImageView
-        android:id="@+id/image_avatar"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
-        android:src="@drawable/ic_person"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:shapeAppearanceOverlay="@style/CircleImage" />
+    <FrameLayout
+        android:layout_width="30dp"
+        android:layout_height="30dp">
 
-    <View
-        android:id="@+id/view_status"
-        android:layout_width="12dp"
-        android:layout_height="12dp"
-        android:background="@drawable/status_online"
-        app:layout_constraintBottom_toBottomOf="@id/image_avatar"
-        app:layout_constraintEnd_toEndOf="@id/image_avatar" />
+        <com.google.android.material.imageview.ShapeableImageView
+            android:id="@+id/image_avatar"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:src="@drawable/ic_person"
+            app:shapeAppearanceOverlay="@style/CircleImage" />
 
-    <TextView
-        android:id="@+id/text_user_name"
+        <View
+            android:id="@+id/view_presence"
+            android:layout_width="9dp"
+            android:layout_height="9dp"
+            android:layout_gravity="bottom|end"
+            android:background="@drawable/bg_presence_online"
+            android:elevation="1dp" />
+    </FrameLayout>
+
+    <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
-        android:text="John Doe"
-        android:textColor="@color/orbit_text_primary"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        app:layout_constraintEnd_toStartOf="@id/text_last_time"
-        app:layout_constraintStart_toEndOf="@id/image_avatar"
-        app:layout_constraintTop_toTopOf="@id/image_avatar" />
+        android:layout_marginStart="10dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
 
+        <TextView
+            android:id="@+id/text_user_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp"
+            tools:text="Lavanya Cutm" />
+
+        <TextView
+            android:id="@+id/text_last_preview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/text_muted"
+            android:textSize="12sp"
+            tools:text="Voice message · 0:14" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="end"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/text_last_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_muted"
+            android:textSize="11sp"
+            tools:text="11:30" />
+
+        <TextView
+            android:id="@+id/text_unread_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_badge_accent"
+            android:minWidth="16dp"
+            android:paddingHorizontal="5dp"
+            android:paddingVertical="1dp"
+            android:textColor="@color/white"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            tools:text="1"
+            tools:visibility="visible" />
+    </LinearLayout>
+
+    <!-- Hidden field for compatibility -->
     <ImageView
         android:id="@+id/image_last_status"
-        android:layout_width="14dp"
-        android:layout_height="14dp"
-        android:layout_marginEnd="4dp"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="@id/text_last_preview"
-        app:layout_constraintStart_toEndOf="@id/image_avatar"
-        app:layout_constraintTop_toTopOf="@id/text_last_preview"
-        app:srcCompat="@android:drawable/checkbox_on_background"
-        app:tint="@color/orbit_accent" />
-
-    <TextView
-        android:id="@+id/text_last_preview"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:text="How are you doing?"
-        android:textColor="@color/orbit_text_secondary"
-        android:textSize="14sp"
-        app:layout_constraintEnd_toStartOf="@id/text_unread_badge"
-        app:layout_constraintStart_toEndOf="@id/image_avatar"
-        app:layout_constraintTop_toBottomOf="@id/text_user_name" />
+        android:layout_height="0dp"
+        android:visibility="gone" />
 
-    <TextView
-        android:id="@+id/text_last_time"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="10:30 AM"
-        android:textColor="@color/orbit_text_secondary"
-        android:textSize="11sp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="@id/text_user_name" />
-
-    <TextView
-        android:id="@+id/text_unread_badge"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:background="@drawable/bg_prefix_circle"
-        android:backgroundTint="@color/orbit_primary"
-        android:minWidth="18dp"
-        android:paddingHorizontal="4dp"
-        android:text="2"
-        android:textAlignment="center"
-        android:textColor="@color/white"
-        android:textSize="10sp"
-        android:textStyle="bold"
-        android:visibility="gone"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/text_last_time" />
-
-</androidx.constraintlayout.widget.ConstraintLayout>
+</LinearLayout>

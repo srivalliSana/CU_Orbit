@@ -125,12 +125,11 @@ class ChatFragment : Fragment() {
         val channelNameArg = arguments?.getString("channelName") ?: "general"
         val rawId = arguments?.getString("channelId") ?: "general"
         
-        // Determine if it's a DM (ID is a phone number)
-        val isDM = rawId.all { it.isDigit() || it == '+' }
+        // Determine if it's a DM (ID contains underscore or is a phone number)
+        val isDM = rawId.contains("_") || rawId.all { it.isDigit() || it == '+' }
         
-        if (isDM) {
-            // Generate a consistent DM ID: e.g., "12345_67890" sorted numerically
-            // so both users always enter the same room.
+        if (isDM && !rawId.contains("_")) {
+            // Generate consistent room ID from phone number
             val otherUser = rawId
             channelId = if (currentUserId < otherUser) "${currentUserId}_$otherUser" else "${otherUser}_$currentUserId"
         } else {
@@ -177,26 +176,42 @@ class ChatFragment : Fragment() {
     private fun setupChatHeader(root: View, nameArg: String, isDM: Boolean, rawId: String) {
         val titleText: TextView = root.findViewById(R.id.text_chat_title)
         val subtitleText: TextView = root.findViewById(R.id.text_chat_subtitle)
+        val headerAvatar: ImageView = root.findViewById(R.id.image_chat_header_avatar)
         val btnAdd: ImageView = root.findViewById(R.id.button_add_member)
 
         if (isDM) {
-            // Resolve contact name from phone number (rawId is the other person's phone)
-            val resolvedName = ContactUtils.getContactName(requireContext(), rawId)
-            channelName = resolvedName ?: rawId 
+            headerAvatar.visibility = View.VISIBLE
+            val otherUserId = if (rawId.contains("_")) {
+                val parts = rawId.split("_")
+                if (parts[0] == currentUserId) parts[1] else parts[0]
+            } else rawId
+
+            val resolvedName = ContactUtils.getContactName(requireContext(), otherUserId)
+            channelName = resolvedName ?: nameArg 
             titleText.text = channelName
             
-            // Set dynamic status
             lifecycleScope.launch {
                 try {
                     val users = repository.getUsers()
-                    val otherUser = users.find { it.phone == rawId || it.id == rawId }
-                    subtitleText.text = otherUser?.status ?: "online"
+                    val otherUser = users.find { it.phone == otherUserId || it.id == otherUserId }
+                    subtitleText.text = otherUser?.presence ?: "offline"
+                    
+                    otherUser?.avatarUrl?.let { url ->
+                        if (url.isNotEmpty()) {
+                            headerAvatar.load(url) {
+                                crossfade(true)
+                                placeholder(R.drawable.ic_person)
+                                error(R.drawable.ic_person)
+                            }
+                        }
+                    }
                 } catch (e: Exception) {
-                    subtitleText.text = "online"
+                    subtitleText.text = "offline"
                 }
             }
             btnAdd.visibility = View.GONE 
         } else {
+            headerAvatar.visibility = View.GONE
             channelName = nameArg
             titleText.text = "#$channelName"
             btnAdd.visibility = View.VISIBLE
@@ -205,8 +220,7 @@ class ChatFragment : Fragment() {
             lifecycleScope.launch {
                 try {
                     val channel = repository.getChannel(channelId)
-                    val count = channel.memberCount ?: 0
-                    subtitleText.text = if (count > 0) "$count members" else "0 members"
+                    subtitleText.text = "${channel.memberCount} members"
                 } catch (e: Exception) {
                     subtitleText.text = ""
                 }
@@ -215,25 +229,56 @@ class ChatFragment : Fragment() {
     }
 
     private fun showAddMemberDialog() {
-        val input = EditText(requireContext()).apply { hint = "Phone number" }
-        androidx.appcompat.app.AlertDialog.Builder(requireContext())
-            .setTitle("Add Member")
-            .setView(input)
-            .setPositiveButton("Add") { _, _ ->
-                val phone = input.text.toString().trim()
-                if (phone.isNotEmpty()) {
-                    lifecycleScope.launch {
-                        try {
-                            repository.addChannelMember(channelId, phone)
-                            Toast.makeText(context, "Added!", Toast.LENGTH_SHORT).show()
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "Error adding member", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            try {
+                val users = repository.getUsers()
+                val names = users.map { it.name }.toTypedArray()
+                val checkedItems = BooleanArray(users.size) { false }
+                val selectedUsers = mutableListOf<com.example.cu_orbit.data.User>()
+
+                val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.layout_add_member_search, null)
+                val searchInput: EditText = dialogView.findViewById(R.id.edit_search_members)
+                val listView: android.widget.ListView = dialogView.findViewById(R.id.list_members)
+                
+                val adapter = android.widget.ArrayAdapter(requireContext(), android.R.layout.simple_list_item_multiple_choice, names)
+                listView.adapter = adapter
+                listView.choiceMode = android.widget.ListView.CHOICE_MODE_MULTIPLE
+                
+                searchInput.addTextChangedListener { s ->
+                    adapter.filter.filter(s)
+                }
+
+                val dialog = androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setTitle("Add Members")
+                    .setView(dialogView)
+                    .setPositiveButton("Add", null)
+                    .setNegativeButton("Cancel", null)
+                    .create()
+
+                dialog.show()
+
+                dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    val checkedPositions = listView.checkedItemPositions
+                    var addedCount = 0
+                    for (i in 0 until adapter.count) {
+                        if (checkedPositions.get(i)) {
+                            val name = adapter.getItem(i)
+                            val user = users.find { it.name == name }
+                            user?.let {
+                                addedCount++
+                                lifecycleScope.launch {
+                                    try { repository.addChannelMember(channelId, it.phone) } catch (e: Exception) {}
+                                }
+                            }
                         }
                     }
+                    Toast.makeText(context, "Adding $addedCount members...", Toast.LENGTH_SHORT).show()
+                    dialog.dismiss()
                 }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Error loading users", Toast.LENGTH_SHORT).show()
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+        }
     }
 
     private fun observeViewModel(root: View) {
@@ -248,13 +293,21 @@ class ChatFragment : Fragment() {
             }
         }
 
+        val recyclerView: RecyclerView = root.findViewById(R.id.recycler_messages)
         viewModel.messages.observe(viewLifecycleOwner) { messages ->
             val oldSize = messagesList.size
             messagesList.clear()
             messagesList.addAll(messages)
             adapter.notifyDataSetChanged()
-            if (messages.size > oldSize) {
-                root.findViewById<RecyclerView>(R.id.recycler_messages)?.scrollToPosition(messagesList.size - 1)
+            
+            val targetId = arguments?.getString("target_message_id")
+            if (targetId != null) {
+                val index = messagesList.indexOfFirst { it.id == targetId }
+                if (index != -1) {
+                    recyclerView.scrollToPosition(index)
+                }
+            } else if (messages.size > oldSize) {
+                recyclerView.scrollToPosition(messagesList.size - 1)
             }
         }
     }
@@ -316,7 +369,10 @@ class ChatFragment : Fragment() {
         }
 
         root.findViewById<ImageView>(R.id.button_search_chat).setOnClickListener {
-            Toast.makeText(context, "Search within chat coming soon!", Toast.LENGTH_SHORT).show()
+            val bundle = Bundle().apply {
+                putString("prefill_query", "in:#$channelName ")
+            }
+            findNavController().navigate(R.id.navigation_search, bundle)
         }
     }
 
@@ -461,7 +517,7 @@ class ChatFragment : Fragment() {
     }
 
     private fun showEditDialog(message: Message) {
-        val input = EditText(requireContext()).apply { setText(message.body) }
+        val input = EditText(requireContext()).apply { setText(message.text) }
         androidx.appcompat.app.AlertDialog.Builder(requireContext())
             .setTitle("Edit Message")
             .setView(input)
@@ -480,7 +536,6 @@ class ChatFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
-        // Hide keyboard to prevent "inactive InputConnection" warnings
         val imm = requireContext().getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
         view?.windowToken?.let { imm.hideSoftInputFromWindow(it, 0) }
 

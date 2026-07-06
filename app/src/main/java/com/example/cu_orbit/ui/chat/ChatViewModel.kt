@@ -56,14 +56,13 @@ class ChatViewModel : ViewModel() {
             val result = repository.getMessages(channelId)
             _messages.postValue(result)
             
-            // Mark other person's messages as read
             currentUserId?.let { uid ->
                 result.filter { it.senderId != uid && it.status != "read" }.forEach { msg ->
                     markAsRead(msg.id)
                 }
             }
         } catch (e: Exception) {
-            // Log error
+            e.printStackTrace()
         }
     }
 
@@ -80,7 +79,7 @@ class ChatViewModel : ViewModel() {
             val result = repository.getReplies(messageId)
             _threadReplies.postValue(result)
         } catch (e: Exception) {
-            // Log error
+            e.printStackTrace()
         }
     }
 
@@ -89,7 +88,7 @@ class ChatViewModel : ViewModel() {
             val result = repository.getTyping(channelId)
             _typingUsers.postValue(result)
         } catch (e: Exception) {
-            // Log error
+            e.printStackTrace()
         }
     }
 
@@ -98,7 +97,7 @@ class ChatViewModel : ViewModel() {
             try {
                 repository.updateTyping(channelId, userId, userName)
             } catch (e: Exception) {
-                // Log error
+                e.printStackTrace()
             }
         }
     }
@@ -110,7 +109,7 @@ class ChatViewModel : ViewModel() {
                 repository.sendMessage(request)
                 loadMessages(channelId)
             } catch (e: Exception) {
-                // Error handling
+                e.printStackTrace()
             }
         }
     }
@@ -121,7 +120,7 @@ class ChatViewModel : ViewModel() {
                 repository.editMessage(id, newBody)
                 loadMessages(channelId)
             } catch (e: Exception) {
-                // Error handling
+                e.printStackTrace()
             }
         }
     }
@@ -130,9 +129,11 @@ class ChatViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 repository.reactToMessage(message.id, userId, userName, emoji)
-                loadMessages(message.channelId)
+                // In a real app with containerId support
+                val cid = message.channelId ?: message.dmId ?: ""
+                loadMessages(cid)
             } catch (e: Exception) {
-                // Error handling
+                e.printStackTrace()
             }
         }
     }
@@ -141,9 +142,10 @@ class ChatViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 repository.deleteMessage(message.id)
-                loadMessages(message.channelId)
+                val cid = message.channelId ?: message.dmId ?: ""
+                loadMessages(cid)
             } catch (e: Exception) {
-                // Error handling
+                e.printStackTrace()
             }
         }
     }

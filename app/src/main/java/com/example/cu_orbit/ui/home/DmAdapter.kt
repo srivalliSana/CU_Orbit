@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.cu_orbit.R
 import com.example.cu_orbit.data.User
 import com.example.cu_orbit.utils.ContactUtils
+import coil.load
 
 class DmAdapter(private val users: List<User>, private val onClick: (User) -> Unit) :
     RecyclerView.Adapter<DmAdapter.DmViewHolder>() {
@@ -18,8 +19,9 @@ class DmAdapter(private val users: List<User>, private val onClick: (User) -> Un
         val time: TextView = view.findViewById(R.id.text_last_time)
         val preview: TextView = view.findViewById(R.id.text_last_preview)
         val unread: TextView = view.findViewById(R.id.text_unread_badge)
-        val status: View = view.findViewById(R.id.view_status)
+        val presence: View = view.findViewById(R.id.view_presence)
         val lastStatus: ImageView = view.findViewById(R.id.image_last_status)
+        val avatar: ImageView = view.findViewById(R.id.image_avatar)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): DmViewHolder {
@@ -54,13 +56,24 @@ class DmAdapter(private val users: List<User>, private val onClick: (User) -> Un
             holder.unread.visibility = View.GONE
         }
         
-        val statusRes = when(user.status) {
-            "online" -> R.drawable.status_online
-            "away" -> R.drawable.status_away
-            "dnd" -> R.drawable.status_dnd
-            else -> R.drawable.status_online
+        val statusRes = when(user.presence) {
+            "online" -> R.drawable.bg_presence_online
+            "away" -> R.drawable.bg_presence_away
+            "dnd" -> R.drawable.bg_presence_dnd
+            else -> R.drawable.bg_presence_offline
         }
-        holder.status.setBackgroundResource(statusRes)
+        holder.presence.setBackgroundResource(statusRes)
+
+        val absoluteAvatarUrl = com.example.cu_orbit.network.RetrofitClient.getAbsoluteUrl(user.avatarUrl)
+        if (absoluteAvatarUrl?.isNotEmpty() == true) {
+            holder.avatar.load(absoluteAvatarUrl) {
+                crossfade(true)
+                placeholder(R.drawable.ic_person)
+                error(R.drawable.ic_person)
+            }
+        } else {
+            holder.avatar.setImageResource(R.drawable.ic_person)
+        }
         
         holder.itemView.setOnClickListener { onClick(user) }
     }

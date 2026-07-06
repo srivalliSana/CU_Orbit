@@ -15,7 +15,8 @@ class FullImageActivity : AppCompatActivity() {
         val imageUrl = intent.getStringExtra("IMAGE_URL")
         val imageView = findViewById<ImageView>(R.id.image_full_view)
         
-        imageView.load(imageUrl) {
+        val absoluteUrl = com.example.cu_orbit.network.RetrofitClient.getAbsoluteUrl(imageUrl)
+        imageView.load(absoluteUrl) {
             crossfade(true)
             placeholder(R.drawable.bg_orbit_gradient)
         }

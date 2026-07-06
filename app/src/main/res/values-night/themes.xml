@@ -5,10 +5,10 @@
         <item name="colorPrimary">@color/orbit_primary</item>
         <item name="colorSecondary">@color/orbit_accent</item>
         <item name="android:windowBackground">@color/orbit_background</item>
-        <item name="android:statusBarColor">#000000</item>
+        <item name="android:statusBarColor">@color/surface_0</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="colorSurface">@color/orbit_surface</item>
-        <item name="android:navigationBarColor">@color/orbit_surface</item>
+        <item name="android:navigationBarColor">@color/surface_0</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="27">false</item>
     </style>
 </resources>

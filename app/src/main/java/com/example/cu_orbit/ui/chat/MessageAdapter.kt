@@ -7,10 +7,10 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.example.cu_orbit.R
 import com.example.cu_orbit.data.Message
+import com.example.cu_orbit.network.RetrofitClient
 import com.example.cu_orbit.utils.MarkdownUtils
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
@@ -34,115 +34,150 @@ class MessageAdapter(
     private var playingMessageId: String? = null
     private var currentUserId: String = ""
 
+    companion object {
+        private const val TYPE_SENT = 1
+        private const val TYPE_RECEIVED = 2
+    }
+
     fun setCurrentUserId(userId: String) {
         this.currentUserId = userId
+        notifyDataSetChanged()
+    }
+
+    override fun getItemViewType(position: Int): Int {
+        val message = messages[position]
+        // Robust comparison: extract digits only to handle (+91) variations
+        val senderDigits = message.senderId.filter { it.isDigit() }
+        val currentDigits = currentUserId.filter { it.isDigit() }
+        
+        return if (senderDigits.isNotEmpty() && senderDigits == currentDigits) {
+            TYPE_SENT
+        } else {
+            TYPE_RECEIVED
+        }
     }
 
     class MessageViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        val headerLayout: View = view.findViewById(R.id.layout_message_header)
-        val userName: TextView = view.findViewById(R.id.text_user_name)
+        // Shared fields
         val timestamp: TextView = view.findViewById(R.id.text_timestamp)
         val body: TextView = view.findViewById(R.id.text_message_body)
-        
-        init {
-            body.movementMethod = android.text.method.LinkMovementMethod.getInstance()
-        }
-
-        val profileImage: ShapeableImageView = view.findViewById(R.id.image_profile)
         val threadIndicator: View = view.findViewById(R.id.layout_thread_indicator)
         val threadCount: TextView = view.findViewById(R.id.text_thread_count)
         val reactionGroup: ChipGroup = view.findViewById(R.id.chip_group_reactions)
-        
-        // Media Views
         val cardImage: View = view.findViewById(R.id.card_message_image)
-        val imageContent: android.widget.ImageView = view.findViewById(R.id.image_message_content)
+        val imageContent: ImageView = view.findViewById(R.id.image_message_content)
         val cardVoice: View = view.findViewById(R.id.card_voice_player)
-        val voicePlayButton: android.widget.ImageView = view.findViewById(R.id.button_play_voice)
+        val voicePlayButton: ImageView = view.findViewById(R.id.button_play_voice)
         val voiceDuration: TextView = view.findViewById(R.id.text_voice_duration)
         val layoutFile: View = view.findViewById(R.id.layout_file_attachment)
         val fileName: TextView = view.findViewById(R.id.text_file_name)
+
+        // Received message only
+        val headerLayout: View? = view.findViewById(R.id.layout_message_header)
+        val userName: TextView? = view.findViewById(R.id.text_user_name)
+        val profileImage: ShapeableImageView? = view.findViewById(R.id.image_profile)
+        
+        // Sent message only
+        val statusIcon: ImageView? = view.findViewById(R.id.image_message_status)
+
+        init {
+            body.movementMethod = android.text.method.LinkMovementMethod.getInstance()
+        }
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MessageViewHolder {
-        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_message, parent, false)
+        val layout = if (viewType == TYPE_SENT) R.layout.item_message_sent else R.layout.item_message_received
+        val view = LayoutInflater.from(parent.context).inflate(layout, parent, false)
         return MessageViewHolder(view)
     }
 
     override fun onBindViewHolder(holder: MessageViewHolder, position: Int) {
         val message = messages[position]
+        val isSent = getItemViewType(position) == TYPE_SENT
         
-        // Grouping logic: Hide header if previous message is from same user
-        val showHeader = if (position == 0) {
-            true
-        } else {
-            val prevMessage = messages[position - 1]
-            // If same sender and within 5 minutes, group them
-            prevMessage.senderId != message.senderId || (message.timestamp - prevMessage.timestamp > 300000)
-        }
+        // 1. Timestamp
+        holder.timestamp.text = timeFormatter.format(Date(message.sentAt))
+        holder.timestamp.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
 
-        if (showHeader) {
-            holder.headerLayout.visibility = View.VISIBLE
-            holder.userName.text = message.senderName ?: "Student"
-            holder.timestamp.text = timeFormatter.format(Date(message.timestamp))
-            
-            // Try to resolve sender avatar
-            val avatarUrl = message.senderAvatarUrl 
-            if (avatarUrl != null && avatarUrl.isNotEmpty()) {
-                holder.profileImage.load(avatarUrl) {
-                    crossfade(true)
-                    placeholder(R.drawable.ic_person)
-                    error(R.drawable.ic_person)
+        // 2. Received Message Header & Avatar logic
+        if (!isSent) {
+            val showHeader = if (position == 0) true 
+            else {
+                val prev = messages[position - 1]
+                prev.senderId != message.senderId || (message.sentAt - prev.sentAt > 300000)
+            }
+
+            if (showHeader) {
+                holder.headerLayout?.visibility = View.VISIBLE
+                holder.userName?.text = message.senderName
+                
+                val avatarUrl = RetrofitClient.getAbsoluteUrl(message.senderAvatarUrl)
+                if (!avatarUrl.isNullOrEmpty()) {
+                    holder.profileImage?.load(avatarUrl) {
+                        crossfade(true)
+                        placeholder(R.drawable.ic_person)
+                        error(R.drawable.ic_person)
+                    }
+                } else {
+                    holder.profileImage?.setImageResource(R.drawable.ic_person)
                 }
             } else {
-                holder.profileImage.setImageResource(R.drawable.ic_person)
+                holder.headerLayout?.visibility = View.GONE
             }
         } else {
-            holder.headerLayout.visibility = View.GONE
+            holder.statusIcon?.visibility = View.VISIBLE
+            
+            // WhatsApp-style logic:
+            // 1. Sent/Offline -> Single Tick (Grey)
+            // 2. Online/Delivered -> Double Tick (Grey)
+            // 3. Read -> Double Tick (Blue)
+            
+            when (message.status) {
+                "read" -> {
+                    holder.statusIcon?.setImageResource(R.drawable.ic_tick_double)
+                    holder.statusIcon?.colorFilter = android.graphics.PorterDuffColorFilter(
+                        android.graphics.Color.parseColor("#34B7F1"), // WhatsApp Blue
+                        android.graphics.PorterDuff.Mode.SRC_IN
+                    )
+                }
+                "delivered" -> {
+                    holder.statusIcon?.setImageResource(R.drawable.ic_tick_double)
+                    holder.statusIcon?.colorFilter = android.graphics.PorterDuffColorFilter(
+                        android.graphics.Color.GRAY,
+                        android.graphics.PorterDuff.Mode.SRC_IN
+                    )
+                }
+                else -> { // "sent" or default
+                    holder.statusIcon?.setImageResource(R.drawable.ic_tick_single)
+                    holder.statusIcon?.colorFilter = android.graphics.PorterDuffColorFilter(
+                        android.graphics.Color.GRAY,
+                        android.graphics.PorterDuff.Mode.SRC_IN
+                    )
+                }
+            }
+            holder.statusIcon?.alpha = 0.8f
         }
 
-        // WhatsApp-style status checkmarks
-        if (message.senderId == currentUserId) {
-            holder.timestamp.setCompoundDrawablesWithIntrinsicBounds(0, 0, 
-                if (message.status == "read") android.R.drawable.checkbox_on_background else android.R.drawable.checkbox_off_background, 0)
-        } else {
-            holder.timestamp.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
-        }
+        // 3. Body & Markdown
+        holder.body.text = MarkdownUtils.formatMarkdown(message.text ?: "")
+        holder.body.visibility = if (message.text.isNullOrEmpty() && message.type != "text") View.GONE else View.VISIBLE
 
-        holder.itemView.setOnLongClickListener {
-            onMessageLongClick(message)
-            true
-        }
-
-        // Reset media views
+        // 4. Media Views Reset
         holder.cardImage.visibility = View.GONE
         holder.cardVoice.visibility = View.GONE
         holder.layoutFile.visibility = View.GONE
-        holder.body.visibility = View.VISIBLE
 
-        val type = message.type ?: "text"
-        android.util.Log.d("MessageAdapter", "Msg ID: ${message.id} Type: $type Body: ${message.body}")
-        
-        when (type) {
-            "text" -> {
-                holder.body.text = MarkdownUtils.formatMarkdown(message.body)
-            }
+        // 5. Media Logic
+        when (message.type) {
             "image" -> {
-                holder.body.visibility = if (message.body.isNullOrEmpty()) View.GONE else View.VISIBLE
-                holder.body.text = MarkdownUtils.formatMarkdown(message.body)
                 holder.cardImage.visibility = View.VISIBLE
-                
-                message.mediaUrl?.let { url ->
-                    val imageUri = when {
-                        url.startsWith("content://") -> android.net.Uri.parse(url)
-                        url.startsWith("/") -> android.net.Uri.fromFile(java.io.File(url))
-                        else -> android.net.Uri.parse(url)
-                    }
-                    holder.imageContent.load(imageUri) {
+                val attachment = message.attachments?.find { it.type == "image" }
+                val url = RetrofitClient.getAbsoluteUrl(attachment?.url)
+                url?.let {
+                    holder.imageContent.load(it) {
                         crossfade(true)
                         placeholder(R.drawable.bg_orbit_gradient)
-                        error(R.drawable.bg_orbit_gradient)
                     }
-                    
                     holder.cardImage.setOnClickListener {
                         val intent = android.content.Intent(holder.itemView.context, FullImageActivity::class.java).apply {
                             putExtra("IMAGE_URL", url)
@@ -152,55 +187,41 @@ class MessageAdapter(
                 }
             }
             "voice" -> {
-                holder.body.visibility = View.GONE
                 holder.cardVoice.visibility = View.VISIBLE
-                holder.voiceDuration.text = message.body
-                
+                holder.voiceDuration.text = "Voice Message"
                 val isPlaying = playingMessageId == message.id
                 holder.voicePlayButton.setImageResource(
                     if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
                 )
-
+                val attachment = message.attachments?.find { it.type == "voice" }
+                val voiceUrl = RetrofitClient.getAbsoluteUrl(attachment?.url)
                 holder.voicePlayButton.setOnClickListener {
-                    if (playingMessageId == message.id) {
-                        stopPlayback(holder)
-                    } else {
-                        startPlayback(holder, message)
+                    voiceUrl?.let { url ->
+                        if (playingMessageId == message.id) stopPlayback(holder) else startPlayback(holder, message, url)
                     }
                 }
             }
             "file" -> {
-                holder.body.visibility = View.GONE
                 holder.layoutFile.visibility = View.VISIBLE
-                holder.fileName.text = message.body
-                
+                val fileAttachment = message.attachments?.find { it.type == "file" }
+                holder.fileName.text = fileAttachment?.filename ?: "Attachment"
                 holder.layoutFile.setOnClickListener {
-                    message.mediaUrl?.let { url ->
-                        val fileUri = when {
-                            url.startsWith("http") -> android.net.Uri.parse(url)
-                            url.startsWith("content://") -> android.net.Uri.parse(url)
-                            url.startsWith("/") -> android.net.Uri.fromFile(java.io.File(url))
-                            else -> android.net.Uri.parse(url)
-                        }
-                        
-                        if (url.startsWith("http")) {
-                            // Open in browser for cloud files
-                            val browserIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, fileUri)
+                    fileAttachment?.url?.let { url ->
+                        try {
+                            val browserIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
                             holder.itemView.context.startActivity(browserIntent)
-                        } else {
-                            openMedia(holder.itemView.context, fileUri, "*/*")
-                        }
+                        } catch (e: Exception) {}
                     }
                 }
             }
         }
 
-        // Reactions
+        // 6. Reactions
         holder.reactionGroup.removeAllViews()
-        if (message.reactions?.isNotEmpty() == true) {
+        val reactions = message.reactions
+        if (!reactions.isNullOrEmpty()) {
             holder.reactionGroup.visibility = View.VISIBLE
-            val reactionCounts = message.reactions.groupBy { it.emoji }
-            reactionCounts.forEach { (emoji, list) ->
+            reactions.groupBy { it.emoji }.forEach { (emoji, list) ->
                 val chip = Chip(ContextThemeWrapper(holder.itemView.context, MaterialR.style.Widget_Material3_Chip_Suggestion), null, 0).apply {
                     text = "$emoji ${list.size}"
                     setOnClickListener { onReactionClick(message, emoji) }
@@ -211,44 +232,32 @@ class MessageAdapter(
             holder.reactionGroup.visibility = View.GONE
         }
         
-        // Threading
-        if (message.replyCount > 0 && message.parentMessageId == null) {
+        // 7. Threading
+        if (message.threadReplyCount > 0 && (message.channelId != null || message.dmId != null)) {
             holder.threadIndicator.visibility = View.VISIBLE
-            holder.threadCount.text = "${message.replyCount} replies"
+            holder.threadCount.text = "${message.threadReplyCount} replies"
             holder.threadIndicator.setOnClickListener { onThreadClick(message) }
         } else {
             holder.threadIndicator.visibility = View.GONE
         }
+
+        holder.itemView.setOnLongClickListener {
+            onMessageLongClick(message)
+            true
+        }
     }
 
-    private fun startPlayback(holder: MessageViewHolder, message: Message) {
-        val url = message.mediaUrl ?: return
-        
-        stopPlayback() // Stop any current playback
-
+    private fun startPlayback(holder: MessageViewHolder, message: Message, url: String) {
+        stopPlayback()
         mediaPlayer = android.media.MediaPlayer().apply {
             try {
-                if (url.startsWith("http")) {
-                    setDataSource(url)
-                } else {
-                    val audioUri = when {
-                        url.startsWith("content://") -> android.net.Uri.parse(url)
-                        url.startsWith("/") -> android.net.Uri.fromFile(java.io.File(url))
-                        else -> android.net.Uri.parse(url)
-                    }
-                    setDataSource(holder.itemView.context, audioUri)
-                }
+                setDataSource(url)
                 prepare()
                 start()
                 playingMessageId = message.id
                 holder.voicePlayButton.setImageResource(android.R.drawable.ic_media_pause)
-                
-                setOnCompletionListener {
-                    stopPlayback()
-                    notifyDataSetChanged() // Refresh UI to reset play icons
-                }
+                setOnCompletionListener { stopPlayback(); notifyDataSetChanged() }
             } catch (e: Exception) {
-                e.printStackTrace()
                 Toast.makeText(holder.itemView.context, "Playback error", Toast.LENGTH_SHORT).show()
             }
         }
@@ -260,30 +269,6 @@ class MessageAdapter(
         playingMessageId = null
         holder?.voicePlayButton?.setImageResource(android.R.drawable.ic_media_play)
         if (holder == null) notifyDataSetChanged()
-    }
-
-    private fun openMedia(context: android.content.Context, uri: android.net.Uri, mimeType: String) {
-        try {
-            val shareUri = if (uri.scheme == "file" || uri.path?.startsWith("/") == true) {
-                val file = if (uri.scheme == "file") java.io.File(uri.path!!) else java.io.File(uri.toString())
-                androidx.core.content.FileProvider.getUriForFile(
-                    context,
-                    "com.example.cu_orbit.fileprovider",
-                    file
-                )
-            } else {
-                uri
-            }
-
-            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                setDataAndType(shareUri, mimeType)
-                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            context.startActivity(intent)
-        } catch (e: Exception) {
-            android.util.Log.e("MessageAdapter", "Error opening media", e)
-            Toast.makeText(context, "No app found to open this file", Toast.LENGTH_SHORT).show()
-        }
     }
 
     override fun getItemCount() = messages.size

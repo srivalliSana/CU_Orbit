@@ -23,8 +23,11 @@ class MediaAdapter(private val mediaMessages: List<Message>, private val onClick
 
     override fun onBindViewHolder(holder: MediaViewHolder, position: Int) {
         val message = mediaMessages[position]
-        if (message.type == "image" && message.mediaUrl != null) {
-            holder.image.load(message.mediaUrl) {
+        val attachment = message.attachments?.firstOrNull()
+        
+        if (message.type == "image" && attachment != null) {
+            val absoluteUrl = com.example.cu_orbit.network.RetrofitClient.getAbsoluteUrl(attachment.url)
+            holder.image.load(absoluteUrl) {
                 placeholder(R.drawable.bg_orbit_gradient)
                 error(R.drawable.bg_orbit_gradient)
             }

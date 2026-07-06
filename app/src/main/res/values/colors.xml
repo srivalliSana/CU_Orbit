@@ -3,31 +3,43 @@
     <color name="white">#FFFFFFFF</color>
     <color name="black">#FF0F172A</color>
 
-    <!-- CU Orbit "Stellar" Palette -->
+    <!-- CU Orbit Redesign Palette -->
     <color name="orbit_primary">#1E40AF</color>
-    <color name="orbit_primary_variant">#1E3A8A</color>
     <color name="orbit_accent">#38BDF8</color>
     <color name="orbit_success">#10B981</color>
     <color name="orbit_warning">#F59E0B</color>
     <color name="orbit_error">#EF4444</color>
 
-    <!-- Light backgrounds for options -->
-    <color name="orbit_purple_bg">#F3E8FF</color>
-    <color name="orbit_blue_bg">#E0F2FE</color>
-    <color name="orbit_green_bg">#DCFCE7</color>
-
-    <!-- Gradients -->
     <color name="orbit_gradient_start">#1E40AF</color>
     <color name="orbit_gradient_end">#3B82F6</color>
 
-    <!-- Neutrals -->
-    <color name="orbit_background">#F8FAFC</color>
-    <color name="orbit_surface">#FFFFFF</color>
-    <color name="orbit_text_primary">#0F172A</color>
-    <color name="orbit_text_secondary">#64748B</color>
-    <color name="orbit_border">#E2E8F0</color>
+    <!-- Design Tokens (Section 9) -->
+    <color name="fill_accent">#1E40AF</color>
+    <color name="on_accent">#FFFFFF</color>
+    <color name="fill_danger">#EF4444</color>
+    <color name="on_danger">#FFFFFF</color>
 
-    <!-- Slack Mapping for Compatibility -->
+    <color name="surface_0">#F8FAFC</color>
+    <color name="surface_1">#FFFFFF</color>
+    <color name="surface_2">#F1F5F9</color>
+
+    <color name="text_primary">#0F172A</color>
+    <color name="text_secondary">#475569</color>
+    <color name="text_muted">#94A3B8</color>
+    <color name="border">#E2E8F0</color>
+    <color name="border_strong">#CBD5E1</color>
+
+    <!-- Compatibility mappings -->
+    <color name="orbit_background">@color/surface_0</color>
+    <color name="orbit_surface">@color/surface_1</color>
+    <color name="orbit_text_primary">@color/text_primary</color>
+    <color name="orbit_text_secondary">@color/text_secondary</color>
+    <color name="orbit_border">@color/border</color>
+    <color name="orbit_blue_bg">#EFF6FF</color>
+    <color name="orbit_green_bg">#ECFDF5</color>
+    <color name="orbit_purple_bg">#FAF5FF</color>
+
+    <!-- Slack Legacy Mapping for Compatibility -->
     <color name="slack_primary">@color/orbit_primary</color>
     <color name="slack_background">@color/orbit_background</color>
     <color name="slack_text_primary">@color/orbit_text_primary</color>
@@ -36,6 +48,6 @@
     <color name="slack_online">@color/orbit_success</color>
     <color name="slack_away">@color/orbit_warning</color>
     <color name="slack_dnd">@color/orbit_error</color>
-    <color name="slack_offline">@color/orbit_text_secondary</color>
+    <color name="slack_offline">@color/text_muted</color>
     <color name="slack_unread">@color/orbit_accent</color>
 </resources>

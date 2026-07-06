@@ -29,6 +29,17 @@
                 android:src="@android:drawable/ic_menu_revert"
                 app:tint="@color/orbit_text_primary" />
 
+            <com.google.android.material.imageview.ShapeableImageView
+                android:id="@+id/image_chat_header_avatar"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginStart="8dp"
+                android:scaleType="centerCrop"
+                android:src="@drawable/ic_person"
+                app:shapeAppearanceOverlay="@style/CircleImage"
+                android:visibility="gone"
+                tools:visibility="visible" />
+
             <LinearLayout
                 android:id="@+id/layout_chat_header_info"
                 android:layout_width="0dp"

@@ -1,65 +1,69 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:padding="14dp"
     android:background="?attr/selectableItemBackground"
-    android:padding="16dp">
+    android:gravity="top">
 
-    <ImageView
-        android:id="@+id/image_icon"
-        android:layout_width="20dp"
-        android:layout_height="20dp"
-        android:src="@drawable/ic_notifications"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:tint="@color/slack_primary" />
-
-    <com.google.android.material.imageview.ShapeableImageView
-        android:id="@+id/image_avatar"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:layout_marginStart="12dp"
-        android:src="@drawable/ic_person"
-        app:layout_constraintStart_toEndOf="@id/image_icon"
-        app:layout_constraintTop_toTopOf="parent"
-        app:shapeAppearanceOverlay="@style/CircleImage" />
-
-    <TextView
-        android:id="@+id/text_activity_title"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
-        android:textColor="@color/slack_text_primary"
-        android:textSize="14sp"
-        app:layout_constraintEnd_toStartOf="@id/text_time"
-        app:layout_constraintStart_toEndOf="@id/image_avatar"
-        app:layout_constraintTop_toTopOf="parent"
-        tools:text="sana mentioned you in #general" />
-
-    <TextView
-        android:id="@+id/text_time"
+    <FrameLayout
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/slack_text_secondary"
-        android:textSize="12sp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        tools:text="2h ago" />
+        android:layout_height="wrap_content">
+        <View
+            android:id="@+id/unread_indicator"
+            android:layout_width="3dp"
+            android:layout_height="40dp"
+            android:layout_gravity="start|center_vertical"
+            android:background="@color/fill_accent"
+            android:visibility="gone" />
 
-    <TextView
-        android:id="@+id/text_message_preview"
+        <ImageView
+            android:id="@+id/image_activity_icon"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="8dp"
+            app:tint="@color/text_muted"
+            tools:src="@android:drawable/ic_menu_send" />
+    </FrameLayout>
+
+    <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:ellipsize="end"
-        android:maxLines="2"
-        android:textColor="@color/slack_text_secondary"
-        android:textSize="14sp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="@id/text_activity_title"
-        app:layout_constraintTop_toBottomOf="@id/text_activity_title"
-        tools:text="Hey, can you take a look at the latest assignment details?" />
+        android:layout_marginStart="12dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+        <TextView
+            android:id="@+id/text_activity_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            tools:text="Mention in #general" />
+
+        <TextView
+            android:id="@+id/text_activity_body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:textColor="@color/text_secondary"
+            android:textSize="13sp"
+            tools:text="Hey @srivalli, check this report." />
+
+        <TextView
+            android:id="@+id/text_activity_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="@color/text_muted"
+            android:textSize="11sp"
+            tools:text="10:30 AM" />
+    </LinearLayout>
+
+</LinearLayout>

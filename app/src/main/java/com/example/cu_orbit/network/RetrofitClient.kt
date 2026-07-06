@@ -7,7 +7,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
-    var baseUrl = "http://192.168.29.195:3000/api/"
+    var baseUrl = "http://192.168.29.192:3000/api/"
         private set
 
     private var _instance: ApiService? = null
@@ -23,6 +23,21 @@ object RetrofitClient {
     fun updateBaseUrl(ip: String) {
         baseUrl = if (ip.startsWith("http")) ip else "http://$ip:3000/api/"
         _instance = createService()
+    }
+
+    fun getAbsoluteUrl(path: String?): String? {
+        if (path == null || path.isEmpty()) return null
+        val cleanBase = baseUrl.replace("/api/", "")
+        
+        // Fix for old URLs stored in DB with different IPs
+        val uploadsIndex = path.indexOf("/uploads/")
+        if (uploadsIndex != -1) {
+            val relative = path.substring(uploadsIndex)
+            return cleanBase + relative
+        }
+        
+        if (path.startsWith("http")) return path
+        return if (path.startsWith("/")) cleanBase + path else "$cleanBase/$path"
     }
 
     private fun createService(): ApiService {

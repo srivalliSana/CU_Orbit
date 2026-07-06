@@ -4,16 +4,25 @@ import com.google.gson.annotations.SerializedName
 
 data class Message(
     @SerializedName("id") val id: String,
-    val senderId: String,
-    val senderName: String,
-    val body: String,
-    val timestamp: Long,
-    val channelId: String,
-    val parentMessageId: String? = null,
-    val replyCount: Int = 0,
+    @SerializedName("channel_id") val channelId: String? = null,
+    @SerializedName("dm_id") val dmId: String? = null,
+    @SerializedName("sender_id") val senderId: String,
+    @SerializedName("sender_name") val senderName: String,
+    @SerializedName("sender_avatar_url") val senderAvatarUrl: String? = null,
+    val text: String? = "",
+    @SerializedName("sent_at") val sentAt: Long,
+    val type: String = "text",
+    @SerializedName("edited_at") val editedAt: Long? = null,
+    @SerializedName("thread_reply_count") val threadReplyCount: Int = 0,
     val reactions: List<Reaction>? = emptyList(),
-    val type: String? = "text",
-    val mediaUrl: String? = null,
-    val status: String = "sent",
-    val senderAvatarUrl: String? = null
+    val attachments: List<Attachment>? = emptyList(),
+    @SerializedName("is_pinned") val isPinned: Boolean = false,
+    val status: String = "sent"
+)
+
+data class Attachment(
+    val type: String, // image | voice | file
+    val url: String,
+    val filename: String? = null,
+    @SerializedName("duration_sec") val durationSec: Int? = null
 )

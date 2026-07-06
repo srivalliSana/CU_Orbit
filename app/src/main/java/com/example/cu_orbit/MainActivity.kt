@@ -27,15 +27,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var appBarConfiguration: AppBarConfiguration
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Apply theme before super.onCreate
-        val prefs = getSharedPreferences("CU_ORBIT_PREFS", Context.MODE_PRIVATE)
-        val isDarkMode = prefs.getBoolean("DARK_MODE", false)
-        if (isDarkMode) {
-            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
-        } else {
-            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
-        }
-
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
@@ -66,7 +57,7 @@ class MainActivity : AppCompatActivity() {
         
         appBarConfiguration = AppBarConfiguration(
             setOf(
-                R.id.navigation_home, R.id.navigation_dms, R.id.navigation_status, R.id.navigation_profile
+                R.id.navigation_home, R.id.navigation_activity, R.id.navigation_status, R.id.navigation_profile
             ), drawerLayout
         )
         setupActionBarWithNavController(navController, appBarConfiguration)
@@ -92,7 +83,7 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "Switched to Computer Science", Toast.LENGTH_SHORT).show()
                 }
                 R.id.nav_add_workspace -> {
-                    navController.navigate(R.id.navigation_create_channel)
+                    navController.navigate(R.id.navigation_channels)
                 }
                 R.id.navigation_settings -> {
                     navController.navigate(R.id.navigation_settings)
@@ -148,8 +139,9 @@ class MainActivity : AppCompatActivity() {
         headerView.findViewById<android.widget.TextView>(R.id.nav_header_status).text = "Active"
         
         val headerImage = headerView.findViewById<ShapeableImageView>(R.id.nav_header_avatar)
-        if (avatarUrl != null && avatarUrl.isNotEmpty()) {
-            headerImage.load(avatarUrl) {
+        val absoluteAvatarUrl = com.example.cu_orbit.network.RetrofitClient.getAbsoluteUrl(avatarUrl)
+        if (absoluteAvatarUrl != null && absoluteAvatarUrl.isNotEmpty()) {
+            headerImage.load(absoluteAvatarUrl) {
                 crossfade(true)
                 placeholder(R.drawable.ic_person)
                 error(R.drawable.ic_person)

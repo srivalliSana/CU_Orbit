@@ -5,12 +5,12 @@
         android:icon="@drawable/ic_home"
         android:title="Home" />
     <item
-        android:id="@+id/navigation_dms"
-        android:icon="@drawable/ic_chat"
-        android:title="DMs" />
+        android:id="@+id/navigation_activity"
+        android:icon="@drawable/ic_activity"
+        android:title="Activity" />
     <item
         android:id="@+id/navigation_status"
-        android:icon="@android:drawable/ic_menu_camera"
+        android:icon="@drawable/ic_status"
         android:title="Status" />
     <item
         android:id="@+id/navigation_profile"

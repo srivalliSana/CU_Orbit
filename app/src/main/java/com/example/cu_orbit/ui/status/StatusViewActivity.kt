@@ -26,7 +26,9 @@ class StatusViewActivity : AppCompatActivity() {
 
         findViewById<TextView>(R.id.text_status_user).text = userName
         findViewById<TextView>(R.id.text_status_caption).text = caption
-        findViewById<ImageView>(R.id.image_status_full).load(mediaUrl)
+        
+        val absoluteUrl = com.example.cu_orbit.network.RetrofitClient.getAbsoluteUrl(mediaUrl)
+        findViewById<ImageView>(R.id.image_status_full).load(absoluteUrl)
 
         findViewById<ImageButton>(R.id.button_close_status).setOnClickListener {
             finish()
