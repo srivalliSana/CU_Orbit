@@ -94,8 +94,12 @@ class EditProfileFragment : Fragment() {
         nameEdit = root.findViewById(R.id.edit_profile_name)
         bioEdit = root.findViewById(R.id.edit_profile_bio)
         saveButton = root.findViewById(R.id.button_save_profile)
+        val phoneEdit: EditText = root.findViewById(R.id.edit_profile_phone)
         val toolbar: com.google.android.material.appbar.MaterialToolbar = root.findViewById(R.id.toolbar_edit_profile)
         val statusGroup: ChipGroup = root.findViewById(R.id.chip_group_status)
+
+        val phone = prefs.getString("USER_ID", "")
+        phoneEdit.setText(phone)
 
         nameEdit.setText(initialName)
         bioEdit.setText(initialBio)
@@ -275,21 +279,23 @@ class EditProfileFragment : Fragment() {
                 }
 
                 // Update server
-                val result = repository.updateUser(phone, name, bio, avatarUrl)
+                repository.updateUser(phone, name, bio, avatarUrl)
                 
-                if (result["success"] == true) {
-                    // Update local prefs
-                    prefs.edit().apply {
-                        putString("USER_NAME", name)
-                        putString("USER_BIO", bio)
-                        putString("USER_AVATAR", avatarUrl)
-                    }.apply()
-                    
-                    Toast.makeText(context, "Profile updated successfully", Toast.LENGTH_SHORT).show()
-                    findNavController().navigateUp()
-                } else {
-                    Toast.makeText(context, "Server failed to update profile", Toast.LENGTH_SHORT).show()
-                }
+                // Update local prefs
+                prefs.edit().apply {
+                    putString("USER_NAME", name)
+                    putString("USER_BIO", bio)
+                    putString("USER_AVATAR", avatarUrl)
+                }.apply()
+
+                // Refresh initial values
+                initialName = name
+                initialBio = bio
+                initialAvatar = avatarUrl
+                checkChanges()
+
+                Toast.makeText(context, "Profile updated successfully", Toast.LENGTH_SHORT).show()
+                findNavController().navigateUp()
             } catch (e: Exception) {
                 e.printStackTrace()
                 Toast.makeText(context, "Update failed: ${e.message}", Toast.LENGTH_LONG).show()

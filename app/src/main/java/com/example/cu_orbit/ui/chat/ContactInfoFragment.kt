@@ -14,11 +14,23 @@ import com.example.cu_orbit.R
 import com.example.cu_orbit.data.User
 import com.example.cu_orbit.repository.MainRepository
 import com.example.cu_orbit.utils.ContactUtils
+import coil.load
 import kotlinx.coroutines.launch
 
 class ContactInfoFragment : Fragment() {
 
     private val repository = MainRepository()
+    private var channelIdForBg: String? = null
+
+    private val pickBackgroundLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri: android.net.Uri? ->
+        uri?.let {
+            val prefs = requireContext().getSharedPreferences("CU_ORBIT_BG", android.content.Context.MODE_PRIVATE)
+            channelIdForBg?.let { id ->
+                prefs.edit().putString("bg_uri_$id", it.toString()).remove("bg_$id").apply()
+                Toast.makeText(context, "Background image updated", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -39,27 +51,45 @@ class ContactInfoFragment : Fragment() {
 
         lifecycleScope.launch {
             try {
-                // We'll search for this user in our registered users
-                val users = repository.getUsers()
-                val user = users.find { it.id == userId || it.phone == userId }
+                // If the ID passed is a DM channel ID (contains underscore), extract the other user's phone
+                val prefs = requireContext().getSharedPreferences("CU_ORBIT_PREFS", android.content.Context.MODE_PRIVATE)
+                val currentUserId = prefs.getString("USER_ID", "") ?: ""
                 
-                if (user != null) {
-                    val contactName = ContactUtils.getContactName(requireContext(), user.phone)
-                    nameText.text = contactName ?: user.name
-                    phoneText.text = user.phone
-                    bioText.text = user.bio
+                val targetPhone = if (userId.contains("_")) {
+                    val parts = userId.split("_")
+                    if (parts[0] == currentUserId) parts[1] else parts[0]
                 } else {
-                    // Just show what we know (e.g. if it's a raw number)
-                    val contactName = ContactUtils.getContactName(requireContext(), userId)
-                    nameText.text = contactName ?: "Unknown User"
-                    phoneText.text = userId
+                    userId
+                }
+
+                // Fetch full user details from server
+                val user = repository.getUser(targetPhone)
+                
+                val contactName = ContactUtils.getContactName(requireContext(), user.phone)
+                nameText.text = contactName ?: user.name ?: user.phone
+                phoneText.text = user.phone
+                bioText.text = if (user.bio.isNullOrEmpty()) "No status available" else user.bio
+
+                // Load Profile Picture
+                val avatarUrl = com.example.cu_orbit.network.RetrofitClient.getAbsoluteUrl(user.avatarUrl)
+                if (!avatarUrl.isNullOrEmpty()) {
+                    expandedAvatar.load(avatarUrl) {
+                        crossfade(true)
+                        placeholder(R.drawable.ic_person)
+                        error(R.drawable.ic_person)
+                    }
+                } else {
+                    expandedAvatar.setImageResource(R.drawable.ic_person)
                 }
                 
-                setupActions(root, userId)
-                loadSharedMedia(root, userId)
+                setupActions(root, targetPhone)
+                loadSharedMedia(root, targetPhone)
                 
             } catch (e: Exception) {
-                // handle error
+                // If server fetch fails, fallback to basic contact lookup
+                val contactName = ContactUtils.getContactName(requireContext(), userId)
+                nameText.text = contactName ?: userId
+                phoneText.text = userId
             }
         }
 
@@ -67,8 +97,29 @@ class ContactInfoFragment : Fragment() {
     }
 
     private fun setupActions(root: View, userId: String) {
-        val prefs = requireContext().getSharedPreferences("CU_ORBIT_PREFS", android.content.Context.MODE_PRIVATE)
-        
+        root.findViewById<View>(R.id.action_change_background).setOnClickListener {
+            // Determine the shared DM channel ID
+            val prefs = requireContext().getSharedPreferences("CU_ORBIT_PREFS", android.content.Context.MODE_PRIVATE)
+            val currentUserId = prefs.getString("USER_ID", "") ?: ""
+            val channelId = if (currentUserId < userId) "${currentUserId}_$userId" else "${userId}_$currentUserId"
+            channelIdForBg = channelId
+
+            val colors = arrayOf("Default", "Pick from Gallery", "Light Blue", "Light Green", "Soft Pink", "Dark Grey")
+            val colorValues = intArrayOf(-1, 0, 0xFFE3F2FD.toInt(), 0xFFE8F5E9.toInt(), 0xFFFCE4EC.toInt(), 0xFF263238.toInt())
+            
+            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle("Pick Background")
+                .setItems(colors) { _, which ->
+                    val bgPrefs = requireContext().getSharedPreferences("CU_ORBIT_BG", android.content.Context.MODE_PRIVATE)
+                    when (which) {
+                        0 -> bgPrefs.edit().remove("bg_$channelId").remove("bg_uri_$channelId").apply()
+                        1 -> pickBackgroundLauncher.launch("image/*")
+                        else -> bgPrefs.edit().putInt("bg_$channelId", colorValues[which]).remove("bg_uri_$channelId").apply()
+                    }
+                    Toast.makeText(context, "Background updated", Toast.LENGTH_SHORT).show()
+                }.show()
+        }
+
         root.findViewById<View>(R.id.action_mute).setOnClickListener {
             Toast.makeText(context, "Notifications muted for this contact", Toast.LENGTH_SHORT).show()
         }
@@ -103,8 +154,7 @@ class ContactInfoFragment : Fragment() {
                 
                 if (mediaMessages.isNotEmpty()) {
                     recycler.adapter = MediaAdapter(mediaMessages) { msg ->
-                        // Reuse the openMedia logic if we had it here or in a utils class
-                        // For now just show a toast or nothing
+                        // Preview media logic
                     }
                 }
             } catch (e: Exception) {}

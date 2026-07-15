@@ -39,7 +39,10 @@ class ActivityFragment : Fragment() {
     }
 }
 
-class ActivityAdapter(private val items: List<ActivityItem>) : RecyclerView.Adapter<ActivityAdapter.ViewHolder>() {
+class ActivityAdapter(
+    private val items: List<ActivityItem>,
+    private val onItemClick: (ActivityItem) -> Unit = {}
+) : RecyclerView.Adapter<ActivityAdapter.ViewHolder>() {
 
     class ViewHolder(v: View) : RecyclerView.ViewHolder(v) {
         val icon: ImageView = v.findViewById(R.id.image_activity_icon)
@@ -69,6 +72,8 @@ class ActivityAdapter(private val items: List<ActivityItem>) : RecyclerView.Adap
             else -> android.R.drawable.ic_menu_info_details
         }
         holder.icon.setImageResource(iconRes)
+        
+        holder.itemView.setOnClickListener { onItemClick(item) }
     }
 
     override fun getItemCount() = items.size

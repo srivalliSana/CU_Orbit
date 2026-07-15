@@ -80,6 +80,14 @@
                 android:padding="8dp"
                 android:src="@android:drawable/ic_menu_search"
                 app:tint="@color/text_primary" />
+
+            <ImageView
+                android:id="@+id/button_more_options"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:padding="8dp"
+                android:src="@android:drawable/ic_menu_more"
+                app:tint="@color/text_primary" />
         </LinearLayout>
 
         <View

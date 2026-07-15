@@ -8,5 +8,7 @@ data class MessageRequest(
     val type: String = "text",
     val mediaUrl: String? = null,
     val parentMessageId: String? = null,
-    val senderAvatarUrl: String? = null
+    val senderAvatarUrl: String? = null,
+    val mentions: List<String>? = null, // List of phones for legacy
+    val enrichedMentions: List<MentionMetadata>? = null
 )

@@ -48,6 +48,12 @@ class ChatFragment : Fragment() {
     private var currentUserId: String = ""
     private var currentUserName: String = ""
 
+    private lateinit var mentionAdapter: MentionAdapter
+    private var allChannelMembers = mutableListOf<com.example.cu_orbit.data.User>()
+    private var isMentioning = false
+    private var mentionTriggerPos = -1
+    private val enrichedMentions = mutableListOf<com.example.cu_orbit.data.MentionMetadata>()
+
     // Voice Recording
     private var mediaRecorder: MediaRecorder? = null
     private var audioFile: File? = null
@@ -141,12 +147,17 @@ class ChatFragment : Fragment() {
         root.findViewById<ImageButton>(R.id.button_back).setOnClickListener { findNavController().navigateUp() }
 
         root.findViewById<View>(R.id.layout_chat_header_info).setOnClickListener {
-            val options = arrayOf("Contact/Channel Info", "Change Background")
+            val options = if (isDM) arrayOf("Contact Info", "Change Background") else arrayOf("Channel Info", "Change Background")
             androidx.appcompat.app.AlertDialog.Builder(requireContext())
                 .setItems(options) { _, which ->
                     if (which == 0) {
-                        val bundle = Bundle().apply { putString("userId", arguments?.getString("channelId") ?: channelId) }
-                        findNavController().navigate(R.id.navigation_contact_info, bundle)
+                        if (isDM) {
+                            val bundle = Bundle().apply { putString("userId", rawId) }
+                            findNavController().navigate(R.id.navigation_contact_info, bundle)
+                        } else {
+                            val bundle = Bundle().apply { putString("channelId", channelId) }
+                            findNavController().navigate(R.id.navigation_channel_info, bundle)
+                        }
                     } else {
                         showBackgroundPicker()
                     }
@@ -165,8 +176,17 @@ class ChatFragment : Fragment() {
         adapter.setCurrentUserId(currentUserId)
         recyclerView.adapter = adapter
 
+        setupMentionSuggestions(root)
         applyChatBackground(root)
         observeViewModel(root)
+
+        // Mark mentions as read when entering the chat
+        lifecycleScope.launch {
+            try {
+                repository.markAllMentionsAsRead(currentUserId, channelId)
+            } catch (e: Exception) {}
+        }
+
         viewModel.startPolling(channelId, currentUserId)
         setupInputArea(root)
         
@@ -205,6 +225,10 @@ class ChatFragment : Fragment() {
                             }
                         }
                     }
+                    
+                    // DM participant for mentions
+                    allChannelMembers.clear()
+                    otherUser?.let { allChannelMembers.add(it) }
                 } catch (e: Exception) {
                     subtitleText.text = "offline"
                 }
@@ -221,10 +245,82 @@ class ChatFragment : Fragment() {
                 try {
                     val channel = repository.getChannel(channelId)
                     subtitleText.text = "${channel.memberCount} members"
+                    
+                    // --- WhatsApp-style: Restricted Messaging Check ---
+                    val members = repository.getChannelMembers(channelId)
+                    val me = members.find { it.phone == currentUserId }
+                    val isAdmin = me?.role == "admin" || channel.createdBy == currentUserId
+                    
+                    if (channel.restrictedMessaging && !isAdmin) {
+                        root.findViewById<View>(R.id.layout_message_input_container).visibility = View.GONE
+                        root.findViewById<TextView>(R.id.text_typing_indicator).apply {
+                            visibility = View.VISIBLE
+                            text = "Only admins can send messages"
+                            setTypeface(null, android.graphics.Typeface.NORMAL)
+                        }
+                    } else {
+                        root.findViewById<View>(R.id.layout_message_input_container).visibility = View.VISIBLE
+                    }
+
+                    // Pre-fetch channel members for mentions
+                    allChannelMembers.clear()
+                    allChannelMembers.addAll(members)
                 } catch (e: Exception) {
                     subtitleText.text = ""
                 }
             }
+        }
+    }
+
+    private fun setupMentionSuggestions(root: View) {
+        val mentionCard: View = root.findViewById(R.id.card_mention_suggestions)
+        val mentionRecycler: RecyclerView = root.findViewById(R.id.recycler_mention_suggestions)
+        mentionRecycler.layoutManager = LinearLayoutManager(context)
+        
+        mentionAdapter = MentionAdapter(emptyList()) { selectedUser ->
+            insertMention(selectedUser)
+            mentionCard.visibility = View.GONE
+            isMentioning = false
+        }
+        mentionRecycler.adapter = mentionAdapter
+    }
+
+    private fun insertMention(user: com.example.cu_orbit.data.User) {
+        val editText: EditText = requireView().findViewById(R.id.edit_message)
+        val currentText = editText.text
+        val cursor = editText.selectionStart
+        
+        if (mentionTriggerPos != -1 && cursor > mentionTriggerPos) {
+            val mentionName = user.name ?: user.phone
+            val platformId = user.slackId ?: user.discordId ?: user.telegramHandle ?: "U_ORBIT"
+            
+            val mention = com.example.cu_orbit.data.MentionMetadata(
+                displayName = mentionName,
+                userId = user.id,
+                platformUserId = platformId,
+                phone = user.phone
+            )
+
+            val spannable = android.text.SpannableStringBuilder(currentText)
+            
+            // Replacement text: "@Name "
+            val replacement = "@$mentionName "
+            spannable.replace(mentionTriggerPos, cursor, replacement)
+            
+            val span = com.example.cu_orbit.utils.MentionSpan(
+                mention = mention,
+                color = androidx.core.content.ContextCompat.getColor(requireContext(), R.color.orbit_primary)
+            ) { /* No-op in EditText usually, or show small profile card */ }
+            
+            val start = mentionTriggerPos
+            val end = mentionTriggerPos + replacement.length - 1 // Exclude the trailing space
+            
+            spannable.setSpan(span, start, end, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            
+            editText.text = spannable
+            editText.setSelection(mentionTriggerPos + replacement.length)
+            
+            enrichedMentions.add(mention)
         }
     }
 
@@ -233,19 +329,17 @@ class ChatFragment : Fragment() {
             try {
                 val users = repository.getUsers()
                 val names = users.map { it.name }.toTypedArray()
-                val checkedItems = BooleanArray(users.size) { false }
-                val selectedUsers = mutableListOf<com.example.cu_orbit.data.User>()
-
+                
                 val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.layout_add_member_search, null)
                 val searchInput: EditText = dialogView.findViewById(R.id.edit_search_members)
                 val listView: android.widget.ListView = dialogView.findViewById(R.id.list_members)
                 
-                val adapter = android.widget.ArrayAdapter(requireContext(), android.R.layout.simple_list_item_multiple_choice, names)
-                listView.adapter = adapter
+                val listAdapter = android.widget.ArrayAdapter(requireContext(), android.R.layout.simple_list_item_multiple_choice, names)
+                listView.adapter = listAdapter
                 listView.choiceMode = android.widget.ListView.CHOICE_MODE_MULTIPLE
                 
                 searchInput.addTextChangedListener { s ->
-                    adapter.filter.filter(s)
+                    listAdapter.filter.filter(s)
                 }
 
                 val dialog = androidx.appcompat.app.AlertDialog.Builder(requireContext())
@@ -260,14 +354,14 @@ class ChatFragment : Fragment() {
                 dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                     val checkedPositions = listView.checkedItemPositions
                     var addedCount = 0
-                    for (i in 0 until adapter.count) {
+                    for (i in 0 until listAdapter.count) {
                         if (checkedPositions.get(i)) {
-                            val name = adapter.getItem(i)
+                            val name = listAdapter.getItem(i)
                             val user = users.find { it.name == name }
                             user?.let {
                                 addedCount++
                                 lifecycleScope.launch {
-                                    try { repository.addChannelMember(channelId, it.phone) } catch (e: Exception) {}
+                                    try { repository.addChannelMember(channelId, it.phone, currentUserId, currentUserName) } catch (e: Exception) {}
                                 }
                             }
                         }
@@ -287,7 +381,13 @@ class ChatFragment : Fragment() {
             val otherTyping = users.filter { it.userId != currentUserId }
             if (otherTyping.isNotEmpty()) {
                 typingText.visibility = View.VISIBLE
-                typingText.text = if (otherTyping.size == 1) "${otherTyping[0].userName} is typing..." else "Multiple people are typing..."
+                val displayMsg = if (otherTyping.size == 1) {
+                    val resolvedName = ContactUtils.getContactName(requireContext(), otherTyping[0].userId)
+                    "${resolvedName ?: otherTyping[0].userName} is typing..."
+                } else {
+                    "Multiple people are typing..."
+                }
+                typingText.text = displayMsg
             } else {
                 typingText.visibility = View.GONE
             }
@@ -316,14 +416,43 @@ class ChatFragment : Fragment() {
         val editMessage: EditText = root.findViewById(R.id.edit_message)
         val buttonSend: ImageButton = root.findViewById(R.id.button_send)
         val buttonMic: ImageView = root.findViewById(R.id.button_mic)
+        val mentionCard: View = root.findViewById(R.id.card_mention_suggestions)
 
-        editMessage.addTextChangedListener { viewModel.updateTyping(channelId, currentUserId, currentUserName) }
+        editMessage.addTextChangedListener { s ->
+            viewModel.updateTyping(channelId, currentUserId, currentUserName)
+            
+            val text = s.toString()
+            val cursor = editMessage.selectionStart
+            
+            // Slack-like mention trigger: find the last '@' before the cursor
+            // that is either at the start of the string or preceded by a whitespace.
+            val lastAtPos = text.take(cursor).lastIndexOf('@')
+            
+            if (lastAtPos != -1 && (lastAtPos == 0 || text[lastAtPos - 1].isWhitespace())) {
+                val query = text.substring(lastAtPos + 1, cursor)
+                
+                // If there's a space between @ and cursor, it's not a mention anymore
+                if (query.contains(" ")) {
+                    isMentioning = false
+                    showMentions(false)
+                } else {
+                    isMentioning = true
+                    mentionTriggerPos = lastAtPos
+                    filterMentions(query.lowercase())
+                }
+            } else {
+                isMentioning = false
+                showMentions(false)
+            }
+        }
 
         buttonSend.setOnClickListener {
             val text = editMessage.text.toString().trim()
             if (text.isNotEmpty()) {
                 sendMessage(text)
                 editMessage.setText("")
+                isMentioning = false
+                showMentions(false)
             }
         }
 
@@ -376,10 +505,30 @@ class ChatFragment : Fragment() {
         }
     }
 
-    private var recordingStartTime = 0L
+    private fun showMentions(show: Boolean) {
+        val card = view?.findViewById<View>(R.id.card_mention_suggestions) ?: return
+        if (show) {
+            mentionAdapter.updateUsers(allChannelMembers.take(8))
+            card.visibility = View.VISIBLE
+        } else {
+            card.visibility = View.GONE
+        }
+    }
+
+    private fun filterMentions(query: String) {
+        val filtered = allChannelMembers.filter { 
+            it.name.lowercase().contains(query) || it.handle.lowercase().contains(query)
+        }.take(8)
+        
+        if (filtered.isNotEmpty()) {
+            mentionAdapter.updateUsers(filtered)
+            view?.findViewById<View>(R.id.card_mention_suggestions)?.visibility = View.VISIBLE
+        } else {
+            view?.findViewById<View>(R.id.card_mention_suggestions)?.visibility = View.GONE
+        }
+    }
 
     private fun startRecording() {
-        recordingStartTime = System.currentTimeMillis()
         val fileName = "voice_msg_${System.currentTimeMillis()}.mp4"
         audioFile = File(requireContext().getExternalFilesDir(null), fileName)
         mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(requireContext()) else @Suppress("DEPRECATION") MediaRecorder()
@@ -392,6 +541,7 @@ class ChatFragment : Fragment() {
                 prepare()
                 start()
                 isRecording = true
+                startTime = System.currentTimeMillis()
                 Toast.makeText(context, "Recording started...", Toast.LENGTH_SHORT).show()
             } catch (e: IOException) {
                 Toast.makeText(context, "Error starting recorder", Toast.LENGTH_SHORT).show()
@@ -401,8 +551,7 @@ class ChatFragment : Fragment() {
 
     private fun stopRecording() {
         try {
-            if (System.currentTimeMillis() - recordingStartTime < 1000) {
-                // If recording is too short, just cancel it
+            if (System.currentTimeMillis() - startTime < 1000) {
                 mediaRecorder?.apply { stop(); release() }
                 mediaRecorder = null
                 isRecording = false
@@ -429,7 +578,26 @@ class ChatFragment : Fragment() {
     private fun sendMessage(text: String, type: String = "text", mediaUrl: String? = null) {
         val prefs = requireContext().getSharedPreferences("CU_ORBIT_PREFS", android.content.Context.MODE_PRIVATE)
         val avatarUrl = prefs.getString("USER_AVATAR", "")
-        viewModel.sendMessage(currentUserId, currentUserName, text, channelId, type, mediaUrl, senderAvatarUrl = avatarUrl)
+        
+        val editText: EditText = requireView().findViewById(R.id.edit_message)
+        val spannable = editText.text
+        
+        // Extract all MentionSpans currently in the EditText
+        val spans = spannable.getSpans(0, spannable.length, com.example.cu_orbit.utils.MentionSpan::class.java)
+        val validMentions = spans.map { it.mention }.distinctBy { it.userId }
+
+        viewModel.sendMessage(
+            senderId = currentUserId,
+            senderName = currentUserName,
+            body = text,
+            channelId = channelId,
+            type = type,
+            mediaUrl = mediaUrl,
+            senderAvatarUrl = avatarUrl,
+            mentions = validMentions.map { it.phone },
+            enrichedMentions = validMentions
+        )
+        enrichedMentions.clear()
     }
 
     private fun applyChatBackground(root: View) {
@@ -439,7 +607,6 @@ class ChatFragment : Fragment() {
         val bgImage: ImageView = root.findViewById(R.id.image_chat_background)
         val recyclerView: RecyclerView = root.findViewById(R.id.recycler_messages)
 
-        // Reset
         bgImage.setImageDrawable(null)
         recyclerView.setBackgroundColor(android.graphics.Color.TRANSPARENT)
 

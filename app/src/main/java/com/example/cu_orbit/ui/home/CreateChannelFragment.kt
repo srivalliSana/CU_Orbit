@@ -51,11 +51,11 @@ class CreateChannelFragment : Fragment() {
         lifecycleScope.launch {
             try {
                 val channel = repository.createChannel(name, isPrivate, description, userId)
-                Toast.makeText(context, "Workspace #${channel.name} created!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Channel #${channel.name} created!", Toast.LENGTH_SHORT).show()
                 findNavController().navigateUp()
             } catch (e: Exception) {
                 e.printStackTrace()
-                Toast.makeText(context, "Could not create workspace. Please check server.", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Could not create channel. Please check server.", Toast.LENGTH_LONG).show()
             }
         }
     }

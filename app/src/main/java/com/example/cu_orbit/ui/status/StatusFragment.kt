@@ -84,15 +84,49 @@ class StatusFragment : Fragment() {
                 val serverUrl = repository.uploadFile(file)
                 
                 if (serverUrl.isNotEmpty()) {
-                    viewModel.postStatus(userId, userName, "image", serverUrl, null)
-                    Toast.makeText(context, "Status update posted!", Toast.LENGTH_SHORT).show()
-                    viewModel.loadStatuses() // Refresh list
+                    showTaggingDialog(userId, userName, serverUrl)
                 } else {
                     Toast.makeText(context, "Server did not return a valid URL", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 android.util.Log.e("StatusFragment", "Upload error: ${e.message}", e)
                 Toast.makeText(context, "Failed to post status: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun showTaggingDialog(userId: String, userName: String, serverUrl: String) {
+        lifecycleScope.launch {
+            try {
+                val users = repository.getUsers().filter { it.phone != userId }
+                val names = users.map { u ->
+                    val contact = com.example.cu_orbit.utils.ContactUtils.getContactName(requireContext(), u.phone)
+                    contact ?: u.name
+                }.toTypedArray()
+
+                val checkedItems = BooleanArray(users.size) { false }
+
+                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setTitle("Secretly tag up to 5 people")
+                    .setMultiChoiceItems(names, checkedItems) { _, which, isChecked ->
+                        checkedItems[which] = isChecked
+                    }
+                    .setPositiveButton("Post") { _, _ ->
+                        val selectedPhones = mutableListOf<String>()
+                        for (i in checkedItems.indices) {
+                            if (checkedItems[i]) selectedPhones.add(users[i].phone)
+                        }
+                        val limitedTagging = selectedPhones.take(5)
+                        viewModel.postStatus(userId, userName, "image", serverUrl, null, limitedTagging)
+                        Toast.makeText(context, "Status update posted!", Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton("Skip") { _, _ ->
+                        viewModel.postStatus(userId, userName, "image", serverUrl, null, null)
+                        Toast.makeText(context, "Status update posted!", Toast.LENGTH_SHORT).show()
+                    }
+                    .show()
+            } catch (e: Exception) {
+                viewModel.postStatus(userId, userName, "image", serverUrl, null, null)
             }
         }
     }

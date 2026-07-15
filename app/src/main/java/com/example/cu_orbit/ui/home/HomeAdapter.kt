@@ -17,7 +17,8 @@ class HomeAdapter(
     private val onWorkspaceClick: (Workspace) -> Unit,
     private val onChannelClick: (Channel) -> Unit,
     private val onUserClick: (DirectMessage) -> Unit,
-    private val onActionClick: (String) -> Unit
+    private val onActionClick: (String) -> Unit,
+    private val onItemLongClick: (Any) -> Unit = {}
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private val items = mutableListOf<Any>()
@@ -89,12 +90,18 @@ class HomeAdapter(
                 holder.name.text = channel.name
                 holder.prefix.text = if (channel.type == "private") "L" else "#" 
                 
-                if (channel.unreadCount > 0) {
+                if (channel.hasUnreadMention) {
+                    holder.name.setTypeface(null, android.graphics.Typeface.BOLD)
+                    holder.name.setTextColor(ContextCompat.getColor(holder.itemView.context, R.color.orbit_primary))
+                    holder.badge.visibility = View.VISIBLE
+                    holder.badge.text = "@"
+                    holder.badge.setBackgroundResource(R.drawable.bg_badge_danger)
+                } else if (channel.unreadCount > 0) {
                     holder.name.setTypeface(null, android.graphics.Typeface.BOLD)
                     holder.name.setTextColor(ContextCompat.getColor(holder.itemView.context, R.color.text_primary))
                     holder.badge.visibility = View.VISIBLE
                     holder.badge.text = channel.unreadCount.toString()
-                    holder.badge.setBackgroundResource(if (channel.hasUnreadMention) R.drawable.bg_badge_danger else R.drawable.bg_badge_accent)
+                    holder.badge.setBackgroundResource(R.drawable.bg_badge_accent)
                 } else {
                     holder.name.setTypeface(null, android.graphics.Typeface.NORMAL)
                     holder.name.setTextColor(ContextCompat.getColor(holder.itemView.context, R.color.text_secondary))
@@ -102,7 +109,29 @@ class HomeAdapter(
                 }
 
                 channel.lastMessagePreview?.let {
-                    holder.preview.text = "${it.senderName ?: "Unknown"}: ${it.text ?: ""}"
+                    val context = holder.itemView.context
+                    val rawText = it.text ?: ""
+                    
+                    val processedText = if (it.type == "system" && rawText.contains(":")) {
+                        val parts = rawText.split(":")
+                        val phone = parts[1]
+                        val contactName = com.example.cu_orbit.utils.ContactUtils.getContactName(context, phone)
+                        val displayName = contactName ?: phone
+                        
+                        if (rawText.startsWith("ADD_MEMBER:")) {
+                            "${it.senderName} added $displayName"
+                        } else if (rawText.startsWith("JOIN_LINK:")) {
+                            "$displayName joined via invite link"
+                        } else {
+                            rawText
+                        }
+                    } else {
+                        // Priority: use the senderIsSelf flag from server
+                        val senderLabel = if (it.senderIsSelf) "You" else (it.senderName ?: "Unknown")
+                        "$senderLabel: $rawText"
+                    }
+
+                    holder.preview.text = processedText
                     holder.time.text = formatTime(it.sentAt)
                 } ?: run {
                     holder.preview.text = ""
@@ -117,11 +146,16 @@ class HomeAdapter(
                 }
 
                 holder.itemView.setOnClickListener { onChannelClick(channel) }
+                holder.itemView.setOnLongClickListener { 
+                    onItemLongClick(channel)
+                    true
+                }
             }
             is DmViewHolder -> {
                 val dmItem = item
                 val name: String
                 val unreadCount: Int
+                val hasMention: Boolean
                 val avatarUrl: String?
                 val presence: String
                 val lastMsgText: String?
@@ -130,8 +164,13 @@ class HomeAdapter(
                 val onClick: () -> Unit
 
                 if (dmItem is DirectMessage) {
-                    name = dmItem.otherUserName
+                    val context = holder.itemView.context
+                    val prefs = context.getSharedPreferences("CU_ORBIT_PREFS", android.content.Context.MODE_PRIVATE)
+                    val currentUserId = prefs.getString("USER_ID", "")
+                    val contactName = com.example.cu_orbit.utils.ContactUtils.getContactName(context, dmItem.otherUserId)
+                    name = if (dmItem.otherUserId == currentUserId) "You" else (contactName ?: dmItem.otherUserName)
                     unreadCount = dmItem.unreadCount
+                    hasMention = dmItem.hasUnreadMention
                     avatarUrl = dmItem.otherUserAvatarUrl
                     presence = dmItem.presence
                     lastMsgText = dmItem.lastMessagePreview?.text
@@ -140,21 +179,32 @@ class HomeAdapter(
                     onClick = { onUserClick(dmItem) }
                 } else {
                     val user = dmItem as User
-                    name = user.name
+                    val context = holder.itemView.context
+                    val prefs = context.getSharedPreferences("CU_ORBIT_PREFS", android.content.Context.MODE_PRIVATE)
+                    val currentUserId = prefs.getString("USER_ID", "")
+                    val contactName = com.example.cu_orbit.utils.ContactUtils.getContactName(context, user.phone)
+                    name = if (user.phone == currentUserId) "You" else (contactName ?: user.name ?: user.phone)
                     unreadCount = user.unreadCount
+                    hasMention = false // User objects don't track mentions directly
                     avatarUrl = user.avatarUrl
                     presence = user.presence
                     lastMsgText = user.lastMessagePreview
                     lastMsgTime = try { user.lastMessageTime?.toLong() } catch(e: Exception) { null }
                     senderIsSelf = false
                     onClick = { 
-                        onUserClick(DirectMessage(user.phone, user.id, user.name, user.avatarUrl, user.presence, user.unreadCount))
+                        onUserClick(DirectMessage(user.phone, user.id, user.name, user.avatarUrl, user.presence, user.unreadCount, false))
                     }
                 }
 
                 holder.name.text = name
                 
-                if (unreadCount > 0) {
+                if (hasMention) {
+                    holder.name.setTypeface(null, android.graphics.Typeface.BOLD)
+                    holder.name.setTextColor(ContextCompat.getColor(holder.itemView.context, R.color.orbit_primary))
+                    holder.badge.visibility = View.VISIBLE
+                    holder.badge.text = "@"
+                    holder.badge.setBackgroundResource(R.drawable.bg_badge_danger)
+                } else if (unreadCount > 0) {
                     holder.name.setTypeface(null, android.graphics.Typeface.BOLD)
                     holder.name.setTextColor(ContextCompat.getColor(holder.itemView.context, R.color.text_primary))
                     holder.badge.visibility = View.VISIBLE
@@ -194,6 +244,10 @@ class HomeAdapter(
                 }
 
                 holder.itemView.setOnClickListener { onClick() }
+                holder.itemView.setOnLongClickListener {
+                    onItemLongClick(dmItem)
+                    true
+                }
             }
             is EmptyViewHolder -> {
                 val empty = item as EmptyStateItem

@@ -17,7 +17,8 @@ data class Message(
     val reactions: List<Reaction>? = emptyList(),
     val attachments: List<Attachment>? = emptyList(),
     @SerializedName("is_pinned") val isPinned: Boolean = false,
-    val status: String = "sent"
+    val status: String = "sent",
+    @SerializedName("enriched_mentions") val enrichedMentions: List<MentionMetadata>? = null
 )
 
 data class Attachment(

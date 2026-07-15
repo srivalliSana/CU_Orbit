@@ -7,7 +7,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
-    var baseUrl = "http://192.168.29.192:3000/api/"
+    var baseUrl = "http://192.168.29.193:3000/api/"
         private set
 
     private var _instance: ApiService? = null
@@ -20,8 +20,11 @@ object RetrofitClient {
             return _instance!!
         }
 
+
+
     fun updateBaseUrl(ip: String) {
         baseUrl = if (ip.startsWith("http")) ip else "http://$ip:3000/api/"
+
         _instance = createService()
     }
 

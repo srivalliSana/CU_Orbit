@@ -35,8 +35,14 @@ interface ApiService {
     @GET("channels/{id}")
     suspend fun getChannel(@Path("id") id: String): Channel
 
+    @PUT("channels/{id}")
+    suspend fun updateChannel(@Path("id") id: String, @Body body: Map<String, Any?>): Channel
+
+    @DELETE("channels/{id}")
+    suspend fun deleteChannel(@Path("id") id: String, @Query("userId") userId: String): Map<String, Any>
+
     @POST("channels/{id}/members")
-    suspend fun addChannelMember(@Path("id") channelId: String, @Body body: Map<String, String>): Map<String, Any>
+    suspend fun addChannelMember(@Path("id") channelId: String, @Body body: Map<String, String?>): Map<String, Any>
 
     @POST("channels/{id}/typing")
     suspend fun updateTyping(@Path("id") channelId: String, @Body body: Map<String, String>): Map<String, Any>
@@ -49,7 +55,7 @@ interface ApiService {
     suspend fun getStatuses(): List<Status>
 
     @POST("status")
-    suspend fun postStatus(@Body body: Map<String, String?>): Status
+    suspend fun postStatus(@Body body: Map<String, Any?>): Status
 
     // UPLOAD
     @retrofit2.http.Multipart
@@ -88,11 +94,35 @@ interface ApiService {
     @GET("mentions/{userId}")
     suspend fun getMentions(@Path("userId") userId: String): List<Mention>
 
+    @POST("mentions/{id}/read")
+    suspend fun markMentionAsRead(@Path("id") mentionId: String): Map<String, Any>
+
+    @POST("mentions/read-all")
+    suspend fun markAllMentionsAsRead(@Body body: Map<String, String>): Map<String, Any>
+
     @PUT("users/{phone}")
     suspend fun updateUser(@Path("phone") phone: String, @Body body: Map<String, String?>): Map<String, Any>
 
     @GET("users/{userId}")
     suspend fun getUser(@Path("userId") userId: String): User
+
+    @GET("channels/{id}/members")
+    suspend fun getChannelMembers(@Path("id") channelId: String): List<User>
+
+    @DELETE("channels/{id}/members/{userId}")
+    suspend fun removeChannelMember(@Path("id") channelId: String, @Path("userId") userId: String): Map<String, Any>
+
+    @PUT("channels/{id}/members/{userId}/role")
+    suspend fun updateMemberRole(@Path("id") channelId: String, @Path("userId") userId: String, @Body body: Map<String, String>): Map<String, Any>
+
+    @POST("channels/join-by-link")
+    suspend fun joinChannelByLink(@Body body: Map<String, String>): Map<String, Any>
+
+    @POST("conversations/{id}/prefs")
+    suspend fun updateConversationPrefs(@Path("id") id: String, @Body body: Map<String, String>): Map<String, Any>
+
+    @POST("home/mark-all-read")
+    suspend fun markAllRead(@Body body: Map<String, String>): Map<String, Any>
 
     @GET("search")
     suspend fun search(

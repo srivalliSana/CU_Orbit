@@ -122,6 +122,30 @@
         tools:text="shree is typing..."
         tools:visibility="visible" />
 
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/card_mention_suggestions"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="8dp"
+        android:visibility="gone"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="12dp"
+        app:layout_constraintBottom_toTopOf="@id/layout_message_input_container"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:strokeWidth="0dp">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recycler_mention_suggestions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxHeight="240dp"
+            android:overScrollMode="never"
+            tools:listitem="@layout/item_mention_suggestion"
+            tools:visibility="visible" />
+    </com.google.android.material.card.MaterialCardView>
+
     <LinearLayout
         android:id="@+id/layout_message_input_container"
         android:layout_width="match_parent"

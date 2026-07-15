@@ -8,18 +8,23 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.cu_orbit.network.RetrofitClient
-import com.google.android.material.button.MaterialButton
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
 import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.launch
 
 class LoginActivity : AppCompatActivity() {
 
+    private val RC_SIGN_IN = 9001
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_login)
 
-        val editPhone: TextInputEditText = findViewById(R.id.edit_phone)
+        val editEmail: TextInputEditText = findViewById(R.id.edit_email)
         val buttonContinue: Button = findViewById(R.id.button_continue)
+        val buttonGoogle: Button = findViewById(R.id.button_google)
         val signTitle: android.widget.TextView = findViewById(R.id.text_welcome)
 
         var tapCount = 0
@@ -32,13 +37,49 @@ class LoginActivity : AppCompatActivity() {
         }
 
         buttonContinue.setOnClickListener {
-            val phone = editPhone.text.toString().trim()
-            if (phone.length == 10) {
+            val email = editEmail.text.toString().trim().lowercase()
+            if (isValidUniversityEmail(email)) {
                 hideKeyboard()
                 buttonContinue.isEnabled = false
-                loginDirectly(phone, buttonContinue)
+                loginWithEmail(email, buttonContinue)
             } else {
-                Toast.makeText(this, "Please enter a valid 10-digit number", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Only @cutm.ac.in or @cutmap.ac.in emails are allowed", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        buttonGoogle.setOnClickListener {
+            signInWithGoogle()
+        }
+    }
+
+    private fun isValidUniversityEmail(email: String): Boolean {
+        return email.endsWith("@cutm.ac.in") || email.endsWith("@cutmap.ac.in")
+    }
+
+    private fun signInWithGoogle() {
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestEmail()
+            .requestProfile()
+            .build()
+        val googleSignInClient = GoogleSignIn.getClient(this, gso)
+        startActivityForResult(googleSignInClient.signInIntent, RC_SIGN_IN)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == RC_SIGN_IN) {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
+            try {
+                val account = task.getResult(ApiException::class.java)
+                val email = account?.email ?: ""
+                if (isValidUniversityEmail(email)) {
+                    loginWithEmail(email, findViewById(R.id.button_google))
+                } else {
+                    GoogleSignIn.getClient(this, GoogleSignInOptions.DEFAULT_SIGN_IN).signOut()
+                    Toast.makeText(this, "Only @cutm.ac.in or @cutmap.ac.in emails are allowed", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: ApiException) {
+                Toast.makeText(this, "Google sign in failed", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -70,30 +111,31 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
-    private fun loginDirectly(phone: String, button: Button) {
+    private fun loginWithEmail(email: String, button: Button) {
         lifecycleScope.launch {
             try {
-                val response = RetrofitClient.instance.login(mapOf("phone" to phone))
+                val response = RetrofitClient.instance.login(mapOf("email" to email))
                 if (response["success"] == true) {
                     val isNewUser = response["isNewUser"] as? Boolean ?: true
                     val prefs = getSharedPreferences("CU_ORBIT_PREFS", MODE_PRIVATE)
                     
                     prefs.edit().apply {
-                        putString("USER_ID", phone)
+                        putString("USER_EMAIL", email)
                         (response["user"] as? Map<*, *>)?.let { user ->
+                            putString("USER_ID", user["phone"]?.toString())
                             putString("USER_NAME", user["name"]?.toString())
                         }
                     }.apply()
 
                     if (isNewUser) {
-                        startActivity(Intent(this@LoginActivity, ProfileSetupActivity::class.java).putExtra("PHONE_NUMBER", phone))
+                        startActivity(Intent(this@LoginActivity, ProfileSetupActivity::class.java).putExtra("EMAIL", email))
                     } else {
                         startActivity(Intent(this@LoginActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
                     }
                     finish()
                 }
             } catch (e: Exception) {
-                Toast.makeText(this@LoginActivity, "Timeout. Check your IP (tap title 5x)", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@LoginActivity, "Connection failed. Check your IP.", Toast.LENGTH_LONG).show()
             } finally {
                 button.isEnabled = true
             }

@@ -19,8 +19,8 @@
     <string name="resend_text">Didn\'t receive the code? Resend</string>
 
     <!-- Create Channel -->
-    <string name="create_channel_title">Create a workspace</string>
-    <string name="create_channel_desc">Workspaces are where your team communicates. They contain multiple channels organized around topics.</string>
+    <string name="create_channel_title">Create a channel</string>
+    <string name="create_channel_desc">Channels are where your team communicates. They contain conversations organized around topics.</string>
     <string name="name_hint">Name</string>
     <string name="desc_hint">Description (optional)</string>
     <string name="make_private">Make private</string>

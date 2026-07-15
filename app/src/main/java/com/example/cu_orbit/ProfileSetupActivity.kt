@@ -60,11 +60,11 @@ class ProfileSetupActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_profile_setup)
 
-        val phone = intent.getStringExtra("PHONE_NUMBER") ?: ""
+        val email = intent.getStringExtra("EMAIL") ?: ""
         
         avatarImage = findViewById(R.id.image_setup_avatar)
         val editName: TextInputEditText = findViewById(R.id.edit_setup_name)
-        val editEmail: TextInputEditText = findViewById(R.id.edit_setup_email)
+        val editPhone: TextInputEditText = findViewById(R.id.edit_setup_phone)
         val editDept: TextInputEditText = findViewById(R.id.edit_setup_dept)
         val btnFinish: Button = findViewById(R.id.button_finish_setup)
 
@@ -72,14 +72,14 @@ class ProfileSetupActivity : AppCompatActivity() {
 
         btnFinish.setOnClickListener {
             val name = editName.text.toString().trim()
-            val email = editEmail.text.toString().trim()
+            val phone = editPhone.text.toString().trim()
             val dept = editDept.text.toString().trim()
 
-            if (name.isNotEmpty() && email.isNotEmpty()) {
+            if (name.isNotEmpty() && phone.length == 10) {
                 hideKeyboard()
                 registerUser(phone, name, email, dept)
             } else {
-                Toast.makeText(this, "Please fill in all required fields", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Please enter name and a valid 10-digit phone number", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -201,6 +201,7 @@ class ProfileSetupActivity : AppCompatActivity() {
                     putString("USER_NAME", name)
                     putString("USER_ID", phone)
                     putString("USER_AVATAR", currentAvatarUrl)
+                    putString("USER_EMAIL", email)
                 }.apply()
                 startActivity(Intent(this@ProfileSetupActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
                 finish()

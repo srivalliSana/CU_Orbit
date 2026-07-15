@@ -64,9 +64,9 @@ class MainActivity : AppCompatActivity() {
         navView.setupWithNavController(navController)
         navigationView.setupWithNavController(navController)
 
-        // Hide the main toolbar on Home fragment to avoid double headers
+        // Hide the main toolbar on Home and Info fragments to avoid double headers
         navController.addOnDestinationChangedListener { _, destination, _ ->
-            if (destination.id == R.id.navigation_home) {
+            if (destination.id == R.id.navigation_home || destination.id == R.id.navigation_channel_info || destination.id == R.id.navigation_chat) {
                 supportActionBar?.hide()
             } else {
                 supportActionBar?.show()
@@ -95,6 +95,36 @@ class MainActivity : AppCompatActivity() {
 
         updateNavHeader(navigationView)
         loadWorkspacesInDrawer(navigationView)
+        handleDeepLink(intent)
+    }
+
+    private fun handleDeepLink(intent: android.content.Intent?) {
+        val data = intent?.data ?: return
+        if (data.host == "cuorbit.app" && data.path?.startsWith("/join/") == true) {
+            val code = data.lastPathSegment
+            if (code != null) {
+                joinChannelByCode(code)
+            }
+        }
+    }
+
+    private fun joinChannelByCode(code: String) {
+        val prefs = getSharedPreferences("CU_ORBIT_PREFS", Context.MODE_PRIVATE)
+        val userId = prefs.getString("USER_ID", "") ?: return
+        
+        lifecycleScope.launch {
+            try {
+                val response = com.example.cu_orbit.network.RetrofitClient.instance.joinChannelByLink(mapOf("inviteCode" to code, "userId" to userId))
+                if (response["success"] == true) {
+                    Toast.makeText(this@MainActivity, "Joined channel via link!", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {}
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handleDeepLink(intent)
     }
 
     private fun loadWorkspacesInDrawer(navigationView: NavigationView) {

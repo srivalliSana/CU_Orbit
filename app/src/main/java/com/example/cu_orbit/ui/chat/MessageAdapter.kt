@@ -1,5 +1,6 @@
 package com.example.cu_orbit.ui.chat
 
+import android.os.Bundle
 import android.view.ContextThemeWrapper
 import android.view.LayoutInflater
 import android.view.View
@@ -12,6 +13,7 @@ import com.example.cu_orbit.R
 import com.example.cu_orbit.data.Message
 import com.example.cu_orbit.network.RetrofitClient
 import com.example.cu_orbit.utils.MarkdownUtils
+import com.example.cu_orbit.utils.MentionSpan
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.R as MaterialR
@@ -20,6 +22,7 @@ import coil.load
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.navigation.findNavController
 
 class MessageAdapter(
     private val messages: List<Message>,
@@ -46,11 +49,11 @@ class MessageAdapter(
 
     override fun getItemViewType(position: Int): Int {
         val message = messages[position]
-        // Robust comparison: extract digits only to handle (+91) variations
-        val senderDigits = message.senderId.filter { it.isDigit() }
-        val currentDigits = currentUserId.filter { it.isDigit() }
+        // Robust comparison: take last 10 digits to handle (+91) variations
+        val senderClean = message.senderId.filter { it.isDigit() }.takeLast(10)
+        val currentClean = currentUserId.filter { it.isDigit() }.takeLast(10)
         
-        return if (senderDigits.isNotEmpty() && senderDigits == currentDigits) {
+        return if (senderClean.isNotEmpty() && senderClean == currentClean) {
             TYPE_SENT
         } else {
             TYPE_RECEIVED
@@ -109,7 +112,9 @@ class MessageAdapter(
 
             if (showHeader) {
                 holder.headerLayout?.visibility = View.VISIBLE
-                holder.userName?.text = message.senderName
+                val context = holder.itemView.context
+                val contactName = com.example.cu_orbit.utils.ContactUtils.getContactName(context, message.senderId)
+                holder.userName?.text = contactName ?: message.senderName
                 
                 val avatarUrl = RetrofitClient.getAbsoluteUrl(message.senderAvatarUrl)
                 if (!avatarUrl.isNullOrEmpty()) {
@@ -126,11 +131,6 @@ class MessageAdapter(
             }
         } else {
             holder.statusIcon?.visibility = View.VISIBLE
-            
-            // WhatsApp-style logic:
-            // 1. Sent/Offline -> Single Tick (Grey)
-            // 2. Online/Delivered -> Double Tick (Grey)
-            // 3. Read -> Double Tick (Blue)
             
             when (message.status) {
                 "read" -> {
@@ -158,11 +158,74 @@ class MessageAdapter(
             holder.statusIcon?.alpha = 0.8f
         }
 
-        // 3. Body & Markdown
-        holder.body.text = MarkdownUtils.formatMarkdown(message.text ?: "")
-        holder.body.visibility = if (message.text.isNullOrEmpty() && message.type != "text") View.GONE else View.VISIBLE
+        // --- Handle System Messages ---
+        if (message.type == "system") {
+            holder.body.visibility = View.VISIBLE
+            holder.cardImage.visibility = View.GONE
+            holder.cardVoice.visibility = View.GONE
+            holder.layoutFile.visibility = View.GONE
+            holder.reactionGroup.visibility = View.GONE
+            holder.threadIndicator.visibility = View.GONE
+            
+            val context = holder.itemView.context
+            val body = message.text ?: ""
+            
+            if (body.contains(":")) {
+                val parts = body.split(":")
+                val phone = parts[1]
+                val contactName = com.example.cu_orbit.utils.ContactUtils.getContactName(context, phone)
+                val displayName = contactName ?: phone
+                
+                holder.body.text = if (body.startsWith("ADD_MEMBER:")) {
+                    "${message.senderName} added $displayName"
+                } else {
+                    "$displayName joined via invite link"
+                }
+                holder.body.setTypeface(null, android.graphics.Typeface.ITALIC)
+                holder.body.setTextColor(androidx.core.content.ContextCompat.getColor(context, R.color.text_muted))
+                holder.body.gravity = android.view.Gravity.CENTER
+                holder.body.setPadding(0, 20, 0, 20)
+            }
+            return
+        }
 
-        // 4. Media Views Reset
+        // 3. Body & Markdown with Mention Highlighting
+        val rawBody = message.text ?: ""
+        val formattedBody = com.example.cu_orbit.utils.MarkdownUtils.formatMarkdown(rawBody, holder.itemView.context)
+
+        // Highlight @mentions from metadata
+        if (!message.enrichedMentions.isNullOrEmpty()) {
+            val spannable = android.text.SpannableStringBuilder(formattedBody)
+            // Sort by length descending to match longest names first (prevents partial matches)
+            message.enrichedMentions.sortedByDescending { it.displayName.length }.forEach { mention ->
+                val tag = "@${mention.displayName}"
+                var index = spannable.toString().indexOf(tag)
+                while (index != -1) {
+                    val span = MentionSpan(
+                        mention = mention,
+                        color = androidx.core.content.ContextCompat.getColor(holder.itemView.context, R.color.orbit_primary)
+                    ) { m ->
+                        val bundle = Bundle().apply { putString("userId", m.userId) }
+                        holder.itemView.findNavController().navigate(R.id.navigation_contact_info, bundle)
+                    }
+                    
+                    spannable.setSpan(
+                        span,
+                        index,
+                        index + tag.length,
+                        android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                    index = spannable.toString().indexOf(tag, index + tag.length)
+                }
+            }
+            holder.body.text = spannable
+        } else {
+            holder.body.text = formattedBody
+        }
+
+        holder.body.visibility = if (rawBody.isEmpty() && message.type != "text") View.GONE else View.VISIBLE
+
+        // 4. Media views reset
         holder.cardImage.visibility = View.GONE
         holder.cardVoice.visibility = View.GONE
         holder.layoutFile.visibility = View.GONE

@@ -25,10 +25,10 @@ class StatusViewModel : ViewModel() {
         }
     }
 
-    fun postStatus(userId: String, userName: String, type: String, mediaUrl: String, caption: String?) {
+    fun postStatus(userId: String, userName: String, type: String, mediaUrl: String, caption: String?, mentions: List<String>? = null) {
         viewModelScope.launch {
             try {
-                repository.postStatus(userId, userName, type, mediaUrl, caption)
+                repository.postStatus(userId, userName, type, mediaUrl, caption, mentions)
                 loadStatuses()
             } catch (e: Exception) {
                 // handle error

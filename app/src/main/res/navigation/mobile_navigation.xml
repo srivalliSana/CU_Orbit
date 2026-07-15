@@ -97,7 +97,21 @@
         android:label="Edit Profile" />
 
     <fragment
+        android:id="@+id/navigation_create_channel"
+        android:name="com.example.cu_orbit.ui.home.CreateChannelFragment"
+        android:label="Create Channel" />
+
+    <fragment
         android:id="@+id/navigation_mentions"
         android:name="com.example.cu_orbit.ui.activity.MentionsFragment"
         android:label="Mentions" />
+
+    <fragment
+        android:id="@+id/navigation_channel_info"
+        android:name="com.example.cu_orbit.ui.chat.ChannelInfoFragment"
+        android:label="Channel Info">
+        <argument
+            android:name="channelId"
+            app:argType="string" />
+    </fragment>
 </navigation>

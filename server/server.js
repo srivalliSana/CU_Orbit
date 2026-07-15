@@ -5,11 +5,18 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const app = express();
 app.use(express.json());
 app.use(cors());
+
+// UTILS
+function normalizePhone(phone) {
+    if (!phone) return '';
+    return phone.replace(/[^\d]/g, '').slice(-10);
+}
 
 // TRAFFIC LOGGER
 app.use((req, res, next) => {
@@ -35,7 +42,7 @@ const dbConfig = {
     user: process.env.DB_USER || 'root',
     pass: process.env.DB_PASS || '@123456Valli',
     host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 3306
+    port: 3306
 };
 
 const sequelize = new Sequelize(dbConfig.name, dbConfig.user, dbConfig.pass, {
@@ -79,13 +86,28 @@ const Channel = sequelize.define('Channel', {
     topic: { type: DataTypes.STRING, defaultValue: '' },
     member_count: { type: DataTypes.INTEGER, defaultValue: 0 },
     pinned_message_count: { type: DataTypes.INTEGER, defaultValue: 0 },
-    is_muted: { type: DataTypes.BOOLEAN, defaultValue: false }
+    is_muted: { type: DataTypes.BOOLEAN, defaultValue: false },
+    invite_code: { type: DataTypes.STRING, unique: true },
+    created_by: { type: DataTypes.STRING, allowNull: true },
+    restricted_messaging: { type: DataTypes.BOOLEAN, defaultValue: false },
+    info_edit_restricted: { type: DataTypes.BOOLEAN, defaultValue: false },
+    approval_required: { type: DataTypes.BOOLEAN, defaultValue: false }
 });
 
 const ChannelMember = sequelize.define('ChannelMember', {
     id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
     channelId: { type: DataTypes.UUID, allowNull: false },
-    userId: { type: DataTypes.STRING, allowNull: false }
+    userId: { type: DataTypes.STRING, allowNull: false },
+    role: { type: DataTypes.ENUM('admin', 'member'), defaultValue: 'member' }
+});
+
+const ConversationPref = sequelize.define('ConversationPref', {
+    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    userId: { type: DataTypes.STRING, allowNull: false },
+    containerId: { type: DataTypes.STRING, allowNull: false },
+    isPinned: { type: DataTypes.BOOLEAN, defaultValue: false },
+    isMuted: { type: DataTypes.BOOLEAN, defaultValue: false },
+    isHidden: { type: DataTypes.BOOLEAN, defaultValue: false }
 });
 
 const Message = sequelize.define('Message', {
@@ -96,7 +118,7 @@ const Message = sequelize.define('Message', {
     senderName: { type: DataTypes.STRING },
     senderAvatarUrl: { type: DataTypes.STRING },
     body: { type: DataTypes.TEXT },
-    type: { type: DataTypes.ENUM('text', 'image', 'voice', 'file'), defaultValue: 'text' },
+    type: { type: DataTypes.ENUM('text', 'image', 'voice', 'file', 'system'), defaultValue: 'text' },
     attachments: { type: DataTypes.JSON, defaultValue: [] },
     reactions: { type: DataTypes.JSON, defaultValue: [] },
     thread_reply_count: { type: DataTypes.INTEGER, defaultValue: 0 },
@@ -104,6 +126,14 @@ const Message = sequelize.define('Message', {
     status: { type: DataTypes.STRING, defaultValue: 'sent' },
     timestamp: { type: DataTypes.BIGINT, defaultValue: () => Date.now() },
     edited_at: { type: DataTypes.DATE, allowNull: true }
+});
+
+const Mention = sequelize.define('Mention', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    message_id: { type: DataTypes.UUID, allowNull: false },
+    mentioned_user_id: { type: DataTypes.STRING, allowNull: false },
+    source_channel_id: { type: DataTypes.STRING, allowNull: false },
+    is_read: { type: DataTypes.BOOLEAN, defaultValue: false }
 });
 
 const Thread = sequelize.define('Thread', {
@@ -116,27 +146,14 @@ const Thread = sequelize.define('Thread', {
     last_reply_at: { type: DataTypes.BIGINT }
 });
 
-const Mention = sequelize.define('Mention', {
-    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-    message_id: { type: DataTypes.UUID, allowNull: false },
-    mentioned_user_id: { type: DataTypes.STRING, allowNull: false },
-    source_channel_id: { type: DataTypes.STRING, allowNull: false },
-    is_read: { type: DataTypes.BOOLEAN, defaultValue: false }
-});
-
-const Draft = sequelize.define('Draft', {
-    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-    user_id: { type: DataTypes.STRING, allowNull: false },
-    container_id: { type: DataTypes.STRING, allowNull: false },
-    text: DataTypes.TEXT,
-    updated_at: { type: DataTypes.BIGINT, defaultValue: () => Date.now() }
-});
-
 const Status = sequelize.define('Status', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     userId: { type: DataTypes.STRING, allowNull: false },
     userName: DataTypes.STRING,
     mediaUrl: { type: DataTypes.STRING, allowNull: false },
+    caption: { type: DataTypes.TEXT, defaultValue: '' },
+    type: { type: DataTypes.STRING, defaultValue: 'image' },
+    mentions: { type: DataTypes.JSON, defaultValue: [] },
     expiresAt: { type: DataTypes.DATE }
 });
 
@@ -152,57 +169,61 @@ Workspace.hasMany(Channel, { foreignKey: 'workspace_id', as: 'channels' });
 Channel.belongsTo(Workspace, { foreignKey: 'workspace_id' });
 Channel.hasMany(ChannelMember, { foreignKey: 'channelId', as: 'members' });
 
+Message.hasMany(Mention, { foreignKey: 'message_id', as: 'mentions' });
+Mention.belongsTo(Message, { foreignKey: 'message_id' });
+Mention.belongsTo(User, { foreignKey: 'mentioned_user_id', targetKey: 'phone', as: 'user' });
+
 // SYNC
 sequelize.authenticate()
     .then(async () => {
         await sequelize.sync({ alter: true });
-        console.log('✅ MySQL Connected');
+        console.log('✅ MySQL Connected & Schema Synced');
 
         const [ws] = await Workspace.findOrCreate({
             where: { slug: 'cu-orbit' },
             defaults: { name: 'CU Orbit', slug: 'cu-orbit' }
         });
 
-        await sequelize.query(`UPDATE Channels SET workspace_id = '${ws.id}' WHERE workspace_id IS NULL OR workspace_id = '' OR workspace_id = 'null'`);
-        await sequelize.query(`UPDATE Messages SET dm_id = channelId WHERE channelId LIKE '%_%' AND (dm_id IS NULL OR dm_id = '')`);
-
-        const [oldDms] = await sequelize.query("SELECT id, channelId, senderId FROM Messages WHERE channelId NOT LIKE '%-%' AND channelId NOT LIKE '%_%' AND channelId IS NOT NULL AND channelId != ''");
-        for (const msg of oldDms) {
-            const p1 = msg.senderId;
-            const p2 = msg.channelId;
-            if (p1 && p2 && p2.length > 5 && !p2.includes('-')) {
-                const dmId = p1 < p2 ? `${p1}_${p2}` : `${p2}_${p1}`;
-                await sequelize.query(`UPDATE Messages SET dm_id = '${dmId}' WHERE id = '${msg.id}'`);
-            }
-        }
-
         const [genChannel] = await Channel.findOrCreate({
             where: { name: 'general', workspace_id: ws.id },
-            defaults: { name: 'general', workspace_id: ws.id, type: 'public' }
+            defaults: {
+                name: 'general', workspace_id: ws.id, type: 'public',
+                invite_code: crypto.randomBytes(4).toString('hex'), created_by: 'system'
+            }
         });
 
         const users = await User.findAll();
         for (const u of users) {
             await ChannelMember.findOrCreate({
                 where: { channelId: genChannel.id, userId: u.phone },
-                defaults: { channelId: genChannel.id, userId: u.phone }
+                defaults: { channelId: genChannel.id, userId: u.phone, role: 'member' }
             });
         }
     })
     .catch(err => console.warn('⚠️ MySQL Offline:', err.message));
+
+// --- NOTIFICATION ROUTER SIMULATION ---
+async function routeMentionNotification(user, message) {
+    console.log(`\n--- 🔔 MENTION NOTIFICATION ---`);
+    console.log(`TO: ${user.name} (${user.phone})`);
+    console.log(`BODY: @${message.senderName} mentioned you in a message!`);
+    console.log(`MESSAGE: "${message.body}"`);
+    console.log(`-------------------------------\n`);
+}
 
 // --- ROUTES ---
 
 // AUTH
 app.post('/api/auth/login', async (req, res) => {
     try {
-        const user = await User.findOne({ where: { phone: req.body.phone } });
+        const { email } = req.body;
+        const user = await User.findOne({ where: { email: email } });
         if (user) {
             const gen = await Channel.findOne({ where: { name: 'general' } });
             if (gen) {
                 await ChannelMember.findOrCreate({
                     where: { channelId: gen.id, userId: user.phone },
-                    defaults: { channelId: gen.id, userId: user.phone }
+                    defaults: { role: 'member' }
                 });
             }
         }
@@ -212,28 +233,31 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.post('/api/auth/register', async (req, res) => {
     try {
-        const handle = req.body.name.toLowerCase().replace(/\s+/g, '_') + '_' + req.body.phone.slice(-4);
-        const user = await User.create({ ...req.body, handle });
+        const { name, phone, email, avatarUrl, bio } = req.body;
+        const handle = name.toLowerCase().replace(/\s+/g, '_') + '_' + phone.slice(-4);
+
+        let user = await User.findOne({ where: { [Op.or]: [{ email }, { phone }] } });
+
+        if (user) {
+            user.name = name;
+            user.phone = phone;
+            user.avatarUrl = avatarUrl || user.avatarUrl;
+            user.bio = bio || user.bio;
+            await user.save();
+        } else {
+            user = await User.create({ name, phone, email, avatarUrl, bio, handle });
+        }
+
         const gen = await Channel.findOne({ where: { name: 'general' } });
         if (gen) {
-            await ChannelMember.create({ channelId: gen.id, userId: user.phone });
+            await ChannelMember.create({ channelId: gen.id, userId: phone, role: 'member' });
+            await gen.increment('member_count');
         }
         res.json({ success: true, user });
-    } catch (err) { res.status(500).json(err); }
-});
-
-// WORKSPACES
-app.get('/api/workspaces', async (req, res) => {
-    try { res.json(await Workspace.findAll({ include: [{ model: Channel, as: 'channels' }] })); } catch (e) { res.json([]); }
-});
-
-app.post('/api/workspaces', async (req, res) => {
-    try {
-        const slug = req.body.name.toLowerCase().replace(/\s+/g, '-');
-        const ws = await Workspace.create({ ...req.body, slug });
-        await Channel.create({ name: 'general', workspace_id: ws.id, type: 'public' });
-        res.json(ws);
-    } catch (e) { res.status(500).json(e); }
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // HOME FEED
@@ -244,51 +268,59 @@ app.get('/api/home/:userId/:workspaceId', async (req, res) => {
         const channelIds = memberships.map(m => m.channelId);
 
         const channels = await Channel.findAll({
-            where: { workspace_id: workspaceId, id: { [Op.in]: channelIds } },
-            raw: true
+            where: { workspace_id: workspaceId, id: { [Op.in]: channelIds } }
         });
 
-        const channelsWithPreview = await Promise.all(channels.map(async (ch) => {
-            const lastMsg = await Message.findOne({
-                where: { channelId: ch.id },
-                order: [['timestamp', 'DESC']]
-            });
-            const unreadCount = await Message.count({
-                where: { channelId: ch.id, senderId: { [Op.ne]: userId }, status: { [Op.ne]: 'read' } }
-            });
+        const channelsData = await Promise.all(channels.map(async (ch) => {
+            const pref = await ConversationPref.findOne({ where: { userId, containerId: ch.id } });
+            if (pref && pref.isHidden) return null;
+
+            const lastMsg = await Message.findOne({ where: { channelId: ch.id }, order: [['timestamp', 'DESC']] });
+            const unreadCount = await Message.count({ where: { channelId: ch.id, senderId: { [Op.ne]: userId }, status: { [Op.ne]: 'read' } } });
+            const hasUnreadMention = await Mention.count({ where: { mentioned_user_id: userId, source_channel_id: ch.id, is_read: false } }) > 0;
+
             return {
-                ...ch,
-                is_muted: !!ch.is_muted,
+                ...ch.get({ plain: true }),
+                is_muted: pref ? pref.isMuted : !!ch.is_muted,
+                is_pinned: pref ? pref.isPinned : false,
                 last_message_preview: lastMsg ? {
+                    sender_id: lastMsg.senderId,
                     sender_name: lastMsg.senderName,
-                    text: lastMsg.body || "",
+                    text: hasUnreadMention ? `${lastMsg.senderName} mentioned you: ${lastMsg.body}` : (lastMsg.body || ""),
                     sent_at: lastMsg.timestamp,
-                    type: lastMsg.type
+                    type: lastMsg.type,
+                    sender_is_self: normalizePhone(lastMsg.senderId) === normalizePhone(userId)
                 } : null,
                 unread_count: unreadCount,
-                has_unread_mention: false
+                has_unread_mention: hasUnreadMention
             };
         }));
 
         const users = await User.findAll({ where: { phone: { [Op.ne]: userId } } });
         const dms = await Promise.all(users.map(async (u) => {
             const dmId = userId < u.phone ? `${userId}_${u.phone}` : `${u.phone}_${userId}`;
-            const lastMsg = await Message.findOne({
-                where: { dm_id: dmId },
-                order: [['timestamp', 'DESC']]
-            });
+            const pref = await ConversationPref.findOne({ where: { userId, containerId: dmId } });
+
+            const lastMsg = await Message.findOne({ where: { dm_id: dmId }, order: [['timestamp', 'DESC']] });
+
+            if (pref && pref.isHidden && !lastMsg) return null;
+            if (pref && pref.isHidden && lastMsg && lastMsg.timestamp < pref.updatedAt) return null;
+
+            const hasUnreadMention = await Mention.count({ where: { mentioned_user_id: userId, source_channel_id: dmId, is_read: false } }) > 0;
+
             return {
                 id: dmId,
                 other_user_id: u.phone,
                 other_user_name: u.name,
                 other_user_avatar_url: u.avatarUrl,
                 presence: u.presence,
-                unread_count: await Message.count({
-                    where: { dm_id: dmId, senderId: { [Op.ne]: userId }, status: { [Op.ne]: 'read' } }
-                }),
+                is_pinned: pref ? pref.isPinned : false,
+                is_muted: pref ? pref.isMuted : false,
+                unread_count: await Message.count({ where: { dm_id: dmId, senderId: { [Op.ne]: userId }, status: { [Op.ne]: 'read' } } }),
+                has_unread_mention: hasUnreadMention,
                 last_message_preview: lastMsg ? {
-                    sender_is_self: lastMsg.senderId === userId,
-                    text: lastMsg.body || "",
+                    sender_is_self: normalizePhone(lastMsg.senderId) === normalizePhone(userId),
+                    text: hasUnreadMention ? `${lastMsg.senderName} mentioned you: ${lastMsg.body}` : (lastMsg.body || ""),
                     sent_at: lastMsg.timestamp,
                     type: lastMsg.type
                 } : null
@@ -296,23 +328,23 @@ app.get('/api/home/:userId/:workspaceId', async (req, res) => {
         }));
 
         res.json({
-            channels: channelsWithPreview,
-            dms: dms
+            channels: channelsData.filter(c => c !== null).sort((a,b) => (b.is_pinned - a.is_pinned)),
+            dms: dms.filter(d => d !== null).sort((a,b) => (b.is_pinned - a.is_pinned))
         });
     } catch (e) {
         console.error(e);
-        res.status(500).json([]);
+        res.status(500).json({ channels: [], dms: [] });
     }
 });
 
 app.get('/api/home/quick-access/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
-        const threadUnread = await Thread.count({ where: { participant_ids: { [Op.contains]: [userId] }, has_unread: true } });
-        const mentionUnread = await Mention.count({ where: { mentioned_user_id: userId, is_read: false } });
-        const draftCount = await Draft.count({ where: { user_id: userId } });
-        res.json({ threads: threadUnread, mentions: mentionUnread, drafts: draftCount });
-    } catch (e) { res.json({ threads: 0, mentions: 0, drafts: 0 }); }
+        const mentions = await Mention.count({ where: { mentioned_user_id: userId, is_read: false } });
+        res.json({ threads: 0, mentions, drafts: 0 });
+    } catch (e) {
+        res.json({ threads: 0, mentions: 0, drafts: 0 });
+    }
 });
 
 // MESSAGES
@@ -321,7 +353,12 @@ app.get('/api/messages/:containerId', async (req, res) => {
         const { containerId } = req.params;
         const messages = await Message.findAll({
             where: { [Op.or]: [{ channelId: containerId }, { dm_id: containerId }] },
-            order: [['timestamp', 'ASC']]
+            order: [['timestamp', 'ASC']],
+            include: [{
+                model: Mention,
+                as: 'mentions',
+                include: [{ model: User, as: 'user', attributes: ['id', 'name', 'phone'] }]
+            }]
         });
 
         res.json(messages.map(m => ({
@@ -336,288 +373,273 @@ app.get('/api/messages/:containerId', async (req, res) => {
             type: m.type,
             attachments: m.attachments || [],
             reactions: m.reactions || [],
-            thread_reply_count: m.thread_reply_count,
-            is_pinned: !!m.is_pinned,
-            status: m.status
+            status: m.status,
+            enriched_mentions: (m.mentions || []).map(mn => ({
+                user_id: mn.user ? mn.user.id : '',
+                display_name: mn.user ? mn.user.name : '',
+                phone: mn.mentioned_user_id
+            }))
         })));
-    } catch (e) { res.json([]); }
+    } catch (e) {
+        console.error(e);
+        res.json([]);
+    }
 });
 
 app.post('/api/messages', async (req, res) => {
     try {
-        const { senderId, senderName, body, channelId, type, senderAvatarUrl, mediaUrl } = req.body;
+        const { senderId, senderName, body, channelId, type, senderAvatarUrl, mediaUrl, mentions, enrichedMentions } = req.body;
 
-        // Determine initial status based on recipient presence (if DM)
-        let initialStatus = 'sent';
-        if (channelId && channelId.includes('_')) {
-            const parts = channelId.split('_');
-            const otherPart = parts[0] === senderId ? parts[1] : parts[0];
-            const recipient = await User.findOne({ where: { phone: otherPart } });
-            if (recipient && recipient.presence === 'online') {
-                initialStatus = 'delivered';
+        // Check restricted messaging
+        if (channelId && !channelId.includes('_')) {
+             const ch = await Channel.findByPk(channelId);
+             if (ch && ch.restricted_messaging) {
+                 const member = await ChannelMember.findOne({ where: { channelId, userId: senderId } });
+                 if (member && member.role !== 'admin') {
+                     return res.status(403).json({ error: 'Only admins can send messages' });
+                 }
+             }
+        }
+
+        const msg = await Message.create({
+            senderId, senderName, body, channelId, type: type || 'text',
+            senderAvatarUrl, dm_id: (channelId && channelId.includes('_')) ? channelId : null,
+            attachments: mediaUrl ? [{ type: type, url: mediaUrl }] : []
+        });
+
+        const mentionedIds = new Set();
+        if (enrichedMentions && Array.isArray(enrichedMentions)) {
+            for (const mData of enrichedMentions) {
+                mentionedIds.add(mData.phone);
             }
         }
-
-        const msgData = {
-            senderId,
-            senderName,
-            body,
-            channelId,
-            type: type || 'text',
-            senderAvatarUrl,
-            status: initialStatus,
-            attachments: mediaUrl ? [{ type: type, url: mediaUrl }] : []
-        };
-
-        if (msgData.channelId && msgData.channelId.includes('_')) {
-            msgData.dm_id = msgData.channelId;
-        }
-
-        const msg = await Message.create(msgData);
-
-        if (msgData.body && msgData.body.includes('@')) {
-            const handles = msgData.body.match(/@[\w_]+/g) || [];
-            for (const h of handles) {
-                const handleToFind = h.substring(1).toLowerCase();
-                const targetUser = await User.findOne({ where: { handle: handleToFind } });
-                if (targetUser) {
-                    await Mention.create({
-                        message_id: msg.id,
-                        mentioned_user_id: targetUser.phone,
-                        source_channel_id: msgData.channelId || msgData.dm_id
-                    });
+        // B. Group Mentions (@all)
+        if (body && (body.toLowerCase().includes('@all') || body.toLowerCase().includes('@everyone'))) {
+            const members = await ChannelMember.findAll({ where: { channelId: channelId } });
+            for (const member of members) {
+                if (normalizePhone(member.userId) !== normalizePhone(senderId)) {
+                    mentionedIds.add(member.userId);
                 }
             }
         }
-        await Draft.destroy({ where: { user_id: msgData.senderId, container_id: msgData.channelId || msgData.dm_id } });
+
+        // C. Fallback: Auto-detect from text if no enriched mentions provided
+        if (mentionedIds.size === 0 && body && body.includes('@')) {
+            const members = await ChannelMember.findAll({ where: { channelId } });
+            for (const m of members) {
+                if (normalizePhone(m.userId) === normalizePhone(senderId)) continue;
+                const user = await User.findOne({ where: { phone: m.userId } });
+                // Robust multi-word check
+                if (user && body.toLowerCase().includes(`@${user.name.toLowerCase()}`)) {
+                    mentionedIds.add(user.phone);
+                } else if (user && user.handle && body.toLowerCase().includes(`@${user.handle.toLowerCase()}`)) {
+                    mentionedIds.add(user.phone);
+                }
+            }
+        }
+
+        for (const uid of mentionedIds) {
+            await Mention.findOrCreate({
+                where: { message_id: msg.id, mentioned_user_id: uid },
+                defaults: { source_channel_id: channelId, is_read: false }
+            });
+            const user = await User.findOne({ where: { phone: uid } });
+            if (user) routeMentionNotification(user, msg);
+        }
 
         res.json(msg);
+    } catch (e) {
+        console.error('[MSG-ERROR]', e);
+        res.status(500).json(e);
+    }
+});
+
+app.post('/api/mentions/read-all', async (req, res) => {
+    try {
+        const { userId, containerId } = req.body;
+        await Mention.update({ is_read: true }, {
+            where: { mentioned_user_id: userId, source_channel_id: containerId }
+        });
+        res.json({ success: true });
+    } catch (e) { res.status(500).json(e); }
+});
+
+// STATUS
+app.get('/api/status', async (req, res) => {
+    try { res.json(await Status.findAll({ order: [['createdAt', 'DESC']] })); } catch (e) { res.json([]); }
+});
+
+app.post('/api/status', async (req, res) => {
+    try {
+        const { userId, userName, type, mediaUrl, caption, mentions } = req.body;
+        const status = await Status.create({
+            userId, userName, type, mediaUrl, caption, mentions: mentions || [],
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+        });
+        if (mentions && Array.isArray(mentions)) {
+            for (const uid of mentions) {
+                await Mention.create({ message_id: status.id, mentioned_user_id: uid, source_channel_id: 'STATUS', is_read: false });
+            }
+        }
+        res.json(status);
+    } catch (e) { res.status(500).json(e); }
+});
+
+// USERS
+app.get('/api/users', async (req, res) => {
+    try { res.json(await User.findAll()); } catch (e) { res.json([]); }
+});
+
+app.get('/api/users/:identifier', async (req, res) => {
+    try {
+        const user = await User.findOne({ where: { [Op.or]: [{ phone: req.params.identifier }, { id: req.params.identifier }] } });
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        res.json(user);
+    } catch (e) { res.status(500).json(e); }
+});
+
+app.put('/api/users/:phone', async (req, res) => {
+    try {
+        const user = await User.findOne({ where: { phone: req.params.phone } });
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        const { name, bio, avatarUrl, status_emoji, status_text } = req.body;
+        if (name) user.name = name;
+        if (bio) user.bio = bio;
+        if (avatarUrl) user.avatarUrl = avatarUrl;
+        if (status_emoji) user.status_emoji = status_emoji;
+        if (status_text) user.status_text = status_text;
+        await user.save();
+        res.json({ success: true, user });
+    } catch (e) { res.status(500).json(e); }
+});
+
+// WORKSPACES
+app.get('/api/workspaces', async (req, res) => {
+    try {
+        res.json(await Workspace.findAll({ include: [{ model: Channel, as: 'channels' }] }));
+    } catch (e) { res.json([]); }
+});
+
+app.post('/api/workspaces/:workspaceId/channels', async (req, res) => {
+    try {
+        const { name, type, userId, description } = req.body;
+        const channel = await Channel.create({
+            workspace_id: req.params.workspaceId,
+            name: name,
+            type: type || 'public',
+            topic: description || '',
+            invite_code: crypto.randomBytes(4).toString('hex'),
+            created_by: userId
+        });
+        if (userId) await ChannelMember.create({ channelId: channel.id, userId: userId, role: 'admin' });
+        res.json(channel);
     } catch (e) {
         console.error(e);
         res.status(500).json(e);
     }
 });
 
-app.put('/api/messages/:id', async (req, res) => {
+// CHANNELS
+app.get('/api/channels/:id', async (req, res) => {
     try {
-        const { body, status } = req.body;
-        const updateData = {};
-        if (body !== undefined) updateData.body = body;
-        if (status !== undefined) updateData.status = status;
-
-        await Message.update(updateData, { where: { id: req.params.id } });
-        res.json({ success: true });
+        const ch = await Channel.findByPk(req.params.id);
+        res.json(ch);
     } catch (e) { res.status(500).json(e); }
 });
 
-app.post('/api/messages/:id/reactions', async (req, res) => {
+app.put('/api/channels/:id', async (req, res) => {
     try {
-        const { userId, userName, emoji } = req.body;
-        const msg = await Message.findByPk(req.params.id);
-        if (!msg) return res.status(404).json({ error: 'Message not found' });
-
-        const reactions = msg.reactions || [];
-        reactions.push({ userId, userName, emoji, timestamp: Date.now() });
-
-        await Message.update({ reactions: reactions }, { where: { id: req.params.id } });
-        res.json({ success: true });
+        const { restricted_messaging, info_edit_restricted, approval_required, topic, name } = req.body;
+        const channel = await Channel.findByPk(req.params.id);
+        if (channel) {
+            if (restricted_messaging !== undefined) channel.restricted_messaging = restricted_messaging;
+            if (info_edit_restricted !== undefined) channel.info_edit_restricted = info_edit_restricted;
+            if (approval_required !== undefined) channel.approval_required = approval_required;
+            if (topic !== undefined) channel.topic = topic;
+            if (name !== undefined) channel.name = name;
+            await channel.save();
+        }
+        res.json(channel);
     } catch (e) { res.status(500).json(e); }
 });
 
-app.delete('/api/messages/:id', async (req, res) => {
+app.get('/api/channels/:id/members', async (req, res) => {
     try {
-        await Message.destroy({ where: { id: req.params.id } });
-        res.json({ success: true });
-    } catch (e) { res.status(500).json(e); }
+        const members = await ChannelMember.findAll({ where: { channelId: req.params.id } });
+        const userPhones = members.map(m => m.userId);
+        const users = await User.findAll({ where: { phone: { [Op.in]: userPhones } } });
+        res.json(users.map(u => {
+            const member = members.find(m => m.userId === u.phone);
+            return { ...u.toJSON(), role: member.role };
+        }));
+    } catch (e) { res.json([]); }
 });
 
-// MEMBERS
 app.post('/api/channels/:id/members', async (req, res) => {
     try {
-        const { userId } = req.body;
-        await ChannelMember.findOrCreate({
-            where: { channelId: req.params.id, userId: userId },
-            defaults: { channelId: req.params.id, userId: userId }
-        });
-        res.json({ success: true });
-    } catch (e) { res.status(500).json(e); }
-});
-
-// DRAFTS
-app.post('/api/drafts', async (req, res) => {
-    try {
-        const { userId, containerId, text } = req.body;
-        if (!text) {
-            await Draft.destroy({ where: { user_id: userId, container_id: containerId } });
-            return res.json({ success: true });
+        const { userId, role, addedBy, adderName } = req.body;
+        const [member, created] = await ChannelMember.findOrCreate({ where: { channelId: req.params.id, userId: userId }, defaults: { channelId: req.params.id, userId: userId, role: role || 'member' } });
+        if (created) {
+            const channel = await Channel.findByPk(req.params.id);
+            if (channel) await channel.increment('member_count');
+            await Message.create({ channelId: req.params.id, senderId: addedBy || 'system', senderName: adderName || 'System', body: `ADD_MEMBER:${userId}`, type: 'system', timestamp: Date.now() });
         }
-        await Draft.upsert({ user_id: userId, container_id: containerId, text: text, updated_at: Date.now() });
         res.json({ success: true });
     } catch (e) { res.status(500).json(e); }
 });
 
-app.get('/api/drafts/:userId', async (req, res) => {
-    try { res.json(await Draft.findAll({ where: { user_id: req.params.userId } })); } catch (e) { res.json([]); }
+app.delete('/api/channels/:id/members/:userId', async (req, res) => {
+    try {
+        const deleted = await ChannelMember.destroy({ where: { channelId: req.params.id, userId: req.params.userId } });
+        if (deleted) {
+            const channel = await Channel.findByPk(req.params.id);
+            if (channel) await channel.decrement('member_count');
+            res.json({ success: true });
+        } else {
+            res.status(404).json({ error: 'Member not found' });
+        }
+    } catch (e) { res.status(500).json(e); }
 });
 
-// MENTIONS
-app.get('/api/mentions/:userId', async (req, res) => {
-    try { res.json(await Mention.findAll({ where: { mentioned_user_id: req.params.userId } })); } catch (e) { res.json([]); }
+app.post('/api/channels/join-by-link', async (req, res) => {
+    try {
+        const { inviteCode, userId } = req.body;
+        const channel = await Channel.findOne({ where: { invite_code: inviteCode } });
+        if (!channel) return res.status(404).json({ error: 'Invalid link' });
+
+        if (channel.approval_required) {
+             return res.json({ success: true, pendingApproval: true });
+        }
+
+        const [member, created] = await ChannelMember.findOrCreate({ where: { channelId: channel.id, userId: userId }, defaults: { channelId: channel.id, userId: userId, role: 'member' } });
+        if (created) {
+            await channel.increment('member_count');
+            await Message.create({ channelId: channel.id, senderId: userId, senderName: 'System', body: `JOIN_LINK:${userId}`, type: 'system', timestamp: Date.now() });
+        }
+        res.json({ success: true, channel });
+    } catch (e) { res.status(500).json(e); }
 });
 
-// TYPING
 app.post('/api/channels/:id/typing', async (req, res) => {
     try {
-        await TypingStatus.upsert({
-            channelId: req.params.id,
-            userId: req.body.userId,
-            userName: req.body.userName,
-            lastTypedAt: Date.now()
-        });
+        const { userId, userName } = req.body;
+        await TypingStatus.upsert({ channelId: req.params.id, userId, userName, lastTypedAt: Date.now() });
         res.json({ success: true });
     } catch (e) { res.status(500).json(e); }
 });
 
 app.get('/api/channels/:id/typing', async (req, res) => {
     try {
-        const tenSecAgo = Date.now() - 10000;
-        const typing = await TypingStatus.findAll({
-            where: { channelId: req.params.id, lastTypedAt: { [Op.gt]: tenSecAgo } }
-        });
+        const fiveSecondsAgo = Date.now() - 5000;
+        const typing = await TypingStatus.findAll({ where: { channelId: req.params.id, lastTypedAt: { [Op.gt]: fiveSecondsAgo } } });
         res.json(typing);
     } catch (e) { res.json([]); }
 });
 
-// CHANNELS DETAILS
-app.get('/api/channels/:id', async (req, res) => {
-    try { res.json(await Channel.findByPk(req.params.id)); } catch (e) { res.status(404).json(e); }
-});
-
-app.post('/api/workspaces/:workspaceId/channels', async (req, res) => {
-    try {
-        const { name, type, userId } = req.body;
-        const channel = await Channel.create({ workspace_id: req.params.workspaceId, name: name, type: type || 'public' });
-        if (userId) await ChannelMember.create({ channelId: channel.id, userId: userId });
-        res.json(channel);
-    } catch (e) { res.status(500).json(e); }
-});
-
-app.get('/api/workspaces/:id/channels', async (req, res) => {
-    try {
-        const { userId, type } = req.query;
-        let channels;
-        if (type === 'public') {
-            channels = await Channel.findAll({ where: { workspace_id: req.params.id, type: 'public' } });
-        } else if (userId) {
-            const memberships = await ChannelMember.findAll({ where: { userId: userId } });
-            const channelIds = memberships.map(m => m.channelId);
-            channels = await Channel.findAll({ where: { workspace_id: req.params.id, id: { [Op.in]: channelIds } } });
-        } else {
-            channels = await Channel.findAll({ where: { workspace_id: req.params.id } });
-        }
-        res.json(channels);
-    } catch (e) { res.json([]); }
-});
-
-// STATUS
-app.get('/api/status', async (req, res) => {
-    try { res.json(await Status.findAll({ order: [['createdAt', 'DESC']] })); } catch (err) { res.json([]); }
-});
-
-app.post('/api/status', async (req, res) => {
-    try { res.json(await Status.create({ ...req.body, expiresAt: new Date(Date.now() + 24 * 3600000) })); } catch (err) { res.status(500).json(err); }
-});
-
-// UPLOAD
 app.post('/api/upload', upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).send('No file uploaded.');
     res.json({ url: `/uploads/${req.file.filename}` });
 });
 
-app.get('/api/users', async (req, res) => {
-    try { res.json(await User.findAll()); } catch (e) { res.json([]); }
-});
-
-app.get('/api/inbox/:userId', async (req, res) => {
-    try { res.json(await User.findAll({ where: { phone: { [Op.ne]: req.params.userId } } })); } catch (e) { res.json([]); }
-});
-
-app.put('/api/users/:phone', async (req, res) => {
-    try {
-        await User.update(req.body, { where: { phone: req.params.phone } });
-        res.json({ success: true, user: await User.findOne({ where: { phone: req.params.phone } }) });
-    } catch (e) { res.status(500).json(e); }
-});
-
-app.get('/api/search', async (req, res) => {
-    try {
-        const { query, userId, workspaceId } = req.query;
-        console.log(`🔍 Search query: "${query}" from user: ${userId} in workspace: ${workspaceId}`);
-        if (!query) return res.json({ channels: [], users: [], messages: [] });
-
-        const searchOp = { [Op.like]: `%${query}%` };
-
-        // 1. Search Channels
-        const channels = await Channel.findAll({
-            where: {
-                ...(workspaceId && workspaceId !== 'null' ? { workspace_id: workspaceId } : {}),
-                name: searchOp
-            }
-        });
-
-        // 2. Search Users (for DMs)
-        const users = await User.findAll({
-            where: {
-                [Op.or]: [
-                    { name: searchOp },
-                    { handle: searchOp }
-                ],
-                phone: { [Op.ne]: userId }
-            }
-        });
-
-        // 3. Search Messages
-        const messagesRaw = await Message.findAll({
-            where: {
-                body: searchOp
-            },
-            limit: 20,
-            order: [['timestamp', 'DESC']]
-        });
-
-        const messages = messagesRaw.map(m => ({
-            id: m.id,
-            channel_id: m.channelId,
-            dm_id: m.dm_id,
-            sender_id: m.senderId,
-            sender_name: m.senderName,
-            sender_avatar_url: m.senderAvatarUrl,
-            text: m.body,
-            sent_at: m.timestamp,
-            type: m.type,
-            attachments: m.attachments || [],
-            reactions: m.reactions || [],
-            thread_reply_count: m.thread_reply_count,
-            is_pinned: !!m.is_pinned,
-            status: m.status
-        }));
-
-        res.json({
-            channels: channels.map(ch => ({
-                ...ch.toJSON(),
-                member_count: ch.member_count,
-                is_muted: !!ch.is_muted
-            })),
-            users,
-            messages
-        });
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: e.message });
-    }
-});
-
 const PORT = 3000;
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 CU Orbit Server ready on port ${PORT}`);
-});
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 CU Orbit Server ready on port ${PORT}`));

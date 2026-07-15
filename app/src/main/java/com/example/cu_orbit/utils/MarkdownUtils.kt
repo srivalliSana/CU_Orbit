@@ -4,11 +4,14 @@ import android.graphics.Typeface
 import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.style.BackgroundColorSpan
+import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
+import androidx.core.content.ContextCompat
+import com.example.cu_orbit.R
 
 object MarkdownUtils {
-    fun formatMarkdown(text: String): SpannableStringBuilder {
+    fun formatMarkdown(text: String, context: android.content.Context? = null): SpannableStringBuilder {
         val builder = SpannableStringBuilder(text)
         
         // Bold: *text*
@@ -21,6 +24,25 @@ object MarkdownUtils {
         applyRegex(builder, "`(.*?)`".toRegex()) {
             setSpan(TypefaceSpan("monospace"), 0, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
             setSpan(BackgroundColorSpan(0x33AAAAAA.toInt()), 0, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+
+        // Mentions: @name (Platform Unified Style)
+        if (context != null) {
+            val mentionRegex = "@([^\\s]+)".toRegex()
+            var match = mentionRegex.find(builder)
+            while (match != null) {
+                val start = match.range.first
+                val end = match.range.last + 1
+                builder.setSpan(
+                    ForegroundColorSpan(ContextCompat.getColor(context, R.color.orbit_primary)),
+                    start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                builder.setSpan(
+                    StyleSpan(Typeface.BOLD),
+                    start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                match = mentionRegex.find(builder, end)
+            }
         }
         
         return builder

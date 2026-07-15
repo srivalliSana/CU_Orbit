@@ -121,6 +121,12 @@
 
             <!-- Actions -->
             <TextView
+                android:id="@+id/action_change_background"
+                style="@style/ProfileOption"
+                android:text="Change Chat Background"
+                app:drawableStartCompat="@android:drawable/ic_menu_gallery" />
+
+            <TextView
                 android:id="@+id/action_mute"
                 style="@style/ProfileOption"
                 android:text="Mute Notifications"

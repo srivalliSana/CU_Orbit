@@ -66,13 +66,15 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:hint="University Email">
+            android:hint="Phone Number"
+            app:prefixText="+91 ">
 
             <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/edit_setup_email"
+                android:id="@+id/edit_setup_phone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="textEmailAddress"
+                android:inputType="phone"
+                android:maxLength="10"
                 android:textColor="@color/orbit_text_primary" />
         </com.google.android.material.textfield.TextInputLayout>
 

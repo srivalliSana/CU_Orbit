@@ -67,11 +67,21 @@
                         android:text="\@srivalli_sana"
                         android:textColor="@color/orbit_text_secondary"
                         android:textSize="15sp" />
+
+                    <TextView
+                        android:id="@+id/profile_phone"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Phone number"
+                        android:textColor="@color/text_muted"
+                        android:textSize="13sp" />
                 </LinearLayout>
             </LinearLayout>
 
             <!-- Status Bar -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_update_status"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="16dp"
@@ -79,7 +89,10 @@
                 app:cardCornerRadius="12dp"
                 app:cardElevation="0dp"
                 app:strokeColor="@color/orbit_border"
-                app:strokeWidth="1dp">
+                app:strokeWidth="1dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?attr/selectableItemBackground">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -90,12 +103,14 @@
                     android:paddingVertical="12dp">
 
                     <TextView
+                        android:id="@+id/text_status_emoji"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="✨"
                         android:textSize="20sp" />
 
                     <TextView
+                        android:id="@+id/text_status_body"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="12dp"
@@ -135,11 +150,14 @@
                 </LinearLayout>
 
                 <LinearLayout
+                    android:id="@+id/layout_set_status_trigger"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:gravity="center"
-                    android:orientation="vertical">
+                    android:orientation="vertical"
+                    android:background="?attr/selectableItemBackground"
+                    android:padding="8dp">
                     <ImageView
                         android:layout_width="26dp"
                         android:layout_height="26dp"

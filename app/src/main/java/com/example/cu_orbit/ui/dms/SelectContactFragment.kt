@@ -140,7 +140,14 @@ class SelectContactFragment : Fragment() {
                 val displayList = mutableListOf<Any>()
                 
                 displayList.add("Contacts on CU Orbit")
-                val appUsers = registeredUsers.filter { it.phone != currentUserId }
+                val appUsers = registeredUsers.map { u ->
+                    if (u.phone == currentUserId) {
+                        u.copy(name = "You (Message Yourself)")
+                    } else {
+                        val contactName = com.example.cu_orbit.utils.ContactUtils.getContactName(requireContext(), u.phone)
+                        u.copy(name = contactName ?: u.name)
+                    }
+                }
                 registeredPhones.clear()
                 registeredPhones.addAll(registeredUsers.map { it.phone })
                 displayList.addAll(appUsers)

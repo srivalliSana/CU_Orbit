@@ -13,6 +13,10 @@ data class User(
     @SerializedName("status_emoji") val statusEmoji: String? = "✨",
     @SerializedName("status_text") val statusText: String? = "",
     val presence: String = "offline",
+    val role: String? = "member",
+    @SerializedName("slack_id") val slackId: String? = null,
+    @SerializedName("discord_id") val discordId: String? = null,
+    @SerializedName("telegram_handle") val telegramHandle: String? = null,
     // Home feed summary fields (not in spec but helpful)
     val lastMessagePreview: String? = "",
     val lastMessageTime: String? = "",

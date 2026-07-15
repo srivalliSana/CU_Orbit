@@ -16,9 +16,13 @@ import com.example.cu_orbit.R
 import com.example.cu_orbit.data.*
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import coil.load
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import com.example.cu_orbit.repository.MainRepository
 
 class HomeFragment : Fragment() {
 
+    private val repository = MainRepository()
     private lateinit var homeAdapter: HomeAdapter
     private lateinit var viewModel: HomeViewModel
 
@@ -43,7 +47,7 @@ class HomeFragment : Fragment() {
         }
 
         root.findViewById<View>(R.id.fab_create).setOnClickListener {
-            findNavController().navigate(R.id.navigation_channels)
+            findNavController().navigate(R.id.navigation_select_contact)
         }
         
         return root
@@ -63,9 +67,31 @@ class HomeFragment : Fragment() {
             findNavController().navigate(R.id.navigation_select_contact)
         }
         
-        root.findViewById<View>(R.id.button_search_top).setOnClickListener {
-            Toast.makeText(context, "Search coming soon", Toast.LENGTH_SHORT).show()
+        root.findViewById<View>(R.id.button_more_options).setOnClickListener {
+            showHomeOptionsMenu(it)
         }
+    }
+
+
+    private fun showAddWorkspaceDialog() {
+        val input = android.widget.EditText(requireContext()).apply { hint = "Workspace name" }
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Create New Workspace")
+            .setView(input)
+            .setPositiveButton("Create") { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isNotEmpty()) {
+                    lifecycleScope.launch {
+                        try {
+                            com.example.cu_orbit.network.RetrofitClient.instance.createWorkspace(mapOf("name" to name))
+                            Toast.makeText(context, "Workspace created!", Toast.LENGTH_SHORT).show()
+                            viewModel.loadHomeFeed()
+                        } catch (e: Exception) {}
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun observeViewModel(root: View) {
@@ -106,14 +132,93 @@ class HomeFragment : Fragment() {
             },
             onActionClick = { id ->
                 when (id) {
-                    "CHANNELS" -> findNavController().navigate(R.id.navigation_channels)
+                    "CHANNELS" -> findNavController().navigate(R.id.navigation_create_channel)
                     "DIRECT MESSAGES", "DMS" -> findNavController().navigate(R.id.navigation_select_contact)
                     "threads" -> Toast.makeText(context, "Threads clicked", Toast.LENGTH_SHORT).show()
                     "mentions" -> findNavController().navigate(R.id.navigation_mentions)
                 }
+            },
+            onItemLongClick = { item ->
+                showItemManagementMenu(item)
             }
         )
         recyclerView.adapter = homeAdapter
+    }
+
+    private fun showHomeOptionsMenu(anchor: View) {
+        val popup = android.widget.PopupMenu(requireContext(), anchor)
+        popup.menu.add("New Channel")
+        popup.menu.add("Starred Messages")
+        popup.menu.add("Mark All as Read")
+        popup.menu.add("Settings")
+
+        val prefs = requireContext().getSharedPreferences("CU_ORBIT_PREFS", android.content.Context.MODE_PRIVATE)
+        val currentUserId = prefs.getString("USER_ID", "") ?: ""
+
+        popup.setOnMenuItemClickListener { item ->
+            when (item.title) {
+                "New Channel" -> findNavController().navigate(R.id.navigation_channels)
+                "Mark All as Read" -> {
+                    lifecycleScope.launch {
+                        try {
+                            repository.markAllRead(currentUserId)
+                            viewModel.loadHomeFeed()
+                            Toast.makeText(context, "All messages marked as read", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {}
+                    }
+                }
+                "Settings" -> findNavController().navigate(R.id.navigation_settings)
+                else -> Toast.makeText(context, "${item.title} coming soon", Toast.LENGTH_SHORT).show()
+            }
+            true
+        }
+        popup.show()
+    }
+
+    private fun showItemManagementMenu(item: Any) {
+        val title = when (item) {
+            is Channel -> "#${item.name}"
+            is DirectMessage -> item.otherUserName
+            is User -> item.name
+            else -> "Chat"
+        }
+        
+        val containerId = when(item) {
+            is Channel -> item.id
+            is DirectMessage -> item.id
+            is User -> {
+                val myId = repository.getPrefs(requireContext()).getString("USER_ID", "") ?: ""
+                if (myId < item.phone) "${myId}_${item.phone}" else "${item.phone}_$myId"
+            }
+            else -> ""
+        }
+        
+        val userId = repository.getPrefs(requireContext()).getString("USER_ID", "") ?: ""
+
+        val options = arrayOf("Pin Chat", "Mute Notifications", "Clear History", "Delete Chat")
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle(title)
+            .setItems(options) { _, which ->
+                val action = when(options[which]) {
+                    "Pin Chat" -> "pin"
+                    "Mute Notifications" -> "mute"
+                    "Clear History" -> "clear"
+                    "Delete Chat" -> "delete"
+                    else -> ""
+                }
+                
+                if (action.isNotEmpty()) {
+                    lifecycleScope.launch {
+                        try {
+                            repository.updateConversationPrefs(containerId, userId, action, "true")
+                            Toast.makeText(context, "${options[which]} successful", Toast.LENGTH_SHORT).show()
+                            viewModel.loadHomeFeed()
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Action failed", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }.show()
     }
 
     private fun showWorkspaceSwitcher() {
@@ -130,7 +235,7 @@ class HomeFragment : Fragment() {
         recycler.adapter = adapter
         
         view.findViewById<View>(R.id.layout_add_workspace).setOnClickListener {
-            // New workspace flow
+            showAddWorkspaceDialog()
             dialog.dismiss()
         }
         

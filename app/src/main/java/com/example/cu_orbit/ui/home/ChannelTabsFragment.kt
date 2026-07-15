@@ -59,9 +59,45 @@ class BrowseChannelsFragment : Fragment() {
 
         loadPublicChannels(recyclerView)
 
-        root.findViewById<View>(R.id.fab_new_dm).visibility = View.GONE
+        root.findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.fab_new_dm).apply {
+            visibility = View.VISIBLE
+            setImageResource(android.R.drawable.ic_menu_share)
+            setOnClickListener { showJoinByCodeDialog() }
+        }
 
         return root
+    }
+
+    private fun showJoinByCodeDialog() {
+        val input = android.widget.EditText(requireContext()).apply { hint = "Enter invite code (e.g. a1b2c3d4)" }
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Join Channel by Link/Code")
+            .setView(input)
+            .setPositiveButton("Join") { _, _ ->
+                val code = input.text.toString().trim()
+                if (code.isNotEmpty()) {
+                    joinByCode(code)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun joinByCode(code: String) {
+        val userId = repository.getPrefs(requireContext()).getString("USER_ID", "") ?: ""
+        lifecycleScope.launch {
+            try {
+                val response = repository.joinChannelByLink(code, userId)
+                if (response["success"] == true) {
+                    Toast.makeText(context, "Successfully joined channel!", Toast.LENGTH_SHORT).show()
+                    findNavController().navigateUp()
+                } else {
+                    Toast.makeText(context, "Invalid code or already a member", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Failed to join. Check code.", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun loadPublicChannels(recyclerView: RecyclerView) {

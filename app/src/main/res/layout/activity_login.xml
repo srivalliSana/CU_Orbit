@@ -38,27 +38,25 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
-                android:text="@string/sign_in_title"
+                android:text="Sign in to CU Orbit"
                 android:textAlignment="center"
                 android:textColor="@color/orbit_text_primary"
                 android:textSize="26sp"
                 android:textStyle="bold" />
 
             <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/layout_phone"
+                android:id="@+id/layout_email"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="40dp"
-                android:hint="@string/phone_hint"
-                app:prefixText="+91 ">
+                android:hint="University Email">
 
                 <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/edit_phone"
+                    android:id="@+id/edit_email"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:inputType="phone"
-                    android:maxLength="10"
+                    android:inputType="textEmailAddress"
                     android:textColor="@color/orbit_text_primary" />
             </com.google.android.material.textfield.TextInputLayout>
 
@@ -68,7 +66,7 @@
                 android:layout_height="56dp"
                 android:layout_marginTop="24dp"
                 android:backgroundTint="@color/orbit_primary"
-                android:text="@string/button_continue"
+                android:text="Continue with Email"
                 android:textAllCaps="false"
                 android:textSize="16sp"
                 app:cornerRadius="12dp" />
@@ -79,7 +77,7 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
                 android:layout_marginTop="24dp"
-                android:text="@string/or_text"
+                android:text="OR"
                 android:textColor="@color/orbit_text_secondary"
                 android:textSize="14sp" />
 
@@ -89,7 +87,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
                 android:layout_marginTop="24dp"
-                android:text="@string/google_sign_in"
+                android:text="Continue with Google"
                 android:textAllCaps="false"
                 android:textColor="@color/orbit_text_primary"
                 android:textSize="16sp"
