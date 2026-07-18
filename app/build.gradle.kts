@@ -14,8 +14,8 @@ android {
         applicationId = "com.example.cu_orbit"
         minSdk = 24
         targetSdk = 36
-        versionCode = 14
-        versionName = "1.0.13"
+        versionCode = 15
+        versionName = "1.0.14"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -35,7 +35,9 @@ android {
 
 // AUTOMATION: Copy built APK to server downloads folder
 tasks.register<Copy>("publishApkToServer") {
-    dependsOn("assembleDebug") // Change to assembleRelease if building for production
+    group = "distribution"
+    description = "Builds the debug APK and copies it to the server downloads folder"
+    dependsOn("assembleDebug")
     from("build/outputs/apk/debug/app-debug.apk")
     into("../server/downloads")
     rename { "cu_orbit.apk" }
