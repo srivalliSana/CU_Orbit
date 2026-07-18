@@ -41,7 +41,7 @@ class ChannelInfoFragment : Fragment() {
         loadChannelDetails(root)
 
         root.findViewById<View>(R.id.action_invite_link).setOnClickListener {
-            if (!currentChannel!!.infoEditRestricted || isAdmin) {
+            if (currentChannel != null && (!currentChannel!!.infoEditRestricted || isAdmin)) {
                 shareInviteLink()
             } else {
                 Toast.makeText(context, "Only admins can share the invite link", Toast.LENGTH_SHORT).show()
@@ -49,7 +49,7 @@ class ChannelInfoFragment : Fragment() {
         }
 
         root.findViewById<View>(R.id.action_add_members).setOnClickListener {
-            if (isAdmin || !currentChannel!!.infoEditRestricted) {
+            if (currentChannel != null && (isAdmin || !currentChannel!!.infoEditRestricted)) {
                 showAddMemberDialog()
             } else {
                 Toast.makeText(context, "Only admins can add members", Toast.LENGTH_SHORT).show()
@@ -92,12 +92,19 @@ class ChannelInfoFragment : Fragment() {
                 val me = members.find { it.phone == currentUserId }
                 isAdmin = me?.role == "admin" || isCreator
                 
-                root.findViewById<View>(R.id.action_add_members).visibility = if (isAdmin) View.VISIBLE else View.GONE
-                
                 // --- WhatsApp-style Settings ---
                 val restrictedSwitch: com.google.android.material.switchmaterial.SwitchMaterial = root.findViewById(R.id.switch_restricted_messaging)
                 val infoSwitch: com.google.android.material.switchmaterial.SwitchMaterial = root.findViewById(R.id.switch_info_restricted)
                 val approvalSwitch: com.google.android.material.switchmaterial.SwitchMaterial = root.findViewById(R.id.switch_approval_required)
+
+                // Enforce Info Lock UI
+                if (channel.infoEditRestricted && !isAdmin) {
+                    root.findViewById<View>(R.id.action_add_members).visibility = View.GONE
+                    root.findViewById<View>(R.id.action_invite_link).visibility = View.GONE
+                } else {
+                    root.findViewById<View>(R.id.action_add_members).visibility = View.VISIBLE
+                    root.findViewById<View>(R.id.action_invite_link).visibility = View.VISIBLE
+                }
 
                 if (isAdmin) {
                     restrictedSwitch.visibility = View.VISIBLE
@@ -170,7 +177,6 @@ class ChannelInfoFragment : Fragment() {
         lifecycleScope.launch {
             try {
                 val users = repository.getUsers()
-                // Filter out users who are already members
                 val currentMembers = currentChannel?.let { repository.getChannelMembers(it.id) } ?: emptyList()
                 val nonMembers = users.filter { u -> currentMembers.none { m -> m.phone == u.phone } }
                 
@@ -180,7 +186,6 @@ class ChannelInfoFragment : Fragment() {
                 }
 
                 val names = nonMembers.map { it.name }.toTypedArray()
-
                 val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.layout_add_member_search, null)
                 val searchInput: android.widget.EditText = dialogView.findViewById(R.id.edit_search_members)
                 val listView: android.widget.ListView = dialogView.findViewById(R.id.list_members)
@@ -223,7 +228,6 @@ class ChannelInfoFragment : Fragment() {
                     }
                     if (addedCount > 0) {
                         Toast.makeText(context, "Adding members...", Toast.LENGTH_SHORT).show()
-                        // Wait a bit for server to process before refreshing
                         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                             loadChannelDetails(requireView())
                         }, 1000)
@@ -258,7 +262,7 @@ class ChannelInfoFragment : Fragment() {
 
     private fun shareInviteLink() {
         val code = currentChannel?.inviteCode ?: "orbit123"
-        val link = "https://cuorbit.app/join/$code"
+        val link = "https://cumess.cutm.ac.in/join/$code"
         val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(android.content.Intent.EXTRA_TEXT, "Join our university channel on CU Orbit: $link")

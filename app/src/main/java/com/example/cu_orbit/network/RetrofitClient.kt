@@ -7,7 +7,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
-    var baseUrl = "http://192.168.29.193:3000/api/"
+    var baseUrl = "https://cumess.cutm.ac.in/api/"
         private set
 
     private var _instance: ApiService? = null
