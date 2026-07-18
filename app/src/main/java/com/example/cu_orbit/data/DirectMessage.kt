@@ -9,6 +9,7 @@ data class DirectMessage(
     @SerializedName("other_user_avatar_url") val otherUserAvatarUrl: String? = "",
     val presence: String = "offline", // online | away | dnd | offline
     @SerializedName("unread_count") val unreadCount: Int = 0,
+    @SerializedName("is_pinned") val isPinned: Boolean = false,
     @SerializedName("has_unread_mention") val hasUnreadMention: Boolean = false,
     @SerializedName("is_muted") val isMuted: Boolean = false,
     @SerializedName("last_message_preview") val lastMessagePreview: MessagePreview? = null

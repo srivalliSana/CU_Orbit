@@ -10,6 +10,7 @@ data class Channel(
     val topic: String = "",
     @SerializedName("member_count") val memberCount: Int = 0,
     @SerializedName("unread_count") val unreadCount: Int = 0,
+    @SerializedName("is_pinned") val isPinned: Boolean = false,
     @SerializedName("has_unread_mention") val hasUnreadMention: Boolean = false,
     @SerializedName("pinned_message_count") val pinnedMessageCount: Int = 0,
     @SerializedName("is_muted") val isMuted: Boolean = false,

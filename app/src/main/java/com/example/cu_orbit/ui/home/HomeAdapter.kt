@@ -193,6 +193,8 @@ class HomeAdapter(
                     holder.itemView.alpha = 1.0f
                 }
 
+                holder.pinIcon.visibility = if (channel.isPinned) View.VISIBLE else View.GONE
+
                 holder.itemView.setOnClickListener {
                     if (selectionMode) toggleSelection(channel)
                     else onChannelClick(channel)
@@ -212,6 +214,7 @@ class HomeAdapter(
                 val lastMsgText: String?
                 val lastMsgTime: Long?
                 val senderIsSelf: Boolean
+                val isPinned: Boolean
                 val onClick: () -> Unit
 
                 if (dmItem is DirectMessage) {
@@ -227,6 +230,7 @@ class HomeAdapter(
                     lastMsgText = dmItem.lastMessagePreview?.text
                     lastMsgTime = dmItem.lastMessagePreview?.sentAt
                     senderIsSelf = dmItem.lastMessagePreview?.senderIsSelf ?: false
+                    isPinned = dmItem.isPinned
                     onClick = { onUserClick(dmItem) }
                 } else {
                     val user = dmItem as User
@@ -242,8 +246,9 @@ class HomeAdapter(
                     lastMsgText = user.lastMessagePreview
                     lastMsgTime = try { user.lastMessageTime?.toLong() } catch(e: Exception) { null }
                     senderIsSelf = false
+                    isPinned = false
                     onClick = { 
-                        onUserClick(DirectMessage(user.phone, user.id, user.name, user.avatarUrl, user.presence, user.unreadCount, false))
+                        onUserClick(DirectMessage(user.phone, user.id, user.name, user.avatarUrl, user.presence, user.unreadCount, false, false, false))
                     }
                 }
 
@@ -298,6 +303,8 @@ class HomeAdapter(
                     holder.preview.text = ""
                     holder.time.text = ""
                 }
+
+                holder.pinIcon.visibility = if (isPinned) View.VISIBLE else View.GONE
 
                 holder.itemView.setOnClickListener {
                     if (selectionMode) toggleSelection(dmItem)
@@ -358,6 +365,7 @@ class HomeAdapter(
         val preview: TextView = view.findViewById(R.id.text_channel_preview)
         val time: TextView = view.findViewById(R.id.text_channel_time)
         val badge: TextView = view.findViewById(R.id.text_channel_badge)
+        val pinIcon: ImageView = view.findViewById(R.id.image_channel_pin)
     }
 
     class DmViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -367,6 +375,7 @@ class HomeAdapter(
         val badge: TextView = view.findViewById(R.id.text_unread_badge)
         val avatar: ImageView = view.findViewById(R.id.image_avatar)
         val presence: View = view.findViewById(R.id.view_presence)
+        val pinIcon: ImageView = view.findViewById(R.id.image_dm_pin)
     }
 
     class EmptyViewHolder(view: View) : RecyclerView.ViewHolder(view) {

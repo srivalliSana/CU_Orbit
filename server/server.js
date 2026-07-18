@@ -347,6 +347,31 @@ app.get('/api/home/quick-access/:userId', async (req, res) => {
     }
 });
 
+// PREFS
+app.post('/api/conversations/:id/prefs', async (req, res) => {
+    try {
+        const { userId, action, value } = req.body;
+        const containerId = req.params.id;
+        const isTrue = (value === 'true' || value === true);
+
+        const [pref] = await ConversationPref.findOrCreate({
+            where: { userId, containerId },
+            defaults: { userId, containerId, isPinned: false, isMuted: false, isHidden: false }
+        });
+
+        if (action === 'pin') pref.isPinned = isTrue;
+        if (action === 'mute') pref.isMuted = isTrue;
+        if (action === 'hide') pref.isHidden = isTrue;
+        if (action === 'delete' && isTrue) pref.isHidden = true;
+
+        await pref.save();
+        res.json({ success: true, pref });
+    } catch (e) {
+        console.error('[PREF-ERROR]', e);
+        res.status(500).json(e);
+    }
+});
+
 // MESSAGES
 app.get('/api/messages/:containerId', async (req, res) => {
     try {
@@ -452,6 +477,18 @@ app.post('/api/messages', async (req, res) => {
         console.error('[MSG-ERROR]', e);
         res.status(500).json(e);
     }
+});
+
+app.put('/api/messages/:id', async (req, res) => {
+    try {
+        const { body, status } = req.body;
+        const msg = await Message.findByPk(req.params.id);
+        if (!msg) return res.status(404).json({ error: 'Message not found' });
+        if (body) msg.body = body;
+        if (status) msg.status = status;
+        await msg.save();
+        res.json(msg);
+    } catch (e) { res.status(500).json(e); }
 });
 
 app.get('/api/mentions/:userId', async (req, res) => {
