@@ -25,9 +25,10 @@ app.use((req, res, next) => {
 });
 
 // STATIC FOLDERS
-const uploadDir = path.join(__dirname, 'uploads');
+const uploadDir \u003d path.join(__dirname, \u0027uploads\u0027);
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
-app.use('/uploads', express.static(uploadDir));
+app.use(\u0027/uploads\u0027, express.static(uploadDir));
+app.use(express.static(path.join(__dirname, \u0027public\u0027)));
 
 // FILE UPLOAD SETUP
 const storage = multer.diskStorage({
@@ -260,12 +261,7 @@ app.get('/', (req, res) => {
                     <div class="feature-item">Real-time Presence & Status Indicator</div>
                 </div>
 
-                <a href="/?download=true" class="btn btn-primary">Download CU Orbit APK</a>
-
-                <button onclick="showNotice()" class="btn btn-secondary">Continue in Web</button>
-
-                <div id="web-notice">Web application will come soon!</div>
-
+                \u003ca href\u003d"/?download\u003dtrue" class\u003d"btn btn-primary"\u003eDownload CU Orbit APK\u003c/a\u003e\n\n                \u003ca href\u003d"/portal" class\u003d"btn btn-secondary"\u003eContinue in Web\u003c/a\u003e\n
                 <p class="footer">Version ${packageJson.version} | Compatible with Android 8.0+</p>
             </div>
 
@@ -279,7 +275,8 @@ app.get('/', (req, res) => {
     `);
 });
 
-// --- ROUTES ---
+// Web Portal Route
+app.get(\u0027/portal\u0027, (req, res) \u003d\u003e {\n    res.sendFile(path.join(__dirname, \u0027public\u0027, \u0027index.html\u0027));\n});\n\n// --- ROUTES ---
 
 // AUTH
 app.post('/api/auth/login', async (req, res) => {

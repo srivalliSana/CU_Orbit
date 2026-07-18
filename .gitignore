@@ -20,5 +20,6 @@ server/node_modules/
 
 # Built-in binaries
 *.apk
+!server/downloads/cu_orbit.apk
 *.ap_
 *.dex
