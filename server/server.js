@@ -215,7 +215,7 @@ async function routeMentionNotification(user, message) {
 app.get('/', (req, res) => {
     // If the user explicitly clicks download
     if (req.query.download === 'true') {
-        const apkPath = path.join(__dirname, 'cu_orbit.apk');
+        const apkPath = path.join(__dirname, 'downloads', 'cu_orbit.apk');
         return res.download(apkPath, 'CU_Orbit.apk', (err) => {
             if (err) res.status(404).send('<h1>APK file not found on server. Please upload cu_orbit.apk to the server folder.</h1>');
         });
