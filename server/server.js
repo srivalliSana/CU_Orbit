@@ -211,6 +211,72 @@ async function routeMentionNotification(user, message) {
     console.log(`-------------------------------\n`);
 }
 
+// --- LANDING PAGE & APK DOWNLOAD ---
+app.get('/', (req, res) => {
+    // If the user explicitly clicks download
+    if (req.query.download === 'true') {
+        const apkPath = path.join(__dirname, 'cu_orbit.apk');
+        return res.download(apkPath, 'CU_Orbit.apk', (err) => {
+            if (err) res.status(404).send('<h1>APK file not found on server. Please upload cu_orbit.apk to the server folder.</h1>');
+        });
+    }
+
+    // Professional Landing Page HTML
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>CU Orbit | University Messaging</title>
+            <style>
+                body { font-family: 'Inter', sans-serif; background: #0f172a; color: white; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+                .card { background: #1e293b; padding: 40px; border-radius: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); max-width: 500px; text-align: center; border: 1px solid #334155; }
+                h1 { color: #38bdf8; margin-bottom: 8px; font-size: 2.5rem; }
+                .subtitle { font-size: 1.1rem; color: #94a3b8; margin-bottom: 30px; }
+                .features { text-align: left; background: #0f172a; padding: 20px; border-radius: 12px; margin-bottom: 30px; }
+                .feature-item { display: flex; align-items: center; margin-bottom: 12px; color: #e2e8f0; font-size: 0.95rem; }
+                .feature-item:before { content: '✓'; color: #10b981; font-weight: bold; margin-right: 10px; }
+                .btn { display: block; width: 100%; box-sizing: border-box; padding: 16px; border-radius: 12px; text-decoration: none; font-weight: bold; font-size: 1.1rem; transition: transform 0.2s; margin-bottom: 12px; border: none; cursor: pointer; }
+                .btn-primary { background: #38bdf8; color: #0f172a; }
+                .btn-secondary { background: transparent; color: #38bdf8; border: 2px solid #38bdf8; }
+                .btn:hover { transform: scale(1.02); }
+                .footer { margin-top: 24px; font-size: 0.8rem; color: #64748b; }
+                #web-notice { display: none; margin-top: 15px; color: #fbbf24; font-weight: bold; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h1>CU Orbit</h1>
+                <p class="subtitle">The official professional messaging platform for our university.</p>
+
+                <div class="features">
+                    <div class="feature-item">Secure University Authentication</div>
+                    <div class="feature-item">WhatsApp-style Admin Controls</div>
+                    <div class="feature-item">Robust @Mention & Tagging System</div>
+                    <div class="feature-item">Multi-Workspace Management</div>
+                    <div class="feature-item">Real-time Presence & Status Indicator</div>
+                </div>
+
+                <a href="/?download=true" class="btn btn-primary">Download CU Orbit APK</a>
+
+                <button onclick="showNotice()" class="btn btn-secondary">Continue in Web</button>
+
+                <div id="web-notice">Web application will come soon!</div>
+
+                <p class="footer">Version 1.1.0 | Compatible with Android 8.0+</p>
+            </div>
+
+            <script>
+                function showNotice() {
+                    document.getElementById('web-notice').style.display = 'block';
+                }
+            </script>
+        </body>
+        </html>
+    `);
+});
+
 // --- ROUTES ---
 
 // AUTH
@@ -332,7 +398,7 @@ app.get('/api/home/:userId/:workspaceId', async (req, res) => {
             dms: dms.filter(d => d !== null).sort((a,b) => (b.is_pinned - a.is_pinned))
         });
     } catch (e) {
-        console.error(e);
+        console.error('[HOME-FEED-ERROR]', e);
         res.status(500).json({ channels: [], dms: [] });
     }
 });
