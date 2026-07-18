@@ -36,6 +36,7 @@ class HomeFragment : Fragment() {
         viewModel = ViewModelProvider(this)[HomeViewModel::class.java]
         
         setupTopBar(root)
+        setupSelectionToolbar(root)
         setupRecyclerView(root)
         observeViewModel(root)
         
@@ -72,26 +73,51 @@ class HomeFragment : Fragment() {
         }
     }
 
+    private fun setupSelectionToolbar(root: View) {
+        root.findViewById<View>(R.id.button_close_selection).setOnClickListener {
+            homeAdapter.clearSelection()
+        }
+        
+        root.findViewById<View>(R.id.button_selection_pin).setOnClickListener {
+            performSelectionAction("pin")
+        }
+        
+        root.findViewById<View>(R.id.button_selection_delete).setOnClickListener {
+            performSelectionAction("delete")
+        }
+        
+        root.findViewById<View>(R.id.button_selection_mute).setOnClickListener {
+            performSelectionAction("mute")
+        }
 
-    private fun showAddWorkspaceDialog() {
-        val input = android.widget.EditText(requireContext()).apply { hint = "Workspace name" }
-        androidx.appcompat.app.AlertDialog.Builder(requireContext())
-            .setTitle("Create New Workspace")
-            .setView(input)
-            .setPositiveButton("Create") { _, _ ->
-                val name = input.text.toString().trim()
-                if (name.isNotEmpty()) {
-                    lifecycleScope.launch {
-                        try {
-                            com.example.cu_orbit.network.RetrofitClient.instance.createWorkspace(mapOf("name" to name))
-                            Toast.makeText(context, "Workspace created!", Toast.LENGTH_SHORT).show()
-                            viewModel.loadHomeFeed()
-                        } catch (e: Exception) {}
-                    }
+        root.findViewById<View>(R.id.button_selection_archive).setOnClickListener {
+            performSelectionAction("archive")
+        }
+    }
+
+    private fun performSelectionAction(action: String) {
+        val selectedItems = homeAdapter.getSelectedItems()
+        val userId = repository.getPrefs(requireContext()).getString("USER_ID", "") ?: ""
+        
+        lifecycleScope.launch {
+            selectedItems.forEach { item ->
+                val containerId = when (item) {
+                    is Channel -> item.id
+                    is DirectMessage -> item.id
+                    is User -> if (userId < item.phone) "${userId}_${item.phone}" else "${item.phone}_$userId"
+                    else -> ""
+                }
+                
+                if (containerId.isNotEmpty()) {
+                    try {
+                        repository.updateConversationPrefs(containerId, userId, action, "true")
+                    } catch (e: Exception) {}
                 }
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+            Toast.makeText(context, "Action: $action applied", Toast.LENGTH_SHORT).show()
+            homeAdapter.clearSelection()
+            viewModel.loadHomeFeed()
+        }
     }
 
     private fun observeViewModel(root: View) {
@@ -114,6 +140,10 @@ class HomeFragment : Fragment() {
         val recyclerView: RecyclerView = root.findViewById(R.id.recycler_home)
         recyclerView.layoutManager = LinearLayoutManager(context)
         
+        val normalToolbar: View = root.findViewById(R.id.layout_normal_toolbar)
+        val selectionToolbar: View = root.findViewById(R.id.layout_selection_toolbar)
+        val countText: TextView = root.findViewById(R.id.text_selection_count)
+
         homeAdapter = HomeAdapter(
             onWorkspaceClick = { /* Handled in switcher */ },
             onChannelClick = { channel ->
@@ -126,7 +156,7 @@ class HomeFragment : Fragment() {
             onUserClick = { dm ->
                 val bundle = Bundle().apply {
                     putString("channelName", dm.otherUserName)
-                    putString("channelId", dm.id) // Using DM ID
+                    putString("channelId", dm.id)
                 }
                 findNavController().navigate(R.id.navigation_chat, bundle)
             },
@@ -138,8 +168,15 @@ class HomeFragment : Fragment() {
                     "mentions" -> findNavController().navigate(R.id.navigation_mentions)
                 }
             },
-            onItemLongClick = { item ->
-                showItemManagementMenu(item)
+            onSelectionChanged = { count ->
+                if (count > 0) {
+                    normalToolbar.visibility = View.GONE
+                    selectionToolbar.visibility = View.VISIBLE
+                    countText.text = count.toString()
+                } else {
+                    normalToolbar.visibility = View.VISIBLE
+                    selectionToolbar.visibility = View.GONE
+                }
             }
         )
         recyclerView.adapter = homeAdapter
@@ -175,50 +212,25 @@ class HomeFragment : Fragment() {
         popup.show()
     }
 
-    private fun showItemManagementMenu(item: Any) {
-        val title = when (item) {
-            is Channel -> "#${item.name}"
-            is DirectMessage -> item.otherUserName
-            is User -> item.name
-            else -> "Chat"
-        }
-        
-        val containerId = when(item) {
-            is Channel -> item.id
-            is DirectMessage -> item.id
-            is User -> {
-                val myId = repository.getPrefs(requireContext()).getString("USER_ID", "") ?: ""
-                if (myId < item.phone) "${myId}_${item.phone}" else "${item.phone}_$myId"
-            }
-            else -> ""
-        }
-        
-        val userId = repository.getPrefs(requireContext()).getString("USER_ID", "") ?: ""
-
-        val options = arrayOf("Pin Chat", "Mute Notifications", "Clear History", "Delete Chat")
+    private fun showAddWorkspaceDialog() {
+        val input = android.widget.EditText(requireContext()).apply { hint = "Workspace name" }
         androidx.appcompat.app.AlertDialog.Builder(requireContext())
-            .setTitle(title)
-            .setItems(options) { _, which ->
-                val action = when(options[which]) {
-                    "Pin Chat" -> "pin"
-                    "Mute Notifications" -> "mute"
-                    "Clear History" -> "clear"
-                    "Delete Chat" -> "delete"
-                    else -> ""
-                }
-                
-                if (action.isNotEmpty()) {
+            .setTitle("Create New Workspace")
+            .setView(input)
+            .setPositiveButton("Create") { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isNotEmpty()) {
                     lifecycleScope.launch {
                         try {
-                            repository.updateConversationPrefs(containerId, userId, action, "true")
-                            Toast.makeText(context, "${options[which]} successful", Toast.LENGTH_SHORT).show()
+                            repository.createWorkspace(name, "")
+                            Toast.makeText(context, "Workspace created!", Toast.LENGTH_SHORT).show()
                             viewModel.loadHomeFeed()
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "Action failed", Toast.LENGTH_SHORT).show()
-                        }
+                        } catch (e: Exception) {}
                     }
                 }
-            }.show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun showWorkspaceSwitcher() {
@@ -244,7 +256,6 @@ class HomeFragment : Fragment() {
     }
 }
 
-// Minimal adapter for the switcher
 class WorkspaceSwitcherAdapter(
     private val workspaces: List<Workspace>,
     private val onClick: (Workspace) -> Unit

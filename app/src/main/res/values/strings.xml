@@ -35,6 +35,7 @@
     <string name="notifications_text">Notifications</string>
     <string name="preferences_text">Preferences</string>
     <string name="saved_items_text">Saved Items</string>
+    <string name="logout_text">Logout</string>
 
     <!-- Edit Profile -->
     <string name="edit_profile_title">Edit Profile</string>

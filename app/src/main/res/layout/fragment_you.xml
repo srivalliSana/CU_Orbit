@@ -239,6 +239,14 @@
                     android:textColor="@color/orbit_primary"
                     app:drawableStartCompat="@android:drawable/ic_menu_save"
                     app:drawableTint="@color/orbit_primary" />
+
+                <TextView
+                    android:id="@+id/option_logout"
+                    style="@style/ProfileOption"
+                    android:text="@string/logout_text"
+                    android:textColor="@color/orbit_error"
+                    app:drawableStartCompat="@android:drawable/ic_lock_power_off"
+                    app:drawableTint="@color/orbit_error" />
             </LinearLayout>
 
         </LinearLayout>

@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.cu_orbit.R
 import com.example.cu_orbit.data.Message
+import com.example.cu_orbit.data.MessageRequest
 import com.google.gson.Gson
 
 class ThreadFragment : Fragment() {
@@ -21,6 +22,8 @@ class ThreadFragment : Fragment() {
     private val repliesList = mutableListOf<Message>()
     private lateinit var viewModel: ChatViewModel
     private var parentMessage: Message? = null
+    private var currentUserId: String = ""
+    private var currentUserName: String = ""
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -31,6 +34,10 @@ class ThreadFragment : Fragment() {
         
         viewModel = ViewModelProvider(this)[ChatViewModel::class.java]
         
+        val prefs = requireContext().getSharedPreferences("CU_ORBIT_PREFS", android.content.Context.MODE_PRIVATE)
+        currentUserId = prefs.getString("USER_ID", "anonymous") ?: "anonymous"
+        currentUserName = prefs.getString("USER_NAME", "Me") ?: "Me"
+
         val messageJson = arguments?.getString("parentMessage")
         parentMessage = Gson().fromJson(messageJson, Message::class.java)
 
@@ -40,7 +47,13 @@ class ThreadFragment : Fragment() {
         val recyclerView: RecyclerView = root.findViewById(R.id.recycler_thread)
         recyclerView.layoutManager = LinearLayoutManager(context)
         
-        adapter = MessageAdapter(repliesList)
+        adapter = MessageAdapter(
+            repliesList,
+            onMessageLongClick = { /* Handle edit/delete */ },
+            onThreadClick = { /* Already in thread */ },
+            onReactionClick = { msg, emoji -> viewModel.reactToMessage(msg, currentUserId, currentUserName, emoji) }
+        )
+        adapter.setCurrentUserId(currentUserId)
         recyclerView.adapter = adapter
 
         observeViewModel()
@@ -64,12 +77,16 @@ class ThreadFragment : Fragment() {
             val text = editMessage.text.toString().trim()
             val parent = parentMessage ?: return@setOnClickListener
             if (text.isNotEmpty()) {
-                val prefs = requireContext().getSharedPreferences("CU_ORBIT_PREFS", android.content.Context.MODE_PRIVATE)
-                val userId = prefs.getString("USER_ID", "anonymous") ?: "anonymous"
-                val userName = prefs.getString("USER_NAME", "Me") ?: "Me"
-                
                 val containerId = parent.channelId ?: parent.dmId ?: ""
-                viewModel.sendMessage(userId, userName, text, containerId, "text", null, parent.id)
+                val request = MessageRequest(
+                    senderId = currentUserId,
+                    senderName = currentUserName,
+                    body = text,
+                    channelId = containerId,
+                    type = "text",
+                    parentMessageId = parent.id
+                )
+                viewModel.sendMessage(request)
                 editMessage.setText("")
             }
         }

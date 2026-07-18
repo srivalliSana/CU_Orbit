@@ -12,11 +12,11 @@ import com.example.cu_orbit.network.RetrofitClient
 import coil.load
 
 class MentionAdapter(
-    private var users: List<User>,
+    private var users: List<User> = emptyList(),
     private val onUserSelected: (User) -> Unit
 ) : RecyclerView.Adapter<MentionAdapter.MentionViewHolder>() {
 
-    fun updateUsers(newUsers: List<User>) {
+    fun submitList(newUsers: List<User>) {
         users = newUsers
         notifyDataSetChanged()
     }
@@ -29,7 +29,7 @@ class MentionAdapter(
     override fun onBindViewHolder(holder: MentionViewHolder, position: Int) {
         val user = users[position]
         holder.name.text = user.name
-        holder.handle.text = "@${user.handle}"
+        holder.handle.text = "@${user.handle ?: user.phone}"
         
         val avatarUrl = RetrofitClient.getAbsoluteUrl(user.avatarUrl)
         if (!avatarUrl.isNullOrEmpty()) {

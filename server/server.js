@@ -286,7 +286,7 @@ app.get('/api/home/:userId/:workspaceId', async (req, res) => {
                 last_message_preview: lastMsg ? {
                     sender_id: lastMsg.senderId,
                     sender_name: lastMsg.senderName,
-                    text: hasUnreadMention ? `${lastMsg.senderName} mentioned you: ${lastMsg.body}` : (lastMsg.body || ""),
+                    text: lastMsg.body || "",
                     sent_at: lastMsg.timestamp,
                     type: lastMsg.type,
                     sender_is_self: normalizePhone(lastMsg.senderId) === normalizePhone(userId)
@@ -320,7 +320,7 @@ app.get('/api/home/:userId/:workspaceId', async (req, res) => {
                 has_unread_mention: hasUnreadMention,
                 last_message_preview: lastMsg ? {
                     sender_is_self: normalizePhone(lastMsg.senderId) === normalizePhone(userId),
-                    text: hasUnreadMention ? `${lastMsg.senderName} mentioned you: ${lastMsg.body}` : (lastMsg.body || ""),
+                    text: lastMsg.body || "",
                     sent_at: lastMsg.timestamp,
                     type: lastMsg.type
                 } : null
@@ -454,12 +454,54 @@ app.post('/api/messages', async (req, res) => {
     }
 });
 
+app.get('/api/mentions/:userId', async (req, res) => {
+    try {
+        const mentions = await Mention.findAll({
+            where: { mentioned_user_id: req.params.userId },
+            order: [['createdAt', 'DESC']]
+        });
+        const results = await Promise.all(mentions.map(async (m) => {
+            const msg = await Message.findByPk(m.message_id);
+            if (!msg) return null;
+            let sourceName = 'Channel';
+            if (m.source_channel_id.includes('_')) sourceName = 'Direct Message';
+            else {
+                const ch = await Channel.findByPk(m.source_channel_id);
+                if (ch) sourceName = `#${ch.name}`;
+            }
+            return {
+                id: m.id,
+                message_id: m.message_id,
+                sender_id: msg.senderId,
+                sender_name: msg.senderName,
+                text: msg.body,
+                sent_at: msg.timestamp,
+                channel_id: m.source_channel_id,
+                channel_name: sourceName,
+                is_read: m.is_read
+            };
+        }));
+        res.json(results.filter(r => r !== null));
+    } catch (e) { res.status(500).json(e); }
+});
+
 app.post('/api/mentions/read-all', async (req, res) => {
     try {
         const { userId, containerId } = req.body;
         await Mention.update({ is_read: true }, {
             where: { mentioned_user_id: userId, source_channel_id: containerId }
         });
+        res.json({ success: true });
+    } catch (e) { res.status(500).json(e); }
+});
+
+app.post('/api/mentions/:id/read', async (req, res) => {
+    try {
+        const mention = await Mention.findByPk(req.params.id);
+        if (mention) {
+            mention.is_read = true;
+            await mention.save();
+        }
         res.json({ success: true });
     } catch (e) { res.status(500).json(e); }
 });

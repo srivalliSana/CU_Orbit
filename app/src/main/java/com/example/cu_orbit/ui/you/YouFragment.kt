@@ -45,7 +45,30 @@ class YouFragment : Fragment() {
             com.example.cu_orbit.utils.AppUtils.shareAppAPK(requireContext())
         }
 
+        root.findViewById<View>(R.id.option_logout).setOnClickListener {
+            performLogout()
+        }
+
         return root
+    }
+
+    private fun performLogout() {
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Logout")
+            .setMessage("Are you sure you want to logout?")
+            .setPositiveButton("Logout") { _, _ ->
+                val prefs = requireContext().getSharedPreferences("CU_ORBIT_PREFS", android.content.Context.MODE_PRIVATE)
+                prefs.edit().clear().apply()
+                
+                // Clear any other app state if necessary
+                
+                val intent = android.content.Intent(requireContext(), com.example.cu_orbit.LoginActivity::class.java)
+                intent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
+                startActivity(intent)
+                requireActivity().finish()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     override fun onResume() {

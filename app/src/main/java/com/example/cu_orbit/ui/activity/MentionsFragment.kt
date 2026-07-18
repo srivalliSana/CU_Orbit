@@ -4,7 +4,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
@@ -15,8 +14,6 @@ import com.example.cu_orbit.data.ActivityItem
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.*
 
 class MentionsFragment : Fragment() {
 
@@ -39,6 +36,14 @@ class MentionsFragment : Fragment() {
         return root
     }
 
+    override fun onResume() {
+        super.onResume()
+        view?.let { root ->
+            val recycler: RecyclerView = root.findViewById(R.id.recycler_activity)
+            loadMentions(root, recycler)
+        }
+    }
+
     private fun loadMentions(root: View, recycler: RecyclerView) {
         val repository = com.example.cu_orbit.repository.MainRepository()
         val userId = repository.getPrefs(requireContext()).getString("USER_ID", "") ?: ""
@@ -48,17 +53,12 @@ class MentionsFragment : Fragment() {
                 val mentions = repository.getMentions(userId)
                 if (mentions.isEmpty()) {
                     root.findViewById<View>(R.id.layout_empty_activity).visibility = View.VISIBLE
-                    Toast.makeText(context, "No mentions found for your ID", Toast.LENGTH_SHORT).show()
                 } else {
                     root.findViewById<View>(R.id.layout_empty_activity).visibility = View.GONE
-                    Toast.makeText(context, "Loaded ${mentions.size} mentions", Toast.LENGTH_SHORT).show()
                     
                     // Map Mention to ActivityItem for reused adapter
                     val items = mentions.map { m ->
-                        // Use the registered senderName from the mention object (populated by server)
                         val title = "${m.senderName ?: "Someone"} mentioned you"
-                        
-                        // Clean up source name if it's "STATUS"
                         val displaySource = if (m.channelName == "STATUS") "Status update" else m.channelName
 
                         ActivityItem(
@@ -73,7 +73,6 @@ class MentionsFragment : Fragment() {
                         )
                     }
                     recycler.adapter = ActivityAdapter(items) { item ->
-                        // find the mention again to get the real channelId
                         val originalMention = mentions.find { it.id == item.id }
                         
                         lifecycleScope.launch {

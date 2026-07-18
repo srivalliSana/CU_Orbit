@@ -92,7 +92,7 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    fun updateTyping(channelId: String, userId: String, userName: String) {
+    fun notifyTyping(channelId: String, userId: String, userName: String) {
         viewModelScope.launch {
             try {
                 repository.updateTyping(channelId, userId, userName)
@@ -102,45 +102,23 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    fun sendMessage(
-        senderId: String,
-        senderName: String,
-        body: String,
-        channelId: String,
-        type: String = "text",
-        mediaUrl: String? = null,
-        parentMessageId: String? = null,
-        senderAvatarUrl: String? = null,
-        mentions: List<String>? = null,
-        enrichedMentions: List<com.example.cu_orbit.data.MentionMetadata>? = null
-    ) {
+    fun sendMessage(request: MessageRequest) {
         viewModelScope.launch {
             try {
-                val request = MessageRequest(
-                    senderId,
-                    senderName,
-                    body,
-                    channelId,
-                    type,
-                    mediaUrl,
-                    parentMessageId,
-                    senderAvatarUrl,
-                    mentions,
-                    enrichedMentions
-                )
                 repository.sendMessage(request)
-                loadMessages(channelId)
+                loadMessages(request.channelId)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
     }
 
-    fun editMessage(id: String, newBody: String, channelId: String) {
+    fun editMessage(message: Message, newBody: String) {
         viewModelScope.launch {
             try {
-                repository.editMessage(id, newBody)
-                loadMessages(channelId)
+                repository.editMessage(message.id, newBody)
+                val cid = message.channelId ?: message.dmId ?: ""
+                loadMessages(cid)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -151,7 +129,6 @@ class ChatViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 repository.reactToMessage(message.id, userId, userName, emoji)
-                // In a real app with containerId support
                 val cid = message.channelId ?: message.dmId ?: ""
                 loadMessages(cid)
             } catch (e: Exception) {

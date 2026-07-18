@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.example.cu_orbit.R
 import com.example.cu_orbit.data.*
+import com.example.cu_orbit.utils.ContactUtils
 import coil.load
 import java.text.SimpleDateFormat
 import java.util.*
@@ -18,10 +19,14 @@ class HomeAdapter(
     private val onChannelClick: (Channel) -> Unit,
     private val onUserClick: (DirectMessage) -> Unit,
     private val onActionClick: (String) -> Unit,
-    private val onItemLongClick: (Any) -> Unit = {}
+    private val onItemLongClick: (Any) -> Unit = {},
+    private val onSelectionChanged: (Int) -> Unit = {}
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private val items = mutableListOf<Any>()
+    private val selectedIds = mutableSetOf<String>()
+    private var selectionMode = false
+    
     private val timeFormat = SimpleDateFormat("h:mm", Locale.getDefault())
     private val dateFormat = SimpleDateFormat("d MMM", Locale.getDefault())
     private val weekdayFormat = SimpleDateFormat("EEE", Locale.getDefault())
@@ -38,6 +43,39 @@ class HomeAdapter(
         items.clear()
         items.addAll(newList)
         notifyDataSetChanged()
+    }
+
+    fun toggleSelection(item: Any) {
+        val id = getItemId(item) ?: return
+        if (selectedIds.contains(id)) {
+            selectedIds.remove(id)
+        } else {
+            selectedIds.add(id)
+        }
+        
+        selectionMode = selectedIds.isNotEmpty()
+        onSelectionChanged(selectedIds.size)
+        notifyDataSetChanged()
+    }
+
+    fun clearSelection() {
+        selectedIds.clear()
+        selectionMode = false
+        onSelectionChanged(0)
+        notifyDataSetChanged()
+    }
+
+    fun getSelectedItems(): List<Any> {
+        return items.filter { getItemId(it) in selectedIds }
+    }
+
+    private fun getItemId(item: Any): String? {
+        return when (item) {
+            is Channel -> item.id
+            is DirectMessage -> item.id
+            is User -> item.phone
+            else -> null
+        }
     }
 
     override fun getItemViewType(position: Int): Int {
@@ -66,11 +104,20 @@ class HomeAdapter(
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         val item = items[position]
+        val itemId = getItemId(item)
+        val isSelected = itemId != null && selectedIds.contains(itemId)
+        
+        // Highlight background if selected
+        holder.itemView.setBackgroundColor(
+            if (isSelected) ContextCompat.getColor(holder.itemView.context, R.color.surface_2)
+            else 0
+        )
+
         when (holder) {
             is HeaderViewHolder -> {
                 val title = item as String
                 holder.title.text = title
-                holder.action.setOnClickListener { onActionClick(title) }
+                holder.action.setOnClickListener { if (!selectionMode) onActionClick(title) }
             }
             is QuickViewHolder -> {
                 val quick = item as QuickAccessItem
@@ -83,7 +130,7 @@ class HomeAdapter(
                 } else {
                     holder.badge.visibility = View.GONE
                 }
-                holder.itemView.setOnClickListener { onActionClick(quick.id) }
+                holder.itemView.setOnClickListener { if (!selectionMode) onActionClick(quick.id) }
             }
             is ChannelViewHolder -> {
                 val channel = item as Channel
@@ -115,7 +162,7 @@ class HomeAdapter(
                     val processedText = if (it.type == "system" && rawText.contains(":")) {
                         val parts = rawText.split(":")
                         val phone = parts[1]
-                        val contactName = com.example.cu_orbit.utils.ContactUtils.getContactName(context, phone)
+                        val contactName = ContactUtils.getContactName(context, phone)
                         val displayName = contactName ?: phone
                         
                         if (rawText.startsWith("ADD_MEMBER:")) {
@@ -126,9 +173,10 @@ class HomeAdapter(
                             rawText
                         }
                     } else {
-                        // Priority: use the senderIsSelf flag from server
-                        val senderLabel = if (it.senderIsSelf) "You" else (it.senderName ?: "Unknown")
-                        "$senderLabel: $rawText"
+                        // Resolve sender name locally
+                        val contactName = if (it.senderId != null) ContactUtils.getContactName(context, it.senderId) else null
+                        val resolvedSenderName = if (it.senderIsSelf) "You" else (contactName ?: it.senderName ?: "Unknown")
+                        "$resolvedSenderName: $rawText"
                     }
 
                     holder.preview.text = processedText
@@ -145,9 +193,12 @@ class HomeAdapter(
                     holder.itemView.alpha = 1.0f
                 }
 
-                holder.itemView.setOnClickListener { onChannelClick(channel) }
+                holder.itemView.setOnClickListener {
+                    if (selectionMode) toggleSelection(channel)
+                    else onChannelClick(channel)
+                }
                 holder.itemView.setOnLongClickListener { 
-                    onItemLongClick(channel)
+                    toggleSelection(channel)
                     true
                 }
             }
@@ -185,7 +236,7 @@ class HomeAdapter(
                     val contactName = com.example.cu_orbit.utils.ContactUtils.getContactName(context, user.phone)
                     name = if (user.phone == currentUserId) "You" else (contactName ?: user.name ?: user.phone)
                     unreadCount = user.unreadCount
-                    hasMention = false // User objects don't track mentions directly
+                    hasMention = false
                     avatarUrl = user.avatarUrl
                     presence = user.presence
                     lastMsgText = user.lastMessagePreview
@@ -236,16 +287,24 @@ class HomeAdapter(
 
                 if (lastMsgTime != null && lastMsgTime > 0) {
                     val prefix = if (senderIsSelf) "You: " else ""
-                    holder.preview.text = "$prefix${lastMsgText ?: ""}"
+                    val finalPreview = if (hasMention) {
+                         "$name mentioned you: ${lastMsgText ?: ""}"
+                    } else {
+                        "$prefix${lastMsgText ?: ""}"
+                    }
+                    holder.preview.text = finalPreview
                     holder.time.text = formatTime(lastMsgTime)
                 } else {
                     holder.preview.text = ""
                     holder.time.text = ""
                 }
 
-                holder.itemView.setOnClickListener { onClick() }
+                holder.itemView.setOnClickListener {
+                    if (selectionMode) toggleSelection(dmItem)
+                    else onClick()
+                }
                 holder.itemView.setOnLongClickListener {
-                    onItemLongClick(dmItem)
+                    toggleSelection(dmItem)
                     true
                 }
             }
@@ -254,7 +313,7 @@ class HomeAdapter(
                 holder.msg.text = empty.text
                 holder.icon.setImageResource(empty.iconRes)
                 holder.action.text = if (empty.id == "channels") "Browse channels" else "Start a conversation"
-                holder.action.setOnClickListener { onActionClick(empty.id.uppercase()) }
+                holder.action.setOnClickListener { if (!selectionMode) onActionClick(empty.id.uppercase()) }
             }
         }
     }
