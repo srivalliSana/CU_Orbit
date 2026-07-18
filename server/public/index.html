@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CU Orbit | Web Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="/css/style.css" rel="stylesheet">
+</head>
+<body class="bg-[#0f172a] text-white overflow-hidden">
+    <!-- Main App Container -->
+    <div id="app" class="h-screen flex flex-col">
+        <!-- Auth View -->
+        <div id="auth-view" class="flex-1 flex items-center justify-center hidden">
+            <div class="bg-[#1e293b] p-10 rounded-2xl w-full max-w-md shadow-2xl border border-slate-700">
+                <div class="text-center mb-8">
+                    <h1 class="text-4xl font-bold text-[#38bdf8] mb-2">CU Orbit</h1>
+                    <p class="text-slate-400">Sign in to your university workspace</p>
+                </div>
+                <input id="login-email" type="email" placeholder="University Email" class="w-full bg-[#0f172a] border border-slate-700 p-4 rounded-xl mb-4 focus:ring-2 focus:ring-[#38bdf8] outline-none">
+                <button onclick="handleLogin()" class="w-full bg-[#38bdf8] text-[#0f172a] font-bold p-4 rounded-xl hover:scale-[1.02] transition-transform">Continue with Email</button>
+            </div>
+        </div>
+
+        <!-- Main Dashboard View -->
+        <div id="main-view" class="flex-1 flex hidden">
+            <!-- Sidebar -->
+            <div class="w-72 bg-[#1e293b] flex flex-col border-r border-slate-700">
+                <div class="p-4 border-b border-slate-700 flex items-center justify-between">
+                    <div id="active-workspace" class="font-bold truncate text-lg">CU Orbit</div>
+                    <i class="fa-solid fa-chevron-down text-slate-500 cursor-pointer"></i>
+                </div>
+
+                <div class="flex-1 overflow-y-auto custom-scrollbar">
+                    <!-- Quick Access -->
+                    <div class="p-2 space-y-1">
+                        <div class="flex items-center space-x-3 p-2 rounded-lg hover:bg-slate-800 cursor-pointer text-slate-300">
+                            <i class="fa-solid fa-at w-5 text-center"></i>
+                            <span>Mentions</span>
+                        </div>
+                    </div>
+
+                    <!-- Channels -->
+                    <div class="mt-4">
+                        <div class="px-4 text-xs font-bold text-slate-500 flex justify-between items-center mb-2">
+                            <span>CHANNELS</span>
+                            <i class="fa-solid fa-plus cursor-pointer hover:text-white"></i>
+                        </div>
+                        <div id="channel-list" class="space-y-0.5"></div>
+                    </div>
+
+                    <!-- DMs -->
+                    <div class="mt-6">
+                        <div class="px-4 text-xs font-bold text-slate-500 flex justify-between items-center mb-2">
+                            <span>DIRECT MESSAGES</span>
+                            <i class="fa-solid fa-plus cursor-pointer hover:text-white"></i>
+                        </div>
+                        <div id="dm-list" class="space-y-0.5"></div>
+                    </div>
+                </div>
+
+                <!-- Profile Footer -->
+                <div class="p-4 bg-[#0f172a] flex items-center space-x-3 border-t border-slate-700">
+                    <img id="user-avatar" src="/ic_person.xml" class="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 object-cover">
+                    <div class="flex-1 min-w-0">
+                        <div id="user-name" class="font-bold truncate text-sm">Srivalli Sana</div>
+                        <div class="text-[10px] text-green-500 flex items-center">
+                            <span class="w-2 h-2 bg-green-500 rounded-full mr-1"></span> Online
+                        </div>
+                    </div>
+                    <i onclick="handleLogout()" class="fa-solid fa-right-from-bracket text-slate-500 hover:text-red-400 cursor-pointer p-2"></i>
+                </div>
+            </div>
+
+            <!-- Chat Area -->
+            <div class="flex-1 flex flex-col bg-[#0f172a]">
+                <div class="h-[52px] border-b border-slate-700 flex items-center px-6 justify-between bg-[#1e293b]">
+                    <div class="flex flex-col min-w-0">
+                        <h2 id="chat-title" class="font-bold text-lg leading-tight"># general</h2>
+                        <span id="chat-subtitle" class="text-xs text-slate-500">15 members</span>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <i class="fa-solid fa-phone text-slate-400 hover:text-white cursor-pointer"></i>
+                        <i class="fa-solid fa-info-circle text-slate-400 hover:text-white cursor-pointer" onclick="toggleInfo()"></i>
+                    </div>
+                </div>
+
+                <!-- Messages -->
+                <div id="message-container" class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar flex flex-col">
+                    <div class="flex-1"></div>
+                    <!-- Messages will be injected here -->
+                </div>
+
+                <!-- Input Area -->
+                <div class="p-4 bg-[#0f172a]">
+                    <div class="bg-[#1e293b] rounded-xl border border-slate-700 p-2 shadow-lg">
+                        <textarea id="message-input" rows="1" placeholder="Message #general" class="w-full bg-transparent p-3 outline-none resize-none text-slate-200 custom-scrollbar"></textarea>
+                        <div class="flex items-center justify-between mt-2 px-2">
+                            <div class="flex items-center space-x-3 text-slate-400">
+                                <i class="fa-solid fa-plus-circle hover:text-white cursor-pointer"></i>
+                                <i class="fa-solid fa-bold hover:text-white cursor-pointer border-r border-slate-700 pr-3"></i>
+                                <i class="fa-solid fa-smile hover:text-white cursor-pointer"></i>
+                                <i class="fa-solid fa-at hover:text-white cursor-pointer"></i>
+                            </div>
+                            <button id="send-button" onclick="handleSendMessage()" class="bg-[#38bdf8] text-[#0f172a] px-5 py-2 rounded-lg font-bold opacity-50 cursor-not-allowed" disabled>Send</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals & Context menus -->
+    <div id="overlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center">
+        <div id="channel-info-modal" class="bg-[#1e293b] w-full max-w-lg rounded-2xl p-8 border border-slate-700 hidden">
+             <!-- Info injected here -->
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>

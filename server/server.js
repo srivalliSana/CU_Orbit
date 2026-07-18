@@ -211,8 +211,11 @@ async function routeMentionNotification(user, message) {
     console.log(`-------------------------------\n`);
 }
 
-// --- LANDING PAGE \u0026 APK DOWNLOAD ---
-const packageJson \u003d require(\u0027./package.json\u0027);\n\napp.get(\u0027/\u0027, (req, res) \u003d\u003e {\n    // If the user explicitly clicks download
+// --- LANDING PAGE & APK DOWNLOAD ---
+const packageJson = require('./package.json');
+
+app.get('/', (req, res) => {
+    // If the user explicitly clicks download
     if (req.query.download === 'true') {
         const apkPath = path.join(__dirname, 'downloads', 'cu_orbit.apk');
         return res.download(apkPath, 'CU_Orbit.apk', (err) => {
@@ -263,7 +266,7 @@ const packageJson \u003d require(\u0027./package.json\u0027);\n\napp.get(\u0027/
 
                 <div id="web-notice">Web application will come soon!</div>
 
-                \u003cp class\u003d"footer"\u003eVersion ${packageJson.version} | Compatible with Android 8.0+\u003c/p\u003e
+                <p class="footer">Version ${packageJson.version} | Compatible with Android 8.0+</p>
             </div>
 
             <script>
