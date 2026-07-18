@@ -147,6 +147,14 @@ const Thread = sequelize.define('Thread', {
     last_reply_at: { type: DataTypes.BIGINT }
 });
 
+const Release = sequelize.define('Release', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    version: { type: DataTypes.STRING, allowNull: false },
+    build_number: { type: DataTypes.INTEGER, allowNull: false },
+    filename: { type: DataTypes.STRING, allowNull: false },
+    release_date: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+});
+
 const Status = sequelize.define('Status', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     userId: { type: DataTypes.STRING, allowNull: false },
@@ -215,12 +223,22 @@ async function routeMentionNotification(user, message) {
 // --- LANDING PAGE & APK DOWNLOAD ---
 const packageJson = require('./package.json');
 
-app.get('/', (req, res) => {
+app.get('/', async (req, res) => {
+    const userAgent = req.get('User-Agent');
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+
+    // Detailed OS Detection for Web
+    let osName = "Web Device";
+    if (userAgent.indexOf("Win") != -1) osName = "Windows PC";
+    if (userAgent.indexOf("Mac") != -1) osName = "macOS Device";
+    if (userAgent.indexOf("Linux") != -1) osName = "Linux System";
+
+    const history = await Release.findAll({ order: [['build_number', 'DESC']] });
+
     if (req.query.download === 'true') {
-        const apkPath = path.join(__dirname, 'downloads', 'cu_orbit.apk');
-        return res.download(apkPath, 'CU_Orbit.apk', (err) => {
-            if (err) res.status(404).send('<h1>APK file not found on server. Please upload cu_orbit.apk to the server folder.</h1>');
-        });
+        const release = await Release.findOne({ where: { version: req.query.v } }) || history[0];
+        const apkPath = path.join(__dirname, 'downloads', release ? release.filename : 'cu_orbit.apk');
+        return res.download(apkPath, release ? release.filename : 'CU_Orbit.apk');
     }
 
     res.send(`
@@ -230,40 +248,86 @@ app.get('/', (req, res) => {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>CU Orbit | University Messaging</title>
+            <script src="https://cdn.tailwindcss.com"></script>
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
             <style>
-                body { font-family: 'Inter', sans-serif; background: #0f172a; color: white; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-                .card { background: #1e293b; padding: 40px; border-radius: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); max-width: 500px; text-align: center; border: 1px solid #334155; }
-                h1 { color: #38bdf8; margin-bottom: 8px; font-size: 2.5rem; }
-                .subtitle { font-size: 1.1rem; color: #94a3b8; margin-bottom: 30px; }
-                .features { text-align: left; background: #0f172a; padding: 20px; border-radius: 12px; margin-bottom: 30px; }
-                .feature-item { display: flex; align-items: center; margin-bottom: 12px; color: #e2e8f0; font-size: 0.95rem; }
-                .feature-item:before { content: '✓'; color: #10b981; font-weight: bold; margin-right: 10px; }
-                .btn { display: block; width: 100%; box-sizing: border-box; padding: 16px; border-radius: 12px; text-decoration: none; font-weight: bold; font-size: 1.1rem; transition: transform 0.2s; margin-bottom: 12px; border: none; cursor: pointer; }
-                .btn-primary { background: #38bdf8; color: #0f172a; }
-                .btn-secondary { background: transparent; color: #38bdf8; border: 2px solid #38bdf8; }
-                .btn:hover { transform: scale(1.02); }
-                .footer { margin-top: 24px; font-size: 0.8rem; color: #64748b; }
-                #web-notice { display: none; margin-top: 15px; color: #fbbf24; font-weight: bold; }
+                body { background: #0f172a; color: white; font-family: 'Inter', sans-serif; }
+                .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
             </style>
         </head>
-        <body>
-            <div class="card">
-                <h1>CU Orbit</h1>
-                <p class="subtitle">The official professional messaging platform for our university.</p>
-                <div class="features">
-                    <div class="feature-item">Secure University Authentication</div>
-                    <div class="feature-item">WhatsApp-style Admin Controls</div>
-                    <div class="feature-item">Robust @Mention & Tagging System</div>
-                    <div class="feature-item">Multi-Workspace Management</div>
-                    <div class="feature-item">Real-time Presence & Status Indicator</div>
+        <body class="min-h-screen flex items-center justify-center p-4">
+            <div class="glass max-w-2xl w-full rounded-3xl p-8 shadow-2xl text-center">
+                <div class="flex justify-center mb-6">
+                    <div class="w-20 h-20 bg-blue-500 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+                        <i class="fa-solid fa-satellite-dish text-4xl text-white"></i>
+                    </div>
                 </div>
-                <a href="/?download=true" class="btn btn-primary">Download CU Orbit APK</a>
-                <a href="/portal" class="btn btn-secondary">Continue in Web</a>
-                <p class="footer">Version ${packageJson.version} | Compatible with Android 8.0+</p>
+
+                <h1 class="text-5xl font-bold text-blue-400 mb-2">CU Orbit</h1>
+                <p class="text-slate-400 text-lg mb-8">The official professional messaging platform for our university.<br>
+                <span class="text-xs font-mono uppercase tracking-widest text-slate-500">Detected: ${osName}</span></p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                    <button onclick="showHistory()" class="bg-blue-500 hover:bg-blue-600 text-slate-900 font-bold py-4 px-6 rounded-2xl flex items-center justify-center space-x-3 transition-all">
+                        <i class="fa-brands fa-android text-2xl"></i>
+                        <span>Get for Android</span>
+                    </button>
+                    <button onclick="alert('iOS version will come soon! Stay tuned.')" class="bg-slate-800 hover:bg-slate-700 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center space-x-3 transition-all opacity-80">
+                        <i class="fa-brands fa-apple text-2xl"></i>
+                        <span>Get for iOS</span>
+                    </button>
+                </div>
+
+                <a href="/portal" class="inline-block text-blue-400 hover:text-blue-300 font-semibold mb-8 underline underline-offset-4">Continue in Web Portal</a>
+
+                <div class="border-t border-slate-800 pt-6 text-left">
+                    <h3 class="text-xs font-bold text-slate-500 mb-4 uppercase tracking-tighter">Latest Features</h3>
+                    <ul class="text-sm text-slate-300 space-y-2">
+                        <li><i class="fa-solid fa-check text-green-500 mr-2"></i> WhatsApp-style Channel Controls</li>
+                        <li><i class="fa-solid fa-check text-green-500 mr-2"></i> Multi-word @Mention pills</li>
+                        <li><i class="fa-solid fa-check text-green-500 mr-2"></i> Real-time Seen Status synchronization</li>
+                    </ul>
+                </div>
             </div>
+
+            <!-- Version History Modal -->
+            <div id="history-modal" class="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 hidden">
+                <div class="bg-[#1e293b] w-full max-w-md rounded-3xl p-8 border border-slate-700">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-blue-400">Android Downloads</h2>
+                        <i onclick="hideHistory()" class="fa-solid fa-times text-slate-500 cursor-pointer hover:text-white p-2"></i>
+                    </div>
+                    <div class="space-y-3">
+                        ${history.map(r => `
+                            <a href="/?download=true&v=${r.version}" class="flex items-center justify-between p-4 bg-[#0f172a] rounded-xl hover:ring-2 hover:ring-blue-500/50 transition-all">
+                                <div>
+                                    <div class="font-bold text-white">v${r.version}</div>
+                                    <div class="text-[10px] text-slate-500">Build ${r.build_number} | ${new Date(r.release_date).toLocaleDateString()}</div>
+                                </div>
+                                <i class="fa-solid fa-download text-blue-400"></i>
+                            </a>
+                        `).join('')}
+                        ${history.length === 0 ? '<p class="text-slate-500 text-center">No releases found. Upload cu_orbit.apk to server.</p>' : ''}
+                    </div>
+                </div>
+            </div>
+
+            <script>
+                function showHistory() { document.getElementById('history-modal').classList.remove('hidden'); }
+                function hideHistory() { document.getElementById('history-modal').classList.add('hidden'); }
+            </script>
         </body>
         </html>
     `);
+});
+
+// Add a route to register new releases (used by Gradle automation)
+app.post('/api/system/register-release', async (req, res) => {
+    try {
+        const { version, build_number, filename } = req.body;
+        const release = await Release.create({ version, build_number, filename });
+        res.json({ success: true, release });
+    } catch (e) { res.status(500).json(e); }
 });
 
 // Web Portal Route
@@ -276,8 +340,15 @@ app.get('/portal', (req, res) => {
 // AUTH
 app.post('/api/auth/login', async (req, res) => {
     try {
-        const { email } = req.body;
-        const user = await User.findOne({ where: { email: email } });
+        const { email, phone } = req.body;
+        let user;
+        if (email) {
+            user = await User.findOne({ where: { email: email } });
+        } else if (phone) {
+            const normalized = normalizePhone(phone);
+            user = await User.findAll().then(users => users.find(u => normalizePhone(u.phone) === normalized));
+        }
+
         if (user) {
             const gen = await Channel.findOne({ where: { name: 'general' } });
             if (gen) {

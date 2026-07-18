@@ -4,7 +4,7 @@ const DEFAULT_WORKSPACE_ID = '5d91e97d-66dc-4eaf-969f-17aaeb151924';
 let currentUser = null;
 let activeContainerId = 'general';
 let pollingInterval = null;
-let typingInterval = null;
+let allUsers = [];
 
 // UI Elements
 const authView = document.getElementById('auth-view');
@@ -16,17 +16,20 @@ const messageInput = document.getElementById('message-input');
 const sendButton = document.getElementById('send-button');
 const chatTitle = document.getElementById('chat-title');
 const chatSubtitle = document.getElementById('chat-subtitle');
+const overlay = document.getElementById('overlay');
+const contactsList = document.getElementById('contacts-list');
+const contactSearch = document.getElementById('contact-search');
 
 // --- AUTH ---
 async function handleLogin() {
-    const email = document.getElementById('login-email').value;
-    if (!email) return alert('Please enter your email');
+    const phone = document.getElementById('login-phone').value;
+    if (!phone) return alert('Please enter your phone number');
 
     try {
         const res = await fetch(`${API_BASE}/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email })
+            body: JSON.stringify({ phone })
         });
         const data = await res.json();
         if (data.success && data.user) {
@@ -34,7 +37,7 @@ async function handleLogin() {
             localStorage.setItem('orbit_user', JSON.stringify(currentUser));
             showDashboard();
         } else {
-            alert('User not found. Please register on the mobile app.');
+            alert('Number not registered. Please sign up on the mobile app first.');
         }
     } catch (e) { console.error(e); }
 }
@@ -49,15 +52,60 @@ function showDashboard() {
     mainView.classList.remove('hidden');
     document.getElementById('user-name').innerText = currentUser.name;
 
-    // Set user avatar
     const avatarImg = document.getElementById('user-avatar');
-    if (currentUser.avatarUrl) {
-        avatarImg.src = getAbsoluteUrl(currentUser.avatarUrl);
-    } else {
-        avatarImg.src = "https://ui-avatars.com/api/?name=" + encodeURIComponent(currentUser.name) + "&background=random";
-    }
+    avatarImg.src = currentUser.avatarUrl ? getAbsoluteUrl(currentUser.avatarUrl) : `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}&background=random`;
 
     loadHomeFeed();
+    loadAllUsers(); // Pre-fetch directory
+}
+
+// --- DIRECTORY & CONTACTS ---
+async function loadAllUsers() {
+    try {
+        const res = await fetch(`${API_BASE}/users`);
+        allUsers = await res.json();
+    } catch (e) {}
+}
+
+function showContacts() {
+    overlay.classList.remove('hidden');
+    renderContacts('');
+}
+
+function renderContacts(query) {
+    contactsList.innerHTML = '';
+    const filtered = allUsers.filter(u =>
+        u.phone !== currentUser.phone &&
+        (u.name.toLowerCase().includes(query.toLowerCase()) || u.phone.includes(query))
+    );
+
+    filtered.forEach(u => {
+        const div = document.createElement('div');
+        div.className = 'flex items-center space-x-3 p-3 hover:bg-slate-700 rounded-xl cursor-pointer transition-colors';
+        const avatar = u.avatarUrl ? getAbsoluteUrl(u.avatarUrl) : `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=random`;
+
+        div.innerHTML = `
+            <img src="${avatar}" class="w-10 h-10 rounded-full border border-slate-600 object-cover">
+            <div class="flex-1">
+                <div class="font-bold text-slate-200">${u.name}</div>
+                <div class="text-xs text-slate-500">${u.phone}</div>
+            </div>
+        `;
+        div.onclick = () => {
+            const dmId = currentUser.phone < u.phone ? `${currentUser.phone}_${u.phone}` : `${u.phone}_${currentUser.phone}`;
+            switchChat(dmId, u.name, u.presence || 'offline');
+            closeModal();
+        };
+        contactsList.appendChild(div);
+    });
+}
+
+contactSearch.oninput = (e) => renderContacts(e.target.value);
+
+function closeModal(e) {
+    if (!e || e.target === overlay || e.target.classList.contains('fa-times')) {
+        overlay.classList.add('hidden');
+    }
 }
 
 // --- HOME FEED ---
@@ -125,7 +173,6 @@ function switchChat(id, title, subtitle) {
     messageInput.placeholder = `Message ${title}`;
     messageContainer.innerHTML = '<div class="flex-1"></div>';
 
-    // Reset input
     messageInput.value = '';
     messageInput.style.height = 'auto';
     sendButton.disabled = true;
@@ -134,12 +181,8 @@ function switchChat(id, title, subtitle) {
     loadMessages();
     markAsRead();
 
-    // Start Polling
     if (pollingInterval) clearInterval(pollingInterval);
-    pollingInterval = setInterval(() => {
-        loadMessages();
-        loadTypingStatus();
-    }, 3000);
+    pollingInterval = setInterval(loadMessages, 3000);
 }
 
 async function loadMessages() {
@@ -158,13 +201,12 @@ async function markAsRead() {
             body: JSON.stringify({ userId: currentUser.phone, containerId: activeContainerId })
         });
         loadHomeFeed();
-    } catch (e) { console.error(e); }
+    } catch (e) {}
 }
 
 function renderMessages(messages) {
     const isAtBottom = messageContainer.scrollHeight - messageContainer.scrollTop <= messageContainer.clientHeight + 100;
 
-    // Group messages by date
     let lastDate = null;
     let html = '<div class="flex-1"></div>';
 
@@ -180,7 +222,7 @@ function renderMessages(messages) {
         }
 
         const isSelf = normalizePhone(msg.sender_id) === normalizePhone(currentUser.phone);
-        const avatarUrl = msg.sender_avatar_url ? getAbsoluteUrl(msg.sender_avatar_url) : "https://ui-avatars.com/api/?name=" + encodeURIComponent(msg.sender_name) + "&background=random";
+        const avatarUrl = msg.sender_avatar_url ? getAbsoluteUrl(msg.sender_avatar_url) : `https://ui-avatars.com/api/?name=${encodeURIComponent(msg.sender_name)}&background=random`;
 
         html += `
             <div class="group flex items-start space-x-4 hover:bg-white/[0.02] -mx-6 px-6 py-2 transition-colors">
@@ -191,45 +233,18 @@ function renderMessages(messages) {
                         <span class="text-[10px] text-slate-500">${new Date(msg.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                     <div class="text-slate-300 leading-relaxed break-words whitespace-pre-wrap">${formatMessageBody(msg.text, msg.enriched_mentions)}</div>
-                    ${renderAttachments(msg.attachments)}
                 </div>
             </div>
         `;
     });
 
     messageContainer.innerHTML = html;
-
-    if (isAtBottom) {
-        messageContainer.scrollTop = messageContainer.scrollHeight;
-    }
-}
-
-function renderAttachments(attachments) {
-    if (!attachments || attachments.length === 0) return '';
-    let html = '<div class="mt-2 flex flex-wrap gap-2">';
-    attachments.forEach(att => {
-        const url = getAbsoluteUrl(att.url);
-        if (att.type === 'image') {
-            html += `<img src="${url}" onclick="window.open('${url}')" class="max-w-sm max-h-80 rounded-lg border border-slate-700 cursor-pointer hover:opacity-90 transition-opacity shadow-lg">`;
-        } else {
-            html += `<a href="${url}" target="_blank" class="flex items-center space-x-3 bg-slate-800 p-3 rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors">
-                <i class="fa-solid fa-file text-blue-400 text-xl"></i>
-                <div class="text-sm">
-                    <div class="font-medium text-slate-200">${att.filename || 'Attachment'}</div>
-                    <div class="text-xs text-slate-500 uppercase">Click to download</div>
-                </div>
-            </a>`;
-        }
-    });
-    html += '</div>';
-    return html;
+    if (isAtBottom) messageContainer.scrollTop = messageContainer.scrollHeight;
 }
 
 function formatMessageBody(text, mentions) {
     if (!text) return '';
     let formatted = text;
-
-    // Highlight mentions from metadata if available
     if (mentions && mentions.length > 0) {
         mentions.forEach(m => {
             const tag = `@${m.display_name}`;
@@ -237,10 +252,8 @@ function formatMessageBody(text, mentions) {
             formatted = formatted.replace(regex, `<span class="text-blue-400 font-bold px-1 rounded bg-blue-400/10 cursor-pointer hover:bg-blue-400/20">@${m.display_name}</span>`);
         });
     } else {
-        // Fallback simple highlighting
         formatted = formatted.replace(/@(\w+)/g, '<span class="text-blue-400 font-bold px-1 rounded bg-blue-400/10 cursor-pointer hover:bg-blue-400/20">@$1</span>');
     }
-
     return formatted;
 }
 
@@ -263,11 +276,7 @@ async function handleSendMessage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-
-        if (res.status === 403) {
-            alert("Only admins can send messages in this channel.");
-            return;
-        }
+        if (res.status === 403) return alert("Only admins can send messages here.");
 
         messageInput.value = '';
         messageInput.style.height = 'auto';
@@ -276,33 +285,6 @@ async function handleSendMessage() {
         loadMessages();
         loadHomeFeed();
     } catch (e) { console.error(e); }
-}
-
-// --- TYPING ---
-async function loadTypingStatus() {
-    try {
-        const res = await fetch(`${API_BASE}/channels/${activeContainerId}/typing`);
-        const typing = await res.json();
-        const otherTyping = typing.filter(t => normalizePhone(t.userId) !== normalizePhone(currentUser.phone));
-
-        const indicator = document.getElementById('typing-indicator');
-        if (otherTyping.length > 0) {
-            const names = otherTyping.map(t => t.userName).join(', ');
-            chatSubtitle.innerHTML = `<span class="text-blue-400 italic font-medium">${names} ${otherTyping.length === 1 ? 'is' : 'are'} typing...</span>`;
-        } else {
-            // Restore original subtitle (needs to be tracked)
-        }
-    } catch (e) {}
-}
-
-async function notifyTyping() {
-    try {
-        await fetch(`${API_BASE}/channels/${activeContainerId}/typing`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: currentUser.phone, userName: currentUser.name })
-        });
-    } catch (e) {}
 }
 
 // --- UTILS ---
@@ -324,15 +306,8 @@ messageInput.oninput = () => {
     sendButton.disabled = !hasValue;
     sendButton.classList.toggle('opacity-50', !hasValue);
     sendButton.classList.toggle('cursor-not-allowed', !hasValue);
-
-    // Auto-resize
     messageInput.style.height = 'auto';
     messageInput.style.height = (messageInput.scrollHeight) + 'px';
-
-    // Notify Typing
-    if (activeContainerId && !activeContainerId.includes('_')) {
-        notifyTyping();
-    }
 };
 
 messageInput.onkeydown = (e) => {
