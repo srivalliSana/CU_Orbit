@@ -230,8 +230,8 @@ app.get('/', async (req, res) => {
     // Detailed OS Detection for Web
     let osName = "Web Device";
     if (userAgent.indexOf("Win") != -1) osName = "Windows PC";
-    if (userAgent.indexOf("Mac") != -1) osName = "macOS Device";
-    if (userAgent.indexOf("Linux") != -1) osName = "Linux System";
+    else if (userAgent.indexOf("Mac") != -1) osName = "macOS Device";
+    else if (userAgent.indexOf("Linux") != -1) osName = "Linux System";
 
     const history = await Release.findAll({ order: [['build_number', 'DESC']] });
 
@@ -247,74 +247,125 @@ app.get('/', async (req, res) => {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>CU Orbit | University Messaging</title>
+            <title>CU Orbit | official University Messaging</title>
             <script src="https://cdn.tailwindcss.com"></script>
             <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
             <style>
-                body { background: #0f172a; color: white; font-family: 'Inter', sans-serif; }
-                .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+                @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap');
+                body { background: #0f172a; color: white; font-family: 'Plus Jakarta Sans', sans-serif; }
+                .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); }
+                .btn-shine { position: relative; overflow: hidden; }
+                .btn-shine::after { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent); transform: rotate(45deg); transition: 0.5s; }
+                .btn-shine:hover::after { left: 120%; }
             </style>
         </head>
-        <body class="min-h-screen flex items-center justify-center p-4">
-            <div class="glass max-w-2xl w-full rounded-3xl p-8 shadow-2xl text-center">
-                <div class="flex justify-center mb-6">
-                    <div class="w-20 h-20 bg-blue-500 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-                        <i class="fa-solid fa-satellite-dish text-4xl text-white"></i>
+        <body class="min-h-screen flex items-center justify-center p-6 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-900 to-slate-950">
+            <div class="glass max-w-2xl w-full rounded-[2.5rem] p-10 shadow-2xl text-center border-t border-blue-400/20">
+                <div class="flex justify-center mb-8">
+                    <div class="w-24 h-24 bg-gradient-to-br from-blue-400 to-blue-600 rounded-3xl flex items-center justify-center shadow-xl shadow-blue-500/20 rotate-3">
+                        <i class="fa-solid fa-satellite-dish text-5xl text-slate-900"></i>
                     </div>
                 </div>
 
-                <h1 class="text-5xl font-bold text-blue-400 mb-2">CU Orbit</h1>
-                <p class="text-slate-400 text-lg mb-8">The official professional messaging platform for our university.<br>
-                <span class="text-xs font-mono uppercase tracking-widest text-slate-500">Detected: ${osName}</span></p>
+                <h1 class="text-6xl font-extrabold tracking-tight text-white mb-3">CU <span class="text-blue-400">Orbit</span></h1>
+                <p class="text-slate-400 text-xl mb-10 max-w-lg mx-auto leading-relaxed">
+                    Elevate your university communication with our professional messaging ecosystem.
+                </p>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                    <button onclick="showHistory()" class="bg-blue-500 hover:bg-blue-600 text-slate-900 font-bold py-4 px-6 rounded-2xl flex items-center justify-center space-x-3 transition-all">
-                        <i class="fa-brands fa-android text-2xl"></i>
-                        <span>Get for Android</span>
+                <div class="inline-flex items-center px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/20 mb-10">
+                    <span class="w-2 h-2 bg-blue-500 rounded-full animate-pulse mr-3"></span>
+                    <span class="text-xs font-bold text-blue-400 uppercase tracking-widest">System Detected: ${osName}</span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-10">
+                    <button onclick="showHistory()" class="btn-shine bg-blue-500 hover:bg-blue-400 text-slate-950 font-bold py-5 px-8 rounded-2xl flex items-center justify-center space-x-4 transition-all shadow-lg shadow-blue-500/20 group">
+                        <i class="fa-brands fa-android text-3xl group-hover:scale-110 transition-transform"></i>
+                        <div class="text-left">
+                            <div class="text-[10px] uppercase opacity-70">Download for</div>
+                            <div class="text-lg leading-none">Android APK</div>
+                        </div>
                     </button>
-                    <button onclick="alert('iOS version will come soon! Stay tuned.')" class="bg-slate-800 hover:bg-slate-700 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center space-x-3 transition-all opacity-80">
-                        <i class="fa-brands fa-apple text-2xl"></i>
-                        <span>Get for iOS</span>
+
+                    <button onclick="alert('iOS App is currently in development. Registration will open soon!')" class="bg-slate-800/50 hover:bg-slate-800 text-slate-300 font-bold py-5 px-8 rounded-2xl flex items-center justify-center space-x-4 transition-all border border-slate-700/50 group">
+                        <i class="fa-brands fa-apple text-3xl group-hover:scale-110 transition-transform"></i>
+                        <div class="text-left">
+                            <div class="text-[10px] uppercase opacity-50">Coming Soon</div>
+                            <div class="text-lg leading-none">iOS Mobile</div>
+                        </div>
                     </button>
                 </div>
 
-                <a href="/portal" class="inline-block text-blue-400 hover:text-blue-300 font-semibold mb-8 underline underline-offset-4">Continue in Web Portal</a>
+                <div class="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-8 mb-10">
+                    <a href="/portal" class="text-blue-400 hover:text-blue-300 font-bold flex items-center group">
+                        <span>Continue in Web Portal</span>
+                        <i class="fa-solid fa-arrow-right ml-2 group-hover:translate-x-1 transition-transform"></i>
+                    </a>
+                    <button onclick="showHistory()" class="text-slate-500 hover:text-white text-sm font-medium transition-colors">
+                        View Version History
+                    </button>
+                </div>
 
-                <div class="border-t border-slate-800 pt-6 text-left">
-                    <h3 class="text-xs font-bold text-slate-500 mb-4 uppercase tracking-tighter">Latest Features</h3>
-                    <ul class="text-sm text-slate-300 space-y-2">
-                        <li><i class="fa-solid fa-check text-green-500 mr-2"></i> WhatsApp-style Channel Controls</li>
-                        <li><i class="fa-solid fa-check text-green-500 mr-2"></i> Multi-word @Mention pills</li>
-                        <li><i class="fa-solid fa-check text-green-500 mr-2"></i> Real-time Seen Status synchronization</li>
-                    </ul>
+                <div class="bg-slate-950/40 rounded-3xl p-6 text-left border border-slate-800/50">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="flex items-start space-x-3 text-sm">
+                            <i class="fa-solid fa-shield-halved text-blue-500 mt-1"></i>
+                            <div>
+                                <span class="block text-slate-200 font-bold">Secure</span>
+                                <span class="text-slate-500 text-xs">University Locked</span>
+                            </div>
+                        </div>
+                        <div class="flex items-start space-x-3 text-sm">
+                            <i class="fa-solid fa-bolt text-blue-500 mt-1"></i>
+                            <div>
+                                <span class="block text-slate-200 font-bold">Real-time</span>
+                                <span class="text-slate-500 text-xs">Zero Latency</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <!-- Version History Modal -->
-            <div id="history-modal" class="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 hidden">
-                <div class="bg-[#1e293b] w-full max-w-md rounded-3xl p-8 border border-slate-700">
-                    <div class="flex justify-between items-center mb-6">
-                        <h2 class="text-2xl font-bold text-blue-400">Android Downloads</h2>
-                        <i onclick="hideHistory()" class="fa-solid fa-times text-slate-500 cursor-pointer hover:text-white p-2"></i>
-                    </div>
-                    <div class="space-y-3">
+            <div id="history-modal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-6 z-50 hidden opacity-0 transition-opacity duration-300">
+                <div class="bg-[#1e293b] w-full max-w-lg rounded-[2.5rem] p-10 border border-slate-700 shadow-2xl relative">
+                    <button onclick="hideHistory()" class="absolute top-6 right-6 w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center hover:bg-slate-700 transition-colors">
+                        <i class="fa-solid fa-times text-slate-400"></i>
+                    </button>
+
+                    <h2 class="text-3xl font-bold text-white mb-2">Build Library</h2>
+                    <p class="text-slate-500 text-sm mb-8">Access historical versions of the Orbit client.</p>
+
+                    <div class="space-y-3 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
                         ${history.map(r => `
-                            <a href="/?download=true&v=${r.version}" class="flex items-center justify-between p-4 bg-[#0f172a] rounded-xl hover:ring-2 hover:ring-blue-500/50 transition-all">
+                            <div class="flex items-center justify-between p-5 bg-slate-900/50 rounded-2xl border border-slate-800 hover:border-blue-500/30 transition-all group">
                                 <div>
-                                    <div class="font-bold text-white">v${r.version}</div>
-                                    <div class="text-[10px] text-slate-500">Build ${r.build_number} | ${new Date(r.release_date).toLocaleDateString()}</div>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-lg font-bold text-white">v${r.version}</span>
+                                        <span class="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 text-[10px] font-bold uppercase">Build ${r.build_number}</span>
+                                    </div>
+                                    <div class="text-xs text-slate-500 mt-1">${new Date(r.release_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
                                 </div>
-                                <i class="fa-solid fa-download text-blue-400"></i>
-                            </a>
+                                <a href="/?download=true&v=${r.version}" class="w-12 h-12 rounded-xl bg-blue-500 flex items-center justify-center text-slate-900 hover:scale-110 transition-transform">
+                                    <i class="fa-solid fa-download"></i>
+                                </a>
+                            </div>
                         `).join('')}
-                        ${history.length === 0 ? '<p class="text-slate-500 text-center">No releases found. Upload cu_orbit.apk to server.</p>' : ''}
+                        ${history.length === 0 ? '<div class="text-center py-10 opacity-30"><i class="fa-solid fa-box-open text-5xl mb-4"></i><p>No releases cataloged yet.</p></div>' : ''}
                     </div>
                 </div>
             </div>
 
             <script>
-                function showHistory() { document.getElementById('history-modal').classList.remove('hidden'); }
-                function hideHistory() { document.getElementById('history-modal').classList.add('hidden'); }
+                function showHistory() {
+                    const m = document.getElementById('history-modal');
+                    m.classList.remove('hidden');
+                    setTimeout(() => m.classList.add('opacity-100'), 10);
+                }
+                function hideHistory() {
+                    const m = document.getElementById('history-modal');
+                    m.classList.remove('opacity-100');
+                    setTimeout(() => m.classList.add('hidden'), 300);
+                }
             </script>
         </body>
         </html>

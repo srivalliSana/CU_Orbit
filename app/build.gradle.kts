@@ -14,8 +14,8 @@ android {
         applicationId = "com.example.cu_orbit"
         minSdk = 24
         targetSdk = 36
-        versionCode = 20
-        versionName = "1.0.19"
+        versionCode = 21
+        versionName = "1.0.20"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -33,16 +33,47 @@ android {
     }
 }
 
-// AUTOMATION: Copy built APK to server downloads folder
-tasks.register<Copy>("publishApkToServer") {
+// AUTOMATION: Copy built APK to server downloads folder and register version
+tasks.register("publishApkToServer") {
     group = "distribution"
-    description = "Builds the debug APK and copies it to the server downloads folder"
+    description = "Builds the APK, copies it to server, and registers the release"
     dependsOn("assembleDebug")
-    from("build/outputs/apk/debug/app-debug.apk")
-    into("../server/downloads")
-    rename { "cu_orbit.apk" }
+    
     doLast {
-        println("✅ APK successfully copied to server/downloads/cu_orbit.apk")
+        val version = android.defaultConfig.versionName
+        val build = android.defaultConfig.versionCode
+        val fileName = "cu_orbit_v$version.apk"
+        val sourceFile = file("build/outputs/apk/debug/app-debug.apk")
+        val destDir = file("../server/downloads")
+        
+        if (!destDir.exists()) destDir.mkdirs()
+        
+        // 1. Copy the file
+        sourceFile.copyTo(file(destDir, fileName), overwrite = true)
+        // Also copy as 'latest' for direct links
+        sourceFile.copyTo(file(destDir, "cu_orbit.apk"), overwrite = true)
+        
+        println("✅ APK copied as $fileName and cu_orbit.apk")
+        
+        // 2. Register via API
+        try {
+            val url = java.net.URL("https://cumess.cutm.ac.in/api/system/register-release")
+            val conn = url.openConnection() as java.net.HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            
+            val json = """{"version": "$version", "build_number": $build, "filename": "$fileName"}"""
+            conn.outputStream.use { it.write(json.toByteArray()) }
+            
+            if (conn.responseCode == 200) {
+                println("🚀 Release v$version registered on server!")
+            } else {
+                println("⚠️ Server returned code: ${conn.responseCode}")
+            }
+        } catch (e: Exception) {
+            println("❌ Failed to register release: ${e.message}")
+        }
     }
 }
 
