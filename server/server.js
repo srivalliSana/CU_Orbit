@@ -25,10 +25,10 @@ app.use((req, res, next) => {
 });
 
 // STATIC FOLDERS
-const uploadDir \u003d path.join(__dirname, \u0027uploads\u0027);
+const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
-app.use(\u0027/uploads\u0027, express.static(uploadDir));
-app.use(express.static(path.join(__dirname, \u0027public\u0027)));
+app.use('/uploads', express.static(uploadDir));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // FILE UPLOAD SETUP
 const storage = multer.diskStorage({
@@ -216,7 +216,6 @@ async function routeMentionNotification(user, message) {
 const packageJson = require('./package.json');
 
 app.get('/', (req, res) => {
-    // If the user explicitly clicks download
     if (req.query.download === 'true') {
         const apkPath = path.join(__dirname, 'downloads', 'cu_orbit.apk');
         return res.download(apkPath, 'CU_Orbit.apk', (err) => {
@@ -224,7 +223,6 @@ app.get('/', (req, res) => {
         });
     }
 
-    // Professional Landing Page HTML
     res.send(`
         <!DOCTYPE html>
         <html lang="en">
@@ -252,7 +250,6 @@ app.get('/', (req, res) => {
             <div class="card">
                 <h1>CU Orbit</h1>
                 <p class="subtitle">The official professional messaging platform for our university.</p>
-
                 <div class="features">
                     <div class="feature-item">Secure University Authentication</div>
                     <div class="feature-item">WhatsApp-style Admin Controls</div>
@@ -260,23 +257,21 @@ app.get('/', (req, res) => {
                     <div class="feature-item">Multi-Workspace Management</div>
                     <div class="feature-item">Real-time Presence & Status Indicator</div>
                 </div>
-
-                \u003ca href\u003d"/?download\u003dtrue" class\u003d"btn btn-primary"\u003eDownload CU Orbit APK\u003c/a\u003e\n\n                \u003ca href\u003d"/portal" class\u003d"btn btn-secondary"\u003eContinue in Web\u003c/a\u003e\n
+                <a href="/?download=true" class="btn btn-primary">Download CU Orbit APK</a>
+                <a href="/portal" class="btn btn-secondary">Continue in Web</a>
                 <p class="footer">Version ${packageJson.version} | Compatible with Android 8.0+</p>
             </div>
-
-            <script>
-                function showNotice() {
-                    document.getElementById('web-notice').style.display = 'block';
-                }
-            </script>
         </body>
         </html>
     `);
 });
 
 // Web Portal Route
-app.get(\u0027/portal\u0027, (req, res) \u003d\u003e {\n    res.sendFile(path.join(__dirname, \u0027public\u0027, \u0027index.html\u0027));\n});\n\n// --- ROUTES ---
+app.get('/portal', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// --- ROUTES ---
 
 // AUTH
 app.post('/api/auth/login', async (req, res) => {
@@ -300,9 +295,7 @@ app.post('/api/auth/register', async (req, res) => {
     try {
         const { name, phone, email, avatarUrl, bio } = req.body;
         const handle = name.toLowerCase().replace(/\s+/g, '_') + '_' + phone.slice(-4);
-
         let user = await User.findOne({ where: { [Op.or]: [{ email }, { phone }] } });
-
         if (user) {
             user.name = name;
             user.phone = phone;
@@ -312,7 +305,6 @@ app.post('/api/auth/register', async (req, res) => {
         } else {
             user = await User.create({ name, phone, email, avatarUrl, bio, handle });
         }
-
         const gen = await Channel.findOne({ where: { name: 'general' } });
         if (gen) {
             await ChannelMember.create({ channelId: gen.id, userId: phone, role: 'member' });
@@ -331,19 +323,13 @@ app.get('/api/home/:userId/:workspaceId', async (req, res) => {
         const { userId, workspaceId } = req.params;
         const memberships = await ChannelMember.findAll({ where: { userId: userId } });
         const channelIds = memberships.map(m => m.channelId);
-
-        const channels = await Channel.findAll({
-            where: { workspace_id: workspaceId, id: { [Op.in]: channelIds } }
-        });
-
+        const channels = await Channel.findAll({ where: { workspace_id: workspaceId, id: { [Op.in]: channelIds } } });
         const channelsData = await Promise.all(channels.map(async (ch) => {
             const pref = await ConversationPref.findOne({ where: { userId, containerId: ch.id } });
             if (pref && pref.isHidden) return null;
-
             const lastMsg = await Message.findOne({ where: { channelId: ch.id }, order: [['timestamp', 'DESC']] });
             const unreadCount = await Message.count({ where: { channelId: ch.id, senderId: { [Op.ne]: userId }, status: { [Op.ne]: 'read' } } });
             const hasUnreadMention = await Mention.count({ where: { mentioned_user_id: userId, source_channel_id: ch.id, is_read: false } }) > 0;
-
             return {
                 ...ch.get({ plain: true }),
                 is_muted: pref ? pref.isMuted : !!ch.is_muted,
@@ -360,19 +346,14 @@ app.get('/api/home/:userId/:workspaceId', async (req, res) => {
                 has_unread_mention: hasUnreadMention
             };
         }));
-
         const users = await User.findAll({ where: { phone: { [Op.ne]: userId } } });
         const dms = await Promise.all(users.map(async (u) => {
             const dmId = userId < u.phone ? `${userId}_${u.phone}` : `${u.phone}_${userId}`;
             const pref = await ConversationPref.findOne({ where: { userId, containerId: dmId } });
-
             const lastMsg = await Message.findOne({ where: { dm_id: dmId }, order: [['timestamp', 'DESC']] });
-
             if (pref && pref.isHidden && !lastMsg) return null;
             if (pref && pref.isHidden && lastMsg && lastMsg.timestamp < pref.updatedAt) return null;
-
             const hasUnreadMention = await Mention.count({ where: { mentioned_user_id: userId, source_channel_id: dmId, is_read: false } }) > 0;
-
             return {
                 id: dmId,
                 other_user_id: u.phone,
@@ -391,7 +372,6 @@ app.get('/api/home/:userId/:workspaceId', async (req, res) => {
                 } : null
             };
         }));
-
         res.json({
             channels: channelsData.filter(c => c !== null).sort((a,b) => (b.is_pinned - a.is_pinned)),
             dms: dms.filter(d => d !== null).sort((a,b) => (b.is_pinned - a.is_pinned))
@@ -418,17 +398,14 @@ app.post('/api/conversations/:id/prefs', async (req, res) => {
         const { userId, action, value } = req.body;
         const containerId = req.params.id;
         const isTrue = (value === 'true' || value === true);
-
         const [pref] = await ConversationPref.findOrCreate({
             where: { userId, containerId },
             defaults: { userId, containerId, isPinned: false, isMuted: false, isHidden: false }
         });
-
         if (action === 'pin') pref.isPinned = isTrue;
         if (action === 'mute') pref.isMuted = isTrue;
         if (action === 'hide') pref.isHidden = isTrue;
         if (action === 'delete' && isTrue) pref.isHidden = true;
-
         await pref.save();
         res.json({ success: true, pref });
     } catch (e) {
@@ -450,7 +427,6 @@ app.get('/api/messages/:containerId', async (req, res) => {
                 include: [{ model: User, as: 'user', attributes: ['id', 'name', 'phone'] }]
             }]
         });
-
         res.json(messages.map(m => ({
             id: m.id,
             channel_id: m.channelId,
@@ -479,8 +455,6 @@ app.get('/api/messages/:containerId', async (req, res) => {
 app.post('/api/messages', async (req, res) => {
     try {
         const { senderId, senderName, body, channelId, type, senderAvatarUrl, mediaUrl, mentions, enrichedMentions } = req.body;
-
-        // Check restricted messaging
         if (channelId && !channelId.includes('_')) {
              const ch = await Channel.findByPk(channelId);
              if (ch && ch.restricted_messaging) {
@@ -490,44 +464,30 @@ app.post('/api/messages', async (req, res) => {
                  }
              }
         }
-
         const msg = await Message.create({
             senderId, senderName, body, channelId, type: type || 'text',
             senderAvatarUrl, dm_id: (channelId && channelId.includes('_')) ? channelId : null,
             attachments: mediaUrl ? [{ type: type, url: mediaUrl }] : []
         });
-
         const mentionedIds = new Set();
         if (enrichedMentions && Array.isArray(enrichedMentions)) {
-            for (const mData of enrichedMentions) {
-                mentionedIds.add(mData.phone);
-            }
+            for (const mData of enrichedMentions) { mentionedIds.add(mData.phone); }
         }
-        // B. Group Mentions (@all)
         if (body && (body.toLowerCase().includes('@all') || body.toLowerCase().includes('@everyone'))) {
             const members = await ChannelMember.findAll({ where: { channelId: channelId } });
             for (const member of members) {
-                if (normalizePhone(member.userId) !== normalizePhone(senderId)) {
-                    mentionedIds.add(member.userId);
-                }
+                if (normalizePhone(member.userId) !== normalizePhone(senderId)) { mentionedIds.add(member.userId); }
             }
         }
-
-        // C. Fallback: Auto-detect from text if no enriched mentions provided
         if (mentionedIds.size === 0 && body && body.includes('@')) {
             const members = await ChannelMember.findAll({ where: { channelId } });
             for (const m of members) {
                 if (normalizePhone(m.userId) === normalizePhone(senderId)) continue;
                 const user = await User.findOne({ where: { phone: m.userId } });
-                // Robust multi-word check
-                if (user && body.toLowerCase().includes(`@${user.name.toLowerCase()}`)) {
-                    mentionedIds.add(user.phone);
-                } else if (user && user.handle && body.toLowerCase().includes(`@${user.handle.toLowerCase()}`)) {
-                    mentionedIds.add(user.phone);
-                }
+                if (user && body.toLowerCase().includes(`@${user.name.toLowerCase()}`)) { mentionedIds.add(user.phone); }
+                else if (user && user.handle && body.toLowerCase().includes(`@${user.handle.toLowerCase()}`)) { mentionedIds.add(user.phone); }
             }
         }
-
         for (const uid of mentionedIds) {
             await Mention.findOrCreate({
                 where: { message_id: msg.id, mentioned_user_id: uid },
@@ -536,7 +496,6 @@ app.post('/api/messages', async (req, res) => {
             const user = await User.findOne({ where: { phone: uid } });
             if (user) routeMentionNotification(user, msg);
         }
-
         res.json(msg);
     } catch (e) {
         console.error('[MSG-ERROR]', e);
@@ -558,10 +517,7 @@ app.put('/api/messages/:id', async (req, res) => {
 
 app.get('/api/mentions/:userId', async (req, res) => {
     try {
-        const mentions = await Mention.findAll({
-            where: { mentioned_user_id: req.params.userId },
-            order: [['createdAt', 'DESC']]
-        });
+        const mentions = await Mention.findAll({ where: { mentioned_user_id: req.params.userId }, order: [['createdAt', 'DESC']] });
         const results = await Promise.all(mentions.map(async (m) => {
             const msg = await Message.findByPk(m.message_id);
             if (!msg) return null;
@@ -572,15 +528,8 @@ app.get('/api/mentions/:userId', async (req, res) => {
                 if (ch) sourceName = `#${ch.name}`;
             }
             return {
-                id: m.id,
-                message_id: m.message_id,
-                sender_id: msg.senderId,
-                sender_name: msg.senderName,
-                text: msg.body,
-                sent_at: msg.timestamp,
-                channel_id: m.source_channel_id,
-                channel_name: sourceName,
-                is_read: m.is_read
+                id: m.id, message_id: m.message_id, sender_id: msg.senderId, sender_name: msg.senderName,
+                text: msg.body, sent_at: msg.timestamp, channel_id: m.source_channel_id, channel_name: sourceName, is_read: m.is_read
             };
         }));
         res.json(results.filter(r => r !== null));
@@ -590,9 +539,7 @@ app.get('/api/mentions/:userId', async (req, res) => {
 app.post('/api/mentions/read-all', async (req, res) => {
     try {
         const { userId, containerId } = req.body;
-        await Mention.update({ is_read: true }, {
-            where: { mentioned_user_id: userId, source_channel_id: containerId }
-        });
+        await Mention.update({ is_read: true }, { where: { mentioned_user_id: userId, source_channel_id: containerId } });
         res.json({ success: true });
     } catch (e) { res.status(500).json(e); }
 });
@@ -600,10 +547,7 @@ app.post('/api/mentions/read-all', async (req, res) => {
 app.post('/api/mentions/:id/read', async (req, res) => {
     try {
         const mention = await Mention.findByPk(req.params.id);
-        if (mention) {
-            mention.is_read = true;
-            await mention.save();
-        }
+        if (mention) { mention.is_read = true; await mention.save(); }
         res.json({ success: true });
     } catch (e) { res.status(500).json(e); }
 });
@@ -621,9 +565,7 @@ app.post('/api/status', async (req, res) => {
             expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
         });
         if (mentions && Array.isArray(mentions)) {
-            for (const uid of mentions) {
-                await Mention.create({ message_id: status.id, mentioned_user_id: uid, source_channel_id: 'STATUS', is_read: false });
-            }
+            for (const uid of mentions) { await Mention.create({ message_id: status.id, mentioned_user_id: uid, source_channel_id: 'STATUS', is_read: false }); }
         }
         res.json(status);
     } catch (e) { res.status(500).json(e); }
@@ -659,36 +601,24 @@ app.put('/api/users/:phone', async (req, res) => {
 
 // WORKSPACES
 app.get('/api/workspaces', async (req, res) => {
-    try {
-        res.json(await Workspace.findAll({ include: [{ model: Channel, as: 'channels' }] }));
-    } catch (e) { res.json([]); }
+    try { res.json(await Workspace.findAll({ include: [{ model: Channel, as: 'channels' }] })); } catch (e) { res.json([]); }
 });
 
 app.post('/api/workspaces/:workspaceId/channels', async (req, res) => {
     try {
         const { name, type, userId, description } = req.body;
         const channel = await Channel.create({
-            workspace_id: req.params.workspaceId,
-            name: name,
-            type: type || 'public',
-            topic: description || '',
-            invite_code: crypto.randomBytes(4).toString('hex'),
-            created_by: userId
+            workspace_id: req.params.workspaceId, name, type: type || 'public',
+            topic: description || '', invite_code: crypto.randomBytes(4).toString('hex'), created_by: userId
         });
         if (userId) await ChannelMember.create({ channelId: channel.id, userId: userId, role: 'admin' });
         res.json(channel);
-    } catch (e) {
-        console.error(e);
-        res.status(500).json(e);
-    }
+    } catch (e) { console.error(e); res.status(500).json(e); }
 });
 
 // CHANNELS
 app.get('/api/channels/:id', async (req, res) => {
-    try {
-        const ch = await Channel.findByPk(req.params.id);
-        res.json(ch);
-    } catch (e) { res.status(500).json(e); }
+    try { const ch = await Channel.findByPk(req.params.id); res.json(ch); } catch (e) { res.status(500).json(e); }
 });
 
 app.put('/api/channels/:id', async (req, res) => {
@@ -739,9 +669,7 @@ app.delete('/api/channels/:id/members/:userId', async (req, res) => {
             const channel = await Channel.findByPk(req.params.id);
             if (channel) await channel.decrement('member_count');
             res.json({ success: true });
-        } else {
-            res.status(404).json({ error: 'Member not found' });
-        }
+        } else { res.status(404).json({ error: 'Member not found' }); }
     } catch (e) { res.status(500).json(e); }
 });
 
@@ -750,11 +678,7 @@ app.post('/api/channels/join-by-link', async (req, res) => {
         const { inviteCode, userId } = req.body;
         const channel = await Channel.findOne({ where: { invite_code: inviteCode } });
         if (!channel) return res.status(404).json({ error: 'Invalid link' });
-
-        if (channel.approval_required) {
-             return res.json({ success: true, pendingApproval: true });
-        }
-
+        if (channel.approval_required) { return res.json({ success: true, pendingApproval: true }); }
         const [member, created] = await ChannelMember.findOrCreate({ where: { channelId: channel.id, userId: userId }, defaults: { channelId: channel.id, userId: userId, role: 'member' } });
         if (created) {
             await channel.increment('member_count');
