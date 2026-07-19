@@ -13,18 +13,40 @@
 B=http://localhost:3000
 mk() { node -e "console.log(require('jsonwebtoken').sign({sub:'x',email:'$1',name:'$2',role:'student'},'test-campus-secret',{algorithm:'HS256',expiresIn:300,audience:'cu-orbit'}))"; }
 
-SA=$(curl -s -X POST $B/api/auth/sso -H 'Content-Type: application/json' -d "{\"token\":\"$(mk alice@cutm.ac.in Alice)\"}")
-SB=$(curl -s -X POST $B/api/auth/sso -H 'Content-Type: application/json' -d "{\"token\":\"$(mk bob@cutm.ac.in Bob)\"}")
-TA=$(echo "$SA" | node -pe 'JSON.parse(require("fs").readFileSync(0)).session')
-TB=$(echo "$SB" | node -pe 'JSON.parse(require("fs").readFileSync(0)).session')
-IA=$(echo "$SA" | node -pe 'JSON.parse(require("fs").readFileSync(0)).user.id')
-IB=$(echo "$SB" | node -pe 'JSON.parse(require("fs").readFileSync(0)).user.id')
-echo "alice=$IA"; echo "bob=$IB"; echo
+set -u
+
+# jq-free field read that tolerates missing keys instead of throwing.
+field() { node -pe 'const o=JSON.parse(require("fs").readFileSync(0)||"{}");process.argv[1].split(".").reduce((a,k)=>a&&a[k],o)??""' "$1" 2>/dev/null; }
+
+login() { # email name -> "session id" or empty
+  local r; r=$(curl -s -X POST "$B/api/auth/sso" -H 'Content-Type: application/json' -d "{\"token\":\"$(mk "$1" "$2")\"}")
+  local s i; s=$(echo "$r" | field session); i=$(echo "$r" | field user.id)
+  if [ -z "$s" ] || [ -z "$i" ]; then
+    echo "PRECONDITION FAILED: could not sign in $1" >&2
+    echo "  server said: $(echo "$r" | head -c 300)" >&2
+    echo "  the assertions below would all be meaningless, so stopping here." >&2
+    exit 1
+  fi
+  echo "$s $i"
+}
+
+read -r TA IA <<<"$(login alice@cutm.ac.in Alice)"
+read -r TB IB <<<"$(login bob@cutm.ac.in Bob)"
+read -r TC IC <<<"$(login carol@cutm.ac.in Carol)"
+echo "alice=$IA"; echo "bob=$IB"; echo "carol=$IC"; echo
 
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
+PASSES=0; FAILURES=0
 chk() { # desc expected actual
-  if [ "$2" = "$3" ]; then echo "  PASS  $1 (got $3)"; else echo "  FAIL  $1 (want $2, got $3)"; fi
+  if [ "$2" = "$3" ]; then echo "  PASS  $1 (got $3)"; PASSES=$((PASSES+1));
+  else echo "  FAIL  $1 (want $2, got $3)"; FAILURES=$((FAILURES+1)); fi
 }
+summary() {
+  echo; echo "$PASSES passed, $FAILURES failed"
+  [ "$FAILURES" -eq 0 ] || { echo "AUTHORIZATION TEST FAILED — do not deploy."; exit 1; }
+  echo "All authorization checks passed."
+}
+trap summary EXIT
 
 echo "--- identity is taken from the session, not the path ---"
 ME=$(curl -s -H "Authorization: Bearer $TA" "$B/api/home/quick-access/$IB" -o /dev/null -w '%{http_code}')
@@ -36,9 +58,6 @@ SEND=$(code -X POST $B/api/messages -H "Authorization: Bearer $TA" -H 'Content-T
 chk "alice can post to her own DM room" 200 "$SEND"
 
 echo "--- a third party must not read that DM ---"
-OUT=$(mk carol@cutm.ac.in Carol)
-SC=$(curl -s -X POST $B/api/auth/sso -H 'Content-Type: application/json' -d "{\"token\":\"$OUT\"}")
-TC=$(echo "$SC" | node -pe 'JSON.parse(require("fs").readFileSync(0)).session')
 chk "carol reading alice+bob's DM" 403 "$(code -H "Authorization: Bearer $TC" $B/api/messages/$DM)"
 chk "bob reading his own DM with alice" 200 "$(code -H "Authorization: Bearer $TB" $B/api/messages/$DM)"
 
@@ -53,9 +72,13 @@ chk "alice editing bob's message" 403 "$(code -X PUT $B/api/messages/$MID -H "Au
 chk "bob editing his own message" 200 "$(code -X PUT $B/api/messages/$MID -H "Authorization: Bearer $TB" -H 'Content-Type: application/json' -d '{"body":"edited"}')"
 
 echo "--- profile edits are self-only ---"
-curl -s -X PUT $B/api/users/0000000000 -H "Authorization: Bearer $TA" -H 'Content-Type: application/json' -d '{"bio":"alice was here"}' -o /dev/null
-BOBBIO=$(curl -s -H "Authorization: Bearer $TB" $B/api/auth/me | node -pe 'JSON.parse(require("fs").readFileSync(0)).user.bio')
-chk "alice's write did not land on bob" "true" "$([ "$BOBBIO" != "alice was here" ] && echo true || echo false)"
+# Alice targets bob's row by path param. The write must land on her own profile.
+curl -s -X PUT "$B/api/users/0000000000" -H "Authorization: Bearer $TA" -H 'Content-Type: application/json' -d '{"bio":"alice was here"}' -o /dev/null
+BOBBIO=$(curl -s -H "Authorization: Bearer $TB" "$B/api/auth/me" | field user.bio)
+ALICEBIO=$(curl -s -H "Authorization: Bearer $TA" "$B/api/auth/me" | field user.bio)
+# Assert positively on both sides: an empty read must not be mistaken for safety.
+chk "alice's own bio was updated"        "alice was here" "$ALICEBIO"
+chk "bob's bio was left alone"           "true"           "$([ -n "$BOBBIO" ] && [ "$BOBBIO" != "alice was here" ] && echo true || echo false)"
 
 echo "--- unauthenticated still blocked ---"
 chk "no token" 401 "$(code $B/api/messages/$DM)"
