@@ -46,3 +46,25 @@ export const createGroup = ({ name, description, type, members }) =>
     method: 'POST',
     body: JSON.stringify({ name, description, type, members }),
   });
+
+// --- People (CampusOne directory is authoritative) ---
+
+export const searchDirectory = (q) =>
+  api(`/api/directory/search?q=${encodeURIComponent(q || '')}`);
+
+export const getPerson = ({ id, email }) =>
+  api(`/api/directory/person?${id ? `id=${encodeURIComponent(id)}` : `email=${encodeURIComponent(email)}`}`);
+
+/** Opens a DM, creating their account from the directory if this is the first. */
+export const startDm = (email) =>
+  api('/api/directory/dm', { method: 'POST', body: JSON.stringify({ email }) });
+
+// --- Read state ---
+
+export const markConversationRead = (containerId) =>
+  api(`/api/conversations/${encodeURIComponent(containerId)}/read`, { method: 'POST', body: '{}' })
+    .catch(() => {});   // best-effort; never block the UI
+
+export const getReads = (messageId) => api(`/api/messages/${messageId}/reads`);
+
+export const getUnread = () => api('/api/unread').catch(() => ({ total: 0 }));

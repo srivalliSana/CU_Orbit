@@ -5,6 +5,7 @@ import ChatList from './components/ChatList';
 import ChatWindow from './components/ChatWindow';
 import EmptyState from './components/EmptyState';
 import NewGroupModal from './components/NewGroupModal';
+import ContactPanel from './components/ContactPanel';
 import { notifyMessage, permission, requestPermission, setBadge } from './lib/notify';
 
 export default function App() {
@@ -15,6 +16,7 @@ export default function App() {
   const [active, setActive] = useState(null);
   const [newGroup, setNewGroup] = useState(false);
   const [askNotify, setAskNotify] = useState(false);
+  const [contact, setContact] = useState(null);   // { id?, email } shown in the side panel
   const seen = useRef(null);   // last-seen unread snapshot, for notifications
 
   useEffect(() => {
@@ -111,10 +113,19 @@ export default function App() {
         activeId={active?.id}
         onSelect={setActive}
         onNewGroup={() => setNewGroup(true)}
+        onOpenContact={setContact}
       />
       {active
-        ? <ChatWindow key={active.id} chat={active} user={user} onSent={refreshChats} />
+        ? <ChatWindow key={active.id} chat={active} user={user} onSent={refreshChats} onOpenContact={setContact} />
         : <EmptyState user={user} onNewGroup={() => setNewGroup(true)} />}
+
+      {contact && (
+        <ContactPanel
+          target={contact}
+          onClose={() => setContact(null)}
+          onOpenChat={(chat) => { setContact(null); setActive(chat); refreshChats(); }}
+        />
+      )}
 
       {askNotify && (
         <div className="absolute bottom-4 left-4 z-40 flex max-w-sm items-center gap-3 rounded-xl bg-white p-3 shadow-lg ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">

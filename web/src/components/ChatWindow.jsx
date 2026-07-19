@@ -2,12 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import Avatar from './Avatar';
 import MessageBubble from './MessageBubble';
 import Composer from './Composer';
-import { getMessages, getTyping, sendMessage, uploadFile } from '../api/chat';
-import { dayLabel } from '../lib/format';
+import { getMessages, getTyping, markConversationRead, sendMessage, uploadFile } from '../api/chat';
+import { dayLabel, lastSeenLabel } from '../lib/format';
 
 const POLL_MS = 3000;
 
-export default function ChatWindow({ chat, user, onSent }) {
+export default function ChatWindow({ chat, user, onSent, onOpenContact }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [typing, setTyping] = useState([]);
@@ -28,6 +28,16 @@ export default function ChatWindow({ chat, user, onSent }) {
     const t = setInterval(load, POLL_MS);
     return () => { alive = false; clearInterval(t); };
   }, [chat.id]);
+
+  // Marking read is deliberately tied to the messages we have actually shown,
+  // not merely to opening the chat, so a receipt means it was on screen.
+  useEffect(() => {
+    if (!messages.length) return;
+    if (document.visibilityState !== 'visible') return;
+    const incoming = messages.some((m) => m.sender_id !== user?.id && m.status !== 'read');
+    if (!incoming) return;
+    markConversationRead(chat.id).then(() => onSent?.());
+  }, [messages, chat.id, user?.id]);
 
   useEffect(() => {
     if (chat.kind !== 'channel') return;
@@ -89,17 +99,23 @@ export default function ChatWindow({ chat, user, onSent }) {
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-slate-50 dark:bg-slate-950">
       <header className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900">
-        <Avatar name={chat.title} kind={chat.kind === 'channel' ? 'channel' : undefined} presence={chat.presence} size={40} />
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{chat.title}</p>
-          <p className="truncate text-xs text-slate-500">
-            {typing.length > 0
-              ? `${typing.map((t) => t.userName).join(', ')} typing…`
-              : chat.kind === 'dm'
-                ? (chat.presence === 'online' ? 'Online' : 'Offline')
-                : (chat.topic || 'Channel')}
-          </p>
-        </div>
+        <button
+          onClick={() => chat.kind === 'dm' && chat.email && onOpenContact?.({ email: chat.email })}
+          disabled={chat.kind !== 'dm' || !chat.email}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default"
+        >
+          <Avatar name={chat.title} kind={chat.kind === 'channel' ? 'channel' : undefined} presence={chat.presence} size={40} />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{chat.title}</p>
+            <p className="truncate text-xs text-slate-500">
+              {typing.length > 0
+                ? `${typing.map((t) => t.userName).join(', ')} typing…`
+                : chat.kind === 'dm'
+                  ? lastSeenLabel(chat.presence, chat.last_seen_at)
+                  : (chat.topic || 'Channel')}
+            </p>
+          </div>
+        </button>
       </header>
 
       <div ref={scroller} onScroll={onScroll} className="flex-1 overflow-y-auto px-4 py-4">
@@ -119,7 +135,12 @@ export default function ChatWindow({ chat, user, onSent }) {
                   </span>
                 </div>
               )}
-              <MessageBubble message={m} own={m.sender_id === user?.id} showSender={chat.kind === 'channel'} />
+              <MessageBubble
+                message={m}
+                own={m.sender_id === user?.id}
+                showSender={chat.kind === 'channel'}
+                isGroup={chat.kind === 'channel'}
+              />
             </React.Fragment>
           );
         })}

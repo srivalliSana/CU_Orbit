@@ -1,16 +1,42 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Avatar from './Avatar';
 import { timeLabel } from '../lib/format';
+import { searchDirectory } from '../api/chat';
 
 /** Left pane: search, then channels and direct messages. */
 // Mirrors GROUP_CREATE_ROLES on the server. The server is the authority; this
 // only avoids showing an action that would be refused.
 const CAN_CREATE_GROUPS = ['faculty', 'admin', 'examcell', 'coordinator'];
 
-export default function ChatList({ user, chats, activeId, onSelect, onNewGroup }) {
+export default function ChatList({ user, chats, activeId, onSelect, onNewGroup, onOpenContact }) {
   const canCreate = CAN_CREATE_GROUPS.includes(user?.role);
   const [q, setQ] = useState('');
   const [tab, setTab] = useState('all');   // all | channels | dms
+  const [people, setPeople] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const searchSeq = useRef(0);
+
+  // Search the campus directory as well as open conversations, so anyone at the
+  // university can be found — not only people already messaged. Debounced, and
+  // stale responses are discarded so a slow reply cannot overwrite a newer one.
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < 2) { setPeople([]); setSearching(false); return; }
+
+    setSearching(true);
+    const seq = ++searchSeq.current;
+    const timer = setTimeout(() => {
+      searchDirectory(term)
+        .then((d) => {
+          if (seq !== searchSeq.current) return;
+          setPeople(d.results || []);
+        })
+        .catch(() => { if (seq === searchSeq.current) setPeople([]); })
+        .finally(() => { if (seq === searchSeq.current) setSearching(false); });
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [q]);
 
   const { channels, dms } = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -75,6 +101,30 @@ export default function ChatList({ user, chats, activeId, onSelect, onNewGroup }
           <p className="px-4 py-8 text-center text-sm text-slate-400">
             {q ? 'No conversations match your search.' : 'No conversations yet.'}
           </p>
+        )}
+
+        {q.trim().length >= 2 && (
+          <Section title={searching ? 'People · searching…' : 'People'}>
+            {!searching && people.length === 0 && (
+              <p className="px-4 py-3 text-xs text-slate-400">Nobody in the campus directory matches.</p>
+            )}
+            {people.map((p) => (
+              <button
+                key={p.email}
+                onClick={() => onOpenContact({ id: p.id, email: p.email })}
+                className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/60"
+              >
+                <Avatar name={p.name} url={p.avatarUrl} presence={p.presence} size={44} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{p.name}</p>
+                  <p className="truncate text-xs text-slate-500">
+                    {[p.role, p.department || p.cohort].filter(Boolean).join(' · ')}
+                  </p>
+                </div>
+                {!p.in_orbit && <span className="shrink-0 text-[10px] text-slate-400">not on Orbit</span>}
+              </button>
+            ))}
+          </Section>
         )}
 
         {showChannels && (

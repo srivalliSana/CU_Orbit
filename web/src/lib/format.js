@@ -44,3 +44,25 @@ export function colorFor(name = '') {
 
 export const initials = (name = '') =>
   name.trim().split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase() || '?';
+
+/** "last seen today at 14:03" / "online" — WhatsApp-style presence line. */
+export function lastSeenLabel(presence, lastSeenAt) {
+  if (presence === 'online') return 'online';
+  if (!lastSeenAt) return '';
+  const d = new Date(lastSeenAt);
+  if (Number.isNaN(d.getTime())) return '';
+
+  const now = new Date();
+  const mins = Math.floor((now - d) / 60000);
+  if (mins < 1) return 'last seen just now';
+  if (mins < 60) return `last seen ${mins} min ago`;
+
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (sameDay(d, now)) return `last seen today at ${time}`;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (sameDay(d, yesterday)) return `last seen yesterday at ${time}`;
+
+  return `last seen ${d.toLocaleDateString([], { day: 'numeric', month: 'short' })} at ${time}`;
+}
