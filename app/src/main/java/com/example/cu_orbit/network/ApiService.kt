@@ -34,6 +34,10 @@ interface ApiService {
     @GET("unread")
     suspend fun getUnread(): UnreadResponse
 
+    /** Current published build, for the in-app update prompt. */
+    @GET("system/latest-version")
+    suspend fun latestVersion(): LatestVersion
+
     @POST("auth/login")
     suspend fun login(@Body body: Map<String, String>): Map<String, Any>
 

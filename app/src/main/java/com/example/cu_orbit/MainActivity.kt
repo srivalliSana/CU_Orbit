@@ -19,6 +19,9 @@ import androidx.appcompat.app.AppCompatDelegate
 import android.content.Context
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
+import com.example.cu_orbit.network.RealtimeClient
+import com.example.cu_orbit.network.SessionManager
+import com.example.cu_orbit.network.UpdateChecker
 import kotlinx.coroutines.launch
 import coil.load
 import com.google.android.material.imageview.ShapeableImageView
@@ -30,6 +33,14 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
+
+        SessionManager.init(this)
+        // Realtime for the whole session; individual screens join their own rooms.
+        RealtimeClient.connect()
+
+        // Old builds are not kept, so anyone behind the current one is prompted
+        // to move to it. Silent if the check fails or the app is up to date.
+        lifecycleScope.launch { UpdateChecker.check(this@MainActivity) }
         
         // Handle system bars properly for edge-to-edge
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.drawer_layout)) { v, insets ->

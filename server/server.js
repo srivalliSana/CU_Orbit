@@ -613,6 +613,42 @@ function touchLastSeen(userId) {
 // middleware placed here would run before req.user exists.
 auth.setOnAuthenticated(touchLastSeen);
 
+/**
+ * Latest published build, for the in-app update check.
+ *
+ * Public: the landing page and the app both ask before anyone is signed in, and
+ * it exposes nothing beyond what the download page already shows.
+ */
+app.get('/api/system/latest-version', async (req, res) => {
+    try {
+        const latest = await Release.findOne({ order: [['build_number', 'DESC']] });
+        if (!latest) return res.json({ available: false });
+
+        // Only advertise a build whose file is actually here, or the app will
+        // prompt for an update it cannot download.
+        const name = isSafeApkName(latest.filename) ? latest.filename : 'cu_orbit.apk';
+        const onDisk = fs.existsSync(path.join(__dirname, 'downloads', name))
+            ? name
+            : (fs.existsSync(path.join(__dirname, 'downloads', 'cu_orbit.apk')) ? 'cu_orbit.apk' : null);
+        if (!onDisk) return res.json({ available: false });
+
+        res.json({
+            available: true,
+            version: latest.version,
+            build_number: latest.build_number,
+            download_url: `/downloads/${onDisk}`,
+            released_at: latest.release_date,
+        });
+    } catch (e) {
+        // The app treats a failure as "no update", so this must not be fatal.
+        res.json({ available: false });
+    }
+});
+
+// Serve APKs directly so the app can download without going through the
+// landing page's HTML.
+app.use('/downloads', express.static(path.join(__dirname, 'downloads')));
+
 // --- PEOPLE DIRECTORY (CampusOne-backed) ---
 
 /**
