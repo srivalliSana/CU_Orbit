@@ -53,10 +53,12 @@ tasks.register("publishApkToServer") {
     val sourceApk = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk")
     val destDirectory = layout.projectDirectory.dir("../server/downloads")
 
-    // Read at configuration time too: touching `project` inside doLast is
-    // unsupported with the configuration cache.
-    val releaseToken = System.getenv("RELEASE_TOKEN")
-        ?: project.findProperty("releaseToken") as String?
+    // Read through providers, not System.getenv/findProperty: those are not
+    // tracked as configuration-cache inputs, so a changed token was cached and
+    // the task kept sending the old one.
+    val releaseToken = providers.environmentVariable("RELEASE_TOKEN")
+        .orElse(providers.gradleProperty("releaseToken"))
+        .orNull
 
     doLast {
         val version = versionName
