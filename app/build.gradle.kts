@@ -118,6 +118,9 @@ dependencies {
     implementation("io.coil-kt:coil:2.5.0")
     // Custom Tabs for the CampusOne sign-in handoff
     implementation("androidx.browser:browser:1.8.0")
+    // Realtime messaging. Excludes org.json, which Android already provides —
+    // duplicating it breaks the build.
+    implementation("io.socket:socket.io-client:2.1.0") { exclude(group = "org.json", module = "json") }
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)

@@ -13,6 +13,27 @@ interface ApiService {
     @GET("auth/me")
     suspend fun me(): MeResponse
 
+    // --- People. CampusOne is authoritative for who exists. ---
+    @GET("directory/search")
+    suspend fun searchDirectory(@Query("q") q: String): DirectorySearchResponse
+
+    @GET("directory/person")
+    suspend fun getPerson(@Query("email") email: String? = null, @Query("id") id: String? = null): PersonResponse
+
+    /** Opens a DM, creating their account from the directory if this is the first. */
+    @POST("directory/dm")
+    suspend fun startDm(@Body body: Map<String, String>): StartDmResponse
+
+    // --- Read state ---
+    @POST("conversations/{id}/read")
+    suspend fun markConversationRead(@Path("id") containerId: String, @Body body: Map<String, String> = emptyMap()): Map<String, Any>
+
+    @GET("messages/{id}/reads")
+    suspend fun getMessageReads(@Path("id") messageId: String): MessageReadsResponse
+
+    @GET("unread")
+    suspend fun getUnread(): UnreadResponse
+
     @POST("auth/login")
     suspend fun login(@Body body: Map<String, String>): Map<String, Any>
 
