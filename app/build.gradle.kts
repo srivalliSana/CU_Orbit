@@ -64,20 +64,30 @@ tasks.register("publishApkToServer") {
         println("✅ APK copied as $fileName and cu_orbit.apk")
         
         // 2. Register via API
-        try {
+        // The endpoint now requires a machine credential. Supply it out of band —
+        // never commit it: set RELEASE_TOKEN in the environment, or releaseToken
+        // in ~/.gradle/gradle.properties.
+        val releaseToken = System.getenv("RELEASE_TOKEN")
+            ?: project.findProperty("releaseToken") as String?
+
+        if (releaseToken.isNullOrBlank()) {
+            println("⚠️ RELEASE_TOKEN not set — APK copied but not registered on the server.")
+            println("   Set it in the environment or as releaseToken in ~/.gradle/gradle.properties.")
+        } else try {
             val url = URL("https://cumess.cutm.ac.in/api/system/register-release")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("x-release-token", releaseToken)
             conn.doOutput = true
-            
+
             val json = """{"version": "$version", "build_number": $build, "filename": "$fileName"}"""
             conn.outputStream.use { it.write(json.toByteArray(Charsets.UTF_8)) }
-            
-            if (conn.responseCode == 200) {
-                println("🚀 Release v$version registered on server!")
-            } else {
-                println("⚠️ Server returned code: ${conn.responseCode}")
+
+            when (conn.responseCode) {
+                200 -> println("🚀 Release v$version registered on server!")
+                401 -> println("❌ Release rejected: RELEASE_TOKEN does not match the server's.")
+                else -> println("⚠️ Server returned code: ${conn.responseCode}")
             }
         } catch (e: Exception) {
             println("❌ Failed to register release: ${e.message}")

@@ -203,8 +203,25 @@ Mention.belongsTo(User, { foreignKey: 'mentioned_user_id', targetKey: 'phone', a
 // SYNC
 sequelize.authenticate()
     .then(async () => {
-        await sequelize.sync({ alter: true });
-        console.log('✅ MySQL Connected & Schema Synced');
+        // DB_SYNC controls how much the process is allowed to change the schema
+        // on boot. 'alter' rewrites live tables to match the models on every
+        // restart — combined with a crash loop that is a lot of unattended DDL,
+        // and it silently drops anything the models no longer describe.
+        //
+        //   alter  - reconcile existing tables (dev, and pre-launch only)
+        //   safe   - create missing tables, never modify existing ones (default)
+        //   off    - touch nothing; schema is managed entirely by migrations
+        const mode = process.env.DB_SYNC || 'safe';
+        if (mode === 'off') {
+            console.log('✅ MySQL Connected (DB_SYNC=off — schema untouched)');
+        } else if (mode === 'alter') {
+            console.warn('⚠️ DB_SYNC=alter — altering live tables to match models. Not for production.');
+            await sequelize.sync({ alter: true });
+            console.log('✅ MySQL Connected & Schema Altered');
+        } else {
+            await sequelize.sync();
+            console.log('✅ MySQL Connected & Schema Synced (missing tables created; existing left alone)');
+        }
 
         const [ws] = await Workspace.findOrCreate({
             where: { slug: 'cu-orbit' },
@@ -268,8 +285,14 @@ app.get('/', async (req, res) => {
             console.error('Landing page: could not look up release —', e.message);
         }
         release = release || history[0];
-        const apkPath = path.join(__dirname, 'downloads', release ? release.filename : 'cu_orbit.apk');
-        return res.download(apkPath, release ? release.filename : 'CU_Orbit.apk');
+        // Re-validate at the point of use: rows predating the check above, or
+        // written by any other path, must not be able to escape the directory.
+        const name = release && isSafeApkName(release.filename) ? release.filename : 'cu_orbit.apk';
+        const apkPath = path.join(__dirname, 'downloads', name);
+        if (!apkPath.startsWith(path.join(__dirname, 'downloads') + path.sep)) {
+            return res.status(400).send('Invalid release');
+        }
+        return res.download(apkPath, name);
     }
 
     res.send(`
@@ -404,12 +427,46 @@ app.get('/', async (req, res) => {
 });
 
 // Add a route to register new releases (used by Gradle automation)
+// APK filenames only. Anything else — path separators, traversal, unexpected
+// extensions — is rejected before it can reach a filesystem call.
+const SAFE_APK = /^[A-Za-z0-9._-]+\.apk$/;
+const isSafeApkName = (n) => typeof n === 'string' && SAFE_APK.test(n) && !n.includes('..') && path.basename(n) === n;
+
+/**
+ * Called by the Gradle publish task, not by a signed-in user, so it takes a
+ * machine credential rather than a session.
+ *
+ * Previously unauthenticated, and its filename was concatenated into a path
+ * that the public landing page then serves via res.download — so anyone could
+ * register "../../../../etc/passwd" and read it back over HTTP. Both halves are
+ * closed here: the credential, and the filename shape.
+ */
 app.post('/api/system/register-release', async (req, res) => {
+    const expected = process.env.RELEASE_TOKEN;
+    if (!expected) {
+        console.error('[release] RELEASE_TOKEN is not set — refusing to register releases.');
+        return res.status(503).json({ error: 'not_configured' });
+    }
+    const supplied = req.get('x-release-token') || '';
+    // Constant-time compare; lengths are padded so a mismatch does not leak size.
+    const a = Buffer.from(String(supplied).padEnd(64).slice(0, 64));
+    const b = Buffer.from(String(expected).padEnd(64).slice(0, 64));
+    if (!crypto.timingSafeEqual(a, b)) {
+        console.warn('[release] rejected registration with bad token from', req.ip);
+        return res.status(401).json({ error: 'unauthorized' });
+    }
+
     try {
         const { version, build_number, filename } = req.body;
+        if (!isSafeApkName(filename)) {
+            return res.status(400).json({ error: 'bad_request', message: 'filename must be a plain .apk name' });
+        }
+        if (!version || !Number.isInteger(build_number)) {
+            return res.status(400).json({ error: 'bad_request', message: 'version and integer build_number required' });
+        }
         const release = await Release.create({ version, build_number, filename });
         res.json({ success: true, release });
-    } catch (e) { res.status(500).json(e); }
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
 // Web Portal Route
