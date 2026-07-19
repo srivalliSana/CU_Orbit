@@ -67,7 +67,14 @@ const User = sequelize.define('User', {
     // account can exist before it is claimed via SSO; unique so it can never
     // point at two Orbit users.
     campus_email: { type: DataTypes.STRING, unique: true, allowNull: true },
-    role: { type: DataTypes.ENUM('student', 'faculty', 'admin'), defaultValue: 'student' },
+    // Mirrors CampusOne's role set: roleFor() yields student/faculty/admin, and
+    // org_roles can elevate to examcell or coordinator. Keep these in step with
+    // lib/auth-options.ts there, or elevated users get silently downgraded.
+    role: { type: DataTypes.ENUM('student', 'faculty', 'admin', 'examcell', 'coordinator'), defaultValue: 'student' },
+    // Carried from the handoff token — drives auto-provisioning of cohort and
+    // campus channels without CU Orbit querying the roster on every login.
+    cohort: { type: DataTypes.STRING, allowNull: true },
+    campus: { type: DataTypes.STRING, allowNull: true },
     // Phone is no longer an identity key — retained as contact detail and as the
     // join key for matching legacy rows against roster.mobile.
     phone: { type: DataTypes.STRING, unique: true, allowNull: true },
@@ -421,6 +428,8 @@ app.get('/portal', (req, res) => {
  * it, project that person into our Users table, and hand back an Orbit session
  * token. The handoff token is never stored and is good for one exchange.
  */
+const ROLES = ['student', 'faculty', 'admin', 'examcell', 'coordinator'];
+
 app.post('/api/auth/sso', async (req, res) => {
     try {
         const { token } = req.body;
@@ -435,7 +444,7 @@ app.post('/api/auth/sso', async (req, res) => {
         }
 
         const campusEmail = String(claims.email).toLowerCase();
-        const role = ['student', 'faculty', 'admin'].includes(claims.role) ? claims.role : 'student';
+        const role = ROLES.includes(claims.role) ? claims.role : 'student';
 
         // Find by campus link first; fall back to a legacy row matched on email
         // so pre-SSO accounts adopt their CampusOne identity instead of forking.
@@ -446,6 +455,8 @@ app.post('/api/auth/sso', async (req, res) => {
             user.campus_email = campusEmail;
             user.name = claims.name || user.name;
             user.role = role;
+            if (claims.cohort) user.cohort = claims.cohort;
+            if (claims.campus) user.campus = claims.campus;
             await user.save();
         } else {
             const base = (claims.name || campusEmail.split('@')[0]).toLowerCase().replace(/\s+/g, '_');
@@ -454,6 +465,8 @@ app.post('/api/auth/sso', async (req, res) => {
                 email: campusEmail,
                 name: claims.name || campusEmail.split('@')[0],
                 role,
+                cohort: claims.cohort || null,
+                campus: claims.campus || null,
                 handle: `${base}_${crypto.randomBytes(2).toString('hex')}`,
             });
         }
