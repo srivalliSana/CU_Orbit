@@ -53,6 +53,11 @@ tasks.register("publishApkToServer") {
     val sourceApk = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk")
     val destDirectory = layout.projectDirectory.dir("../server/downloads")
 
+    // Read at configuration time too: touching `project` inside doLast is
+    // unsupported with the configuration cache.
+    val releaseToken = System.getenv("RELEASE_TOKEN")
+        ?: project.findProperty("releaseToken") as String?
+
     doLast {
         val version = versionName
         val build = versionCode
@@ -68,13 +73,8 @@ tasks.register("publishApkToServer") {
         
         println("✅ APK copied as $fileName and cu_orbit.apk")
         
-        // 2. Register via API
-        // The endpoint now requires a machine credential. Supply it out of band —
-        // never commit it: set RELEASE_TOKEN in the environment, or releaseToken
-        // in ~/.gradle/gradle.properties.
-        val releaseToken = System.getenv("RELEASE_TOKEN")
-            ?: project.findProperty("releaseToken") as String?
-
+        // 2. Register via API. The endpoint requires a machine credential;
+        // supply it out of band — never commit it. See the capture above.
         if (releaseToken.isNullOrBlank()) {
             println("⚠️ RELEASE_TOKEN not set — APK copied but not registered on the server.")
             println("   Set it in the environment or as releaseToken in ~/.gradle/gradle.properties.")
