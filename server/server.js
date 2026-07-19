@@ -8,6 +8,7 @@ const os = require('os');
 const crypto = require('crypto');
 require('dotenv').config();
 const auth = require('./lib/auth');
+const campus = require('./lib/campus');
 
 const app = express();
 app.use(express.json());
@@ -533,6 +534,186 @@ app.get('/api/health', async (req, res) => {
 });
 
 const ROLES = ['student', 'faculty', 'admin', 'examcell', 'coordinator'];
+
+// --- PEOPLE DIRECTORY (CampusOne-backed) ---
+
+/**
+ * Search people. Merges CU Orbit's own users with the CampusOne directory, so
+ * someone can be found and messaged before they have ever opened the app.
+ * Entries already in Orbit win, and carry their real id.
+ */
+app.get('/api/directory/search', auth.requireAuth, async (req, res) => {
+    try {
+        const q = String(req.query.q || '').trim();
+        const term = q.toLowerCase();
+
+        const local = await User.findAll({
+            where: q ? {
+                [Op.and]: [
+                    { id: { [Op.ne]: req.user.id } },
+                    { [Op.or]: [
+                        { name: { [Op.like]: `%${q}%` } },
+                        { campus_email: { [Op.like]: `%${q}%` } },
+                        { email: { [Op.like]: `%${q}%` } },
+                    ] },
+                ],
+            } : { id: { [Op.ne]: req.user.id } },
+            limit: 25,
+        });
+
+        const seen = new Set();
+        const results = [];
+        for (const u of local) {
+            const key = (u.campus_email || u.email || '').toLowerCase();
+            if (key) seen.add(key);
+            results.push({
+                id: u.id,
+                email: u.campus_email || u.email,
+                name: u.name,
+                role: u.role,
+                cohort: u.cohort,
+                campus: u.campus,
+                avatarUrl: u.avatarUrl,
+                presence: u.presence,
+                in_orbit: true,
+            });
+        }
+
+        for (const p of await campus.searchDirectory(term, 25)) {
+            const key = (p.email || '').toLowerCase();
+            if (!key || seen.has(key) || key === (req.user.email || '').toLowerCase()) continue;
+            seen.add(key);
+            results.push({
+                id: null,                 // no Orbit account yet
+                email: p.email,
+                name: p.name,
+                role: p.role,
+                department: p.department || null,
+                school: p.school || null,
+                cohort: p.cohort || null,
+                campus: p.campus || null,
+                regno: p.regno || null,
+                in_orbit: false,
+            });
+        }
+
+        res.json({ results: results.slice(0, 40), directory_available: campus.configured() });
+    } catch (e) {
+        console.error('[DIRECTORY-SEARCH]', e.message);
+        res.status(500).json({ error: 'server_error', results: [] });
+    }
+});
+
+/** Full details for one person, by Orbit id or campus email. */
+app.get('/api/directory/person', auth.requireAuth, async (req, res) => {
+    try {
+        const { id, email } = req.query;
+        let user = null;
+        if (id) user = await User.findByPk(String(id));
+        else if (email) user = await User.findOne({ where: { campus_email: String(email).toLowerCase() } });
+        if (!user && !email) return res.status(404).json({ error: 'not_found' });
+
+        const key = (user?.campus_email || email || '').toLowerCase();
+        const entry = key
+            ? (await campus.searchDirectory(key, 5)).find((p) => (p.email || '').toLowerCase() === key) || null
+            : null;
+
+        res.json({
+            person: {
+                id: user?.id || null,
+                email: key || null,
+                name: user?.name || entry?.name || null,
+                role: user?.role || entry?.role || 'student',
+                avatarUrl: user?.avatarUrl || null,
+                presence: user?.presence || null,
+                bio: user?.bio || null,
+                status_text: user?.status_text || null,
+                cohort: user?.cohort || entry?.cohort || null,
+                campus: user?.campus || entry?.campus || null,
+                department: entry?.department || null,
+                school: entry?.school || null,
+                regno: entry?.regno || null,
+                is_hod: entry?.is_hod || false,
+                in_orbit: Boolean(user),
+            },
+        });
+    } catch (e) {
+        console.error('[DIRECTORY-PERSON]', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
+/**
+ * Open a DM with someone from the directory, creating their Orbit account if
+ * this is the first time anyone has messaged them. Their real profile is filled
+ * in when they first sign in.
+ */
+app.post('/api/directory/dm', auth.requireAuth, async (req, res) => {
+    try {
+        const email = String(req.body.email || '').toLowerCase().trim();
+        if (!email) return res.status(400).json({ error: 'bad_request', message: 'email required' });
+        if (email === (req.user.email || '').toLowerCase()) {
+            return res.status(400).json({ error: 'bad_request', message: 'Cannot message yourself' });
+        }
+
+        let user = await User.findOne({ where: { campus_email: email } });
+        if (!user) {
+            // Only people CampusOne knows about — this must not become a way to
+            // create arbitrary accounts.
+            const entry = (await campus.searchDirectory(email, 5))
+                .find((p) => (p.email || '').toLowerCase() === email);
+            if (!entry) return res.status(404).json({ error: 'not_found', message: 'Not in the campus directory' });
+
+            const base = (entry.name || email.split('@')[0]).toLowerCase().replace(/\s+/g, '_');
+            user = await User.create({
+                campus_email: email,
+                email,
+                name: entry.name || email.split('@')[0],
+                role: ROLES.includes(entry.role) ? entry.role : 'student',
+                cohort: entry.cohort || null,
+                campus: entry.campus || null,
+                handle: `${base}_${crypto.randomBytes(2).toString('hex')}`,
+                presence: 'offline',
+            });
+        }
+
+        res.json({ dm_id: [req.user.id, user.id].sort().join('_'), user });
+    } catch (e) {
+        console.error('[DIRECTORY-DM]', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
+/** Unread total for the signed-in user — drives the CampusOne menu badge. */
+app.get('/api/unread', auth.requireAuth, async (req, res) => {
+    try {
+        const memberships = await ChannelMember.findAll({ where: { userId: req.user.id } });
+        const channelIds = memberships.map((m) => m.channelId);
+
+        const channelUnread = channelIds.length
+            ? await Message.count({
+                where: {
+                    channelId: { [Op.in]: channelIds },
+                    senderId: { [Op.ne]: req.user.id },
+                    status: { [Op.ne]: 'read' },
+                },
+            })
+            : 0;
+
+        // DM rooms are "<uuid>_<uuid>", so ours are the ones containing our id.
+        const dmUnread = await Message.count({
+            where: {
+                dm_id: { [Op.like]: `%${req.user.id}%` },
+                senderId: { [Op.ne]: req.user.id },
+                status: { [Op.ne]: 'read' },
+            },
+        });
+
+        res.json({ total: channelUnread + dmUnread, channels: channelUnread, dms: dmUnread });
+    } catch (e) {
+        res.json({ total: 0, channels: 0, dms: 0 });
+    }
+});
 
 /**
  * Clients should not have to know the workspace UUID to ask for "my stuff", so
