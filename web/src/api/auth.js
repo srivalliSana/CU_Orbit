@@ -22,6 +22,44 @@ export const inIframe = () => {
   try { return window.self !== window.top; } catch { return true; }
 };
 
+/**
+ * The handoff arrives the instant the frame loads — before signIn() has
+ * finished awaiting /api/config. postMessage does not queue for listeners that
+ * register later, so the listener is installed synchronously at module load and
+ * buffers whatever turns up. Waiters registered afterwards are handed the
+ * buffered value.
+ *
+ * We also announce readiness to the parent, so a parent that missed the eager
+ * post can send it again. Belt and braces: whichever arrives first wins.
+ */
+let bufferedHandoff = null;
+let handoffWaiter = null;
+
+if (typeof window !== 'undefined' && inIframe()) {
+  window.addEventListener('message', (ev) => {
+    const d = ev.data || {};
+    if (d.type !== 'campusone:handoff' || !d.token) return;
+    // Origin is verified in signIn(), which knows the configured campus URL.
+    // Here we only capture; nothing is trusted until that check runs.
+    if (handoffWaiter) handoffWaiter({ token: d.token, origin: ev.origin });
+    else bufferedHandoff = { token: d.token, origin: ev.origin };
+  });
+
+  // No secret in this message, so a wildcard target is safe; we do not know the
+  // parent's origin until /api/config resolves, and that is the point.
+  try { window.parent.postMessage({ type: 'orbit:ready' }, '*'); } catch { /* ignore */ }
+}
+
+const awaitHandoff = (timeoutMs) =>
+  new Promise((resolve, reject) => {
+    if (bufferedHandoff) return resolve(bufferedHandoff);
+    const timer = setTimeout(() => {
+      handoffWaiter = null;
+      reject(new Error('CampusOne did not provide a sign-in token.'));
+    }, timeoutMs);
+    handoffWaiter = (v) => { clearTimeout(timer); handoffWaiter = null; resolve(v); };
+  });
+
 async function json(res) {
   if (!res.ok) {
     const detail = await res.json().catch(() => ({}));
@@ -73,25 +111,19 @@ export async function signIn() {
   }
 
   if (inIframe()) {
-    // Wait for CampusOne to hand the token over. It arrives right after load,
-    // so a miss usually means the parent page failed to mint one.
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error('CampusOne did not provide a sign-in token.')),
-        15000
-      );
-      window.addEventListener('message', async (ev) => {
-        if (ev.origin !== campusOrigin) return;              // only ever trust CampusOne
-        const d = ev.data || {};
-        if (d.type !== 'campusone:handoff' || !d.token) return;
-        clearTimeout(timer);
-        try {
-          const user = await exchange(d.token);
-          sessionStorage.removeItem(REDIRECT_FLAG);
-          resolve(user);
-        } catch (e) { reject(e); }
-      });
-    });
+    // Ask again now that the parent origin is known — covers a parent that was
+    // not yet listening when we first announced readiness.
+    try { window.parent.postMessage({ type: 'orbit:ready' }, campusOrigin); } catch { /* ignore */ }
+
+    const { token, origin } = await awaitHandoff(15000);
+    // Only now is the token trusted: it must have come from the configured
+    // CampusOne origin, not merely from some parent frame.
+    if (origin !== campusOrigin) {
+      throw new Error('Sign-in token came from an unexpected origin.');
+    }
+    const user = await exchange(token);
+    sessionStorage.removeItem(REDIRECT_FLAG);
+    return user;
   }
 
   // Standalone: send them to CampusOne to sign in, guarding against a loop if
