@@ -38,3 +38,11 @@ export async function uploadFile(file) {
   if (!res.ok) throw new Error('Upload failed');
   return res.json();
 }
+
+export const listUsers = () => api('/api/users');
+
+export const createGroup = ({ name, description, type, members }) =>
+  api('/api/workspaces/default/channels', {
+    method: 'POST',
+    body: JSON.stringify({ name, description, type, members }),
+  });

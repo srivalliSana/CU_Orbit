@@ -4,6 +4,7 @@ import { getHome } from './api/chat';
 import ChatList from './components/ChatList';
 import ChatWindow from './components/ChatWindow';
 import EmptyState from './components/EmptyState';
+import NewGroupModal from './components/NewGroupModal';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -11,6 +12,7 @@ export default function App() {
   const [error, setError] = useState(null);
   const [chats, setChats] = useState({ channels: [], dms: [] });
   const [active, setActive] = useState(null);
+  const [newGroup, setNewGroup] = useState(false);
 
   useEffect(() => {
     signIn()
@@ -66,10 +68,29 @@ export default function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-100 dark:bg-slate-950">
-      <ChatList user={user} chats={chats} activeId={active?.id} onSelect={setActive} />
+      <ChatList
+        user={user}
+        chats={chats}
+        activeId={active?.id}
+        onSelect={setActive}
+        onNewGroup={() => setNewGroup(true)}
+      />
       {active
         ? <ChatWindow key={active.id} chat={active} user={user} onSent={refreshChats} />
-        : <EmptyState user={user} />}
+        : <EmptyState user={user} onNewGroup={() => setNewGroup(true)} />}
+
+      {newGroup && (
+        <NewGroupModal
+          user={user}
+          onClose={() => setNewGroup(false)}
+          onCreated={(channel) => {
+            setNewGroup(false);
+            refreshChats();
+            // Open the new group straight away, as WhatsApp does.
+            setActive({ id: channel.id, kind: 'channel', title: `# ${channel.name}`, topic: channel.topic });
+          }}
+        />
+      )}
     </div>
   );
 }

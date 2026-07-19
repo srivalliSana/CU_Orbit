@@ -533,6 +533,20 @@ app.get('/api/health', async (req, res) => {
 const ROLES = ['student', 'faculty', 'admin', 'examcell', 'coordinator'];
 
 /**
+ * Clients should not have to know the workspace UUID to ask for "my stuff", so
+ * 'default' (and anything unrecognised) resolves to the first workspace.
+ */
+async function resolveWorkspaceId(given) {
+    if (given && given !== 'default' && given !== 'me') {
+        const exact = await Workspace.findByPk(given).catch(() => null);
+        if (exact) return exact.id;
+    }
+    const ws = await Workspace.findOne({ where: { slug: 'cu-orbit' } })
+        || await Workspace.findOne({ order: [['createdAt', 'ASC']] });
+    return ws ? ws.id : null;
+}
+
+/**
  * May this user read/write the given container?
  * A container id is either a channel UUID or a DM room id ("uuidA_uuidB").
  */
@@ -678,7 +692,7 @@ app.get('/api/home/:userId/:workspaceId', auth.requireAuth, async (req, res) => 
         // session decides whose home this is, otherwise any signed-in user could
         // read another user's channel list by editing the path.
         const userId = req.user.id;
-        const { workspaceId } = req.params;
+        const workspaceId = await resolveWorkspaceId(req.params.workspaceId);
         const memberships = await ChannelMember.findAll({ where: { userId: userId } });
         const channelIds = memberships.map(m => m.channelId);
         const channels = await Channel.findAll({ where: { workspace_id: workspaceId, id: { [Op.in]: channelIds } } });
@@ -1019,12 +1033,40 @@ app.get('/api/workspaces', auth.requireAuth, async (req, res) => {
 
 app.post('/api/workspaces/:workspaceId/channels', auth.requireAuth, async (req, res) => {
     try {
-        const { name, type, userId, description } = req.body;
+        const { name, type, description, members } = req.body;
+
+        const clean = String(name || '').trim().replace(/^#/, '');
+        if (!clean) return res.status(400).json({ error: 'bad_request', message: 'Group name is required' });
+        if (clean.length > 80) return res.status(400).json({ error: 'bad_request', message: 'Group name is too long' });
+
+        const workspaceId = await resolveWorkspaceId(req.params.workspaceId);
+        if (!workspaceId) return res.status(404).json({ error: 'not_found', message: 'No workspace' });
+
+        // Creator comes from the session — a body-supplied userId let anyone
+        // create a group owned by someone else.
+        const creator = req.user.id;
+
         const channel = await Channel.create({
-            workspace_id: req.params.workspaceId, name, type: type || 'public',
-            topic: description || '', invite_code: crypto.randomBytes(4).toString('hex'), created_by: userId
+            workspace_id: workspaceId, name: clean, type: type === 'private' ? 'private' : 'public',
+            topic: description || '', invite_code: crypto.randomBytes(4).toString('hex'), created_by: creator
         });
-        if (userId) await ChannelMember.create({ channelId: channel.id, userId: userId, role: 'admin' });
+        await ChannelMember.create({ channelId: channel.id, userId: creator, role: 'admin' });
+
+        // Optional initial members. Unknown ids are skipped rather than failing
+        // the whole creation.
+        let added = 0;
+        if (Array.isArray(members) && members.length) {
+            const valid = await User.findAll({ where: { id: { [Op.in]: members.filter((m) => m !== creator) } }, attributes: ['id'] });
+            for (const u of valid) {
+                const [, created] = await ChannelMember.findOrCreate({
+                    where: { channelId: channel.id, userId: u.id },
+                    defaults: { channelId: channel.id, userId: u.id, role: 'member' },
+                });
+                if (created) added++;
+            }
+        }
+        await channel.update({ member_count: added + 1 });
+
         res.json(channel);
     } catch (e) { console.error(e); res.status(500).json(e); }
 });

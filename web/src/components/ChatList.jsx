@@ -3,7 +3,7 @@ import Avatar from './Avatar';
 import { timeLabel } from '../lib/format';
 
 /** Left pane: search, then channels and direct messages. */
-export default function ChatList({ user, chats, activeId, onSelect }) {
+export default function ChatList({ user, chats, activeId, onSelect, onNewGroup }) {
   const [q, setQ] = useState('');
   const [tab, setTab] = useState('all');   // all | channels | dms
 
@@ -28,6 +28,16 @@ export default function ChatList({ user, chats, activeId, onSelect }) {
           <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{user?.name || 'You'}</p>
           <p className="truncate text-xs text-slate-500">{user?.campus_email || user?.email}</p>
         </div>
+        <button
+          onClick={onNewGroup}
+          title="New group"
+          aria-label="New group"
+          className="shrink-0 rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M19 8v6M22 11h-6" />
+          </svg>
+        </button>
       </header>
 
       <div className="px-3 py-2">
