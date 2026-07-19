@@ -428,6 +428,28 @@ app.get('/portal', (req, res) => {
  * it, project that person into our Users table, and hand back an Orbit session
  * token. The handoff token is never stored and is good for one exchange.
  */
+/**
+ * Health probe. Documented in the README long before it existed — its absence
+ * is part of why an 88-restart crash loop went unnoticed.
+ *
+ * `ready` means the schema is actually usable, not merely that the process is
+ * listening: on a fresh database the server accepts connections seconds before
+ * sync() finishes creating tables, and callers need to distinguish those.
+ */
+app.get('/api/health', async (req, res) => {
+    const out = { status: 'ok', version: packageJson.version, uptime_s: Math.round(process.uptime()), db: 'down', ready: false };
+    try {
+        await sequelize.authenticate();
+        out.db = 'up';
+        await Channel.findOne({ attributes: ['id'], limit: 1 });
+        out.ready = true;
+    } catch (e) {
+        out.status = out.db === 'up' ? 'degraded' : 'error';
+        out.detail = e.message;
+    }
+    res.status(out.ready ? 200 : 503).json(out);
+});
+
 const ROLES = ['student', 'faculty', 'admin', 'examcell', 'coordinator'];
 
 /**

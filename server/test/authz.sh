@@ -18,23 +18,8 @@ set -u
 # jq-free field read that tolerates missing keys instead of throwing.
 field() { node -pe 'const o=JSON.parse(require("fs").readFileSync(0)||"{}");process.argv[1].split(".").reduce((a,k)=>a&&a[k],o)??""' "$1" 2>/dev/null; }
 
-login() { # email name -> "session id" or empty
-  local r; r=$(curl -s -X POST "$B/api/auth/sso" -H 'Content-Type: application/json' -d "{\"token\":\"$(mk "$1" "$2")\"}")
-  local s i; s=$(echo "$r" | field session); i=$(echo "$r" | field user.id)
-  if [ -z "$s" ] || [ -z "$i" ]; then
-    echo "PRECONDITION FAILED: could not sign in $1" >&2
-    echo "  server said: $(echo "$r" | head -c 300)" >&2
-    echo "  the assertions below would all be meaningless, so stopping here." >&2
-    exit 1
-  fi
-  echo "$s $i"
-}
-
-read -r TA IA <<<"$(login alice@cutm.ac.in Alice)"
-read -r TB IB <<<"$(login bob@cutm.ac.in Bob)"
-read -r TC IC <<<"$(login carol@cutm.ac.in Carol)"
-echo "alice=$IA"; echo "bob=$IB"; echo "carol=$IC"; echo
-
+# Reporting harness is installed first, so an abort during preconditions is
+# still summarised rather than exiting silently.
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 PASSES=0; FAILURES=0
 chk() { # desc expected actual
@@ -42,11 +27,57 @@ chk() { # desc expected actual
   else echo "  FAIL  $1 (want $2, got $3)"; FAILURES=$((FAILURES+1)); fi
 }
 summary() {
+  local rc=$?
   echo; echo "$PASSES passed, $FAILURES failed"
+  # An abort before any assertion ran must not read as success just because
+  # nothing failed.
+  if [ $((PASSES + FAILURES)) -eq 0 ]; then
+    echo "AUTHORIZATION TEST DID NOT RUN — preconditions unmet. Nothing was verified."
+    exit "${rc:-1}"
+  fi
   [ "$FAILURES" -eq 0 ] || { echo "AUTHORIZATION TEST FAILED — do not deploy."; exit 1; }
   echo "All authorization checks passed."
 }
 trap summary EXIT
+
+# On a fresh database the server listens seconds before sync() has created the
+# tables, so a fixed sleep races it. Wait for the schema to actually be usable.
+wait_ready() {
+  local i
+  for i in $(seq 1 60); do
+    [ "$(curl -s -o /dev/null -w '%{http_code}' "$B/api/health")" = "200" ] && return 0
+    sleep 1
+  done
+  echo "PRECONDITION FAILED: server never became ready at $B" >&2
+  echo "  last health: $(curl -s "$B/api/health" | head -c 300)" >&2
+  exit 1
+}
+
+# NB: exit inside $( ) only leaves the subshell, so failures are reported by
+# returning empty and checked by the caller in the parent shell.
+login() { # email name -> "session id", empty on failure
+  local r s i
+  r=$(curl -s -X POST "$B/api/auth/sso" -H 'Content-Type: application/json' -d "{\"token\":\"$(mk "$1" "$2")\"}")
+  s=$(echo "$r" | field session); i=$(echo "$r" | field user.id)
+  [ -n "$s" ] && [ -n "$i" ] && { echo "$s $i"; return 0; }
+  echo "  $1 -> $(echo "$r" | head -c 200)" >&2
+  return 1
+}
+
+require_login() { # varname_token varname_id email name
+  local out
+  if ! out=$(login "$3" "$4"); then
+    echo "PRECONDITION FAILED: could not sign in $3 — assertions would be meaningless. Stopping." >&2
+    exit 1
+  fi
+  read -r "$1" "$2" <<<"$out"
+}
+
+wait_ready
+require_login TA IA alice@cutm.ac.in Alice
+require_login TB IB bob@cutm.ac.in Bob
+require_login TC IC carol@cutm.ac.in Carol
+echo "alice=$IA"; echo "bob=$IB"; echo "carol=$IC"; echo
 
 echo "--- identity is taken from the session, not the path ---"
 ME=$(curl -s -H "Authorization: Bearer $TA" "$B/api/home/quick-access/$IB" -o /dev/null -w '%{http_code}')
