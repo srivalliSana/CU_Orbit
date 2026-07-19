@@ -42,14 +42,19 @@ send() { # token containerId text -> asserts the send worked
   fi
 }
 
+# /api/unread is a global total across every conversation, and this database is
+# reused between runs, so assertions are on deltas from a baseline rather than
+# absolute values.
+read_conv() { curl -s -o /dev/null -X POST "$B/api/conversations/$2/read" -H "Authorization: Bearer $1" -H 'Content-Type: application/json' -d '{}'; }
+
 echo "--- direct message ---"
 DM="$(printf '%s\n%s' "$IA" "$IB" | sort | tr '\n' '_' | sed 's/_$//')"
-BEFORE=$(unread "$TB")
+BASE_B=$(unread "$TB"); BASE_A=$(unread "$TA")
 send "$TA" "$DM" "hi"
-chk "recipient's unread rises"        "$((BEFORE+1))" "$(unread "$TB")"
-chk "sender's own message is not unread" "0"          "$(unread "$TA")"
-curl -s -o /dev/null -X POST "$B/api/conversations/$DM/read" -H "Authorization: Bearer $TB" -H 'Content-Type: application/json' -d '{}'
-chk "clears after reading"            "0"             "$(unread "$TB")"
+chk "recipient's unread rises by one"    "$((BASE_B+1))" "$(unread "$TB")"
+chk "sender's own message is not unread" "$BASE_A"       "$(unread "$TA")"
+read_conv "$TB" "$DM"
+chk "returns to baseline after reading"  "$BASE_B"       "$(unread "$TB")"
 
 echo "--- group: one member reading must not clear it for the other ---"
 G=$(curl -s -X POST $B/api/workspaces/default/channels -H "Authorization: Bearer $TA" -H 'Content-Type: application/json' \
@@ -57,15 +62,16 @@ G=$(curl -s -X POST $B/api/workspaces/default/channels -H "Authorization: Bearer
 GID=$(echo "$G"|field id)
 [ -n "$GID" ] || { echo "PRECONDITION FAILED: group not created — $(echo "$G"|head -c 200)"; exit 1; }
 
+GB=$(unread "$TB"); GC=$(unread "$TC")
 send "$TA" "$GID" "team"
-chk "member B sees it unread" "1" "$(unread "$TB")"
-chk "member C sees it unread" "1" "$(unread "$TC")"
+chk "member B sees it unread" "$((GB+1))" "$(unread "$TB")"
+chk "member C sees it unread" "$((GC+1))" "$(unread "$TC")"
 
-curl -s -o /dev/null -X POST "$B/api/conversations/$GID/read" -H "Authorization: Bearer $TB" -H 'Content-Type: application/json' -d '{}'
-# The bug: this cleared for nobody, because Message.status only flips once all
-# members have read.
-chk "clears for B after B reads"        "0" "$(unread "$TB")"
-chk "still unread for C who has not"    "1" "$(unread "$TC")"
+read_conv "$TB" "$GID"
+# The original bug: this cleared for nobody, because Message.status is one
+# value for the whole message and only flips once every member has read.
+chk "clears for B after B reads"     "$GB"       "$(unread "$TB")"
+chk "still unread for C who has not" "$((GC+1))" "$(unread "$TC")"
 
 echo; echo "$P passed, $F failed"
 [ $F -eq 0 ] || { echo "UNREAD TEST FAILED"; exit 1; }
