@@ -27,7 +27,11 @@
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
 
-    <application
+        <!-- Launch the installer for an in-app update. Android does not permit a
+         sideloaded app to install silently; the user still confirms. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+<application
         android:name=".OrbitApp"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
