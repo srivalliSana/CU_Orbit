@@ -30,6 +30,25 @@ const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 app.use('/uploads', express.static(uploadDir));
 
+// CampusOne embeds the messenger in an iframe at /connect, so it must be
+// allowed to frame us — while everyone else is still refused. 'self' keeps the
+// standalone site working.
+const CAMPUS_URL = process.env.CAMPUS_URL || 'https://campusone.cutm.ac.in';
+app.use((req, res, next) => {
+    res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${CAMPUS_URL}`);
+    // X-Frame-Options has no origin-list equivalent and would override the CSP
+    // in older browsers, so it is deliberately not set.
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    next();
+});
+
+// Where an unauthenticated visitor is sent to sign in. Exposed to the client so
+// the redirect target is configured in one place.
+app.get('/api/config', (req, res) => {
+    res.json({ campus_url: CAMPUS_URL, connect_path: '/connect' });
+});
+
 // Serve the Web App assets (css/js). index:false so express.static does not
 // auto-serve public/index.html at '/', which would shadow the landing page route below.
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
