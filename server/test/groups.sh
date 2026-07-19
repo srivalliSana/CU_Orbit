@@ -21,6 +21,9 @@ G=$(curl -s -X POST $B/api/workspaces/default/channels -H "Authorization: Bearer
     -d "{\"name\":\"Project Team\",\"type\":\"private\",\"members\":[\"$IB\"]}")
 GID=$(echo "$G"|field id)
 chk "group created"            "true"          "$([ -n "$GID" ] && echo true || echo false)"
+# Without this, a failed creation leaves every later assertion chasing an empty
+# id and the real reason never appears.
+[ -n "$GID" ] || echo "      server said: $(echo "$G" | head -c 300)"
 chk "creator recorded as Ann"  "$IA"           "$(echo "$G"|field created_by)"
 chk "member_count is 2"        "2"             "$(echo "$G"|field member_count)"
 

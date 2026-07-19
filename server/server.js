@@ -541,9 +541,18 @@ async function resolveWorkspaceId(given) {
         const exact = await Workspace.findByPk(given).catch(() => null);
         if (exact) return exact.id;
     }
-    const ws = await Workspace.findOne({ where: { slug: 'cu-orbit' } })
+    const existing = await Workspace.findOne({ where: { slug: 'cu-orbit' } })
         || await Workspace.findOne({ order: [['createdAt', 'ASC']] });
-    return ws ? ws.id : null;
+    if (existing) return existing.id;
+
+    // The boot seed creates this, but /api/health reports ready as soon as the
+    // tables exist — before the seed finishes. Rather than depend on that
+    // ordering, create it on demand.
+    const [ws] = await Workspace.findOrCreate({
+        where: { slug: 'cu-orbit' },
+        defaults: { name: 'CU Orbit', slug: 'cu-orbit' },
+    });
+    return ws.id;
 }
 
 /**
