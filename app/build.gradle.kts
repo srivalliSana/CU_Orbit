@@ -1,3 +1,6 @@
+import java.net.HttpURLConnection
+import java.net.URL
+
 plugins {
     alias(libs.plugins.android.application)
 }
@@ -14,8 +17,8 @@ android {
         applicationId = "com.example.cu_orbit"
         minSdk = 24
         targetSdk = 36
-        versionCode = 21
-        versionName = "1.0.20"
+        versionCode = 22
+        versionName = "1.0.21"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -48,23 +51,23 @@ tasks.register("publishApkToServer") {
         
         if (!destDir.exists()) destDir.mkdirs()
         
-        // 1. Copy the file
-        sourceFile.copyTo(file(destDir, fileName), overwrite = true)
+        // 1. Copy the file using standard Java File constructor to avoid Gradle's file() ambiguity
+        sourceFile.copyTo(File(destDir, fileName), overwrite = true)
         // Also copy as 'latest' for direct links
-        sourceFile.copyTo(file(destDir, "cu_orbit.apk"), overwrite = true)
+        sourceFile.copyTo(File(destDir, "cu_orbit.apk"), overwrite = true)
         
         println("✅ APK copied as $fileName and cu_orbit.apk")
         
         // 2. Register via API
         try {
-            val url = java.net.URL("https://cumess.cutm.ac.in/api/system/register-release")
-            val conn = url.openConnection() as java.net.HttpURLConnection
+            val url = URL("https://cumess.cutm.ac.in/api/system/register-release")
+            val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
             conn.doOutput = true
             
             val json = """{"version": "$version", "build_number": $build, "filename": "$fileName"}"""
-            conn.outputStream.use { it.write(json.toByteArray()) }
+            conn.outputStream.use { it.write(json.toByteArray(Charsets.UTF_8)) }
             
             if (conn.responseCode == 200) {
                 println("🚀 Release v$version registered on server!")
