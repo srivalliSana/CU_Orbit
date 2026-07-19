@@ -105,7 +105,10 @@ const User = sequelize.define('User', {
     bio: { type: DataTypes.TEXT, defaultValue: 'Hey there! I am using CU Orbit.' },
     status_emoji: { type: DataTypes.STRING, defaultValue: '✨' },
     status_text: { type: DataTypes.STRING, defaultValue: '' },
-    presence: { type: DataTypes.ENUM('online', 'away', 'dnd', 'offline'), defaultValue: 'online' }
+    presence: { type: DataTypes.ENUM('online', 'away', 'dnd', 'offline'), defaultValue: 'online' },
+    // Drives "last seen" — refreshed on API activity, not on login, so it
+    // reflects actual use.
+    last_seen_at: { type: DataTypes.DATE, allowNull: true }
 });
 
 const Workspace = sequelize.define('Workspace', {
@@ -165,6 +168,26 @@ const Message = sequelize.define('Message', {
     status: { type: DataTypes.STRING, defaultValue: 'sent' },
     timestamp: { type: DataTypes.BIGINT, defaultValue: () => Date.now() },
     edited_at: { type: DataTypes.DATE, allowNull: true }
+});
+
+/**
+ * Per-recipient read state.
+ *
+ * Message.status is a single value, which is enough for a DM but cannot express
+ * "3 of 7 people read this" in a group. This records one row per reader, so
+ * group read counts and "seen by" lists are exact.
+ */
+const MessageRead = sequelize.define('MessageRead', {
+    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    message_id: { type: DataTypes.UUID, allowNull: false },
+    container_id: { type: DataTypes.STRING, allowNull: false },
+    user_id: { type: DataTypes.STRING, allowNull: false },
+    read_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+}, {
+    indexes: [
+        { unique: true, fields: ['message_id', 'user_id'] },
+        { fields: ['container_id', 'user_id'] }
+    ]
 });
 
 const Mention = sequelize.define('Mention', {
@@ -547,56 +570,69 @@ app.get('/api/health', async (req, res) => {
 
 const ROLES = ['student', 'faculty', 'admin', 'examcell', 'coordinator'];
 
+/**
+ * Refresh last_seen_at on API activity.
+ *
+ * Throttled in memory to one write per user per minute — without that, a client
+ * polling every 3 seconds would issue an UPDATE per poll per user. Fire and
+ * forget: presence must never delay or fail a request.
+ */
+const lastSeenWrites = new Map();
+const LAST_SEEN_THROTTLE_MS = 60_000;
+
+function touchLastSeen(userId) {
+    if (!userId) return;
+    const now = Date.now();
+    const previous = lastSeenWrites.get(userId) || 0;
+    if (now - previous < LAST_SEEN_THROTTLE_MS) return;
+    lastSeenWrites.set(userId, now);
+
+    if (lastSeenWrites.size > 5000) {
+        for (const [id, at] of lastSeenWrites) if (now - at > LAST_SEEN_THROTTLE_MS * 5) lastSeenWrites.delete(id);
+    }
+
+    User.update({ last_seen_at: new Date(now), presence: 'online' }, { where: { id: userId } })
+        .catch(() => { /* presence is best-effort */ });
+}
+
+// requireAuth runs per route, so this is a hook rather than middleware —
+// middleware placed here would run before req.user exists.
+auth.setOnAuthenticated(touchLastSeen);
+
 // --- PEOPLE DIRECTORY (CampusOne-backed) ---
 
 /**
- * Search people. Merges CU Orbit's own users with the CampusOne directory, so
- * someone can be found and messaged before they have ever opened the app.
- * Entries already in Orbit win, and carry their real id.
+ * Search people.
+ *
+ * CampusOne is the authority for who exists and for their name, role and
+ * department. CU Orbit rows are never a source of contacts — they only enrich a
+ * directory entry with app-specific state (id, avatar, presence, last seen).
+ *
+ * That means someone removed from the campus directory stops being findable
+ * here even if they still have an Orbit account, which is the intended
+ * behaviour: one place governs the roll.
  */
 app.get('/api/directory/search', auth.requireAuth, async (req, res) => {
     try {
-        const q = String(req.query.q || '').trim();
-        const term = q.toLowerCase();
+        const term = String(req.query.q || '').trim().toLowerCase();
+        const me = (req.user.email || '').toLowerCase();
 
-        const local = await User.findAll({
-            where: q ? {
-                [Op.and]: [
-                    { id: { [Op.ne]: req.user.id } },
-                    { [Op.or]: [
-                        { name: { [Op.like]: `%${q}%` } },
-                        { campus_email: { [Op.like]: `%${q}%` } },
-                        { email: { [Op.like]: `%${q}%` } },
-                    ] },
-                ],
-            } : { id: { [Op.ne]: req.user.id } },
-            limit: 25,
-        });
+        const people = await campus.searchDirectory(term, 40);
+        const emails = people.map((p) => (p.email || '').toLowerCase()).filter(Boolean);
 
-        const seen = new Set();
+        // One query for whatever the directory returned, rather than per row.
+        const known = emails.length
+            ? await User.findAll({ where: { campus_email: { [Op.in]: emails } } })
+            : [];
+        const byEmail = new Map(known.map((u) => [(u.campus_email || '').toLowerCase(), u]));
+
         const results = [];
-        for (const u of local) {
-            const key = (u.campus_email || u.email || '').toLowerCase();
-            if (key) seen.add(key);
-            results.push({
-                id: u.id,
-                email: u.campus_email || u.email,
-                name: u.name,
-                role: u.role,
-                cohort: u.cohort,
-                campus: u.campus,
-                avatarUrl: u.avatarUrl,
-                presence: u.presence,
-                in_orbit: true,
-            });
-        }
-
-        for (const p of await campus.searchDirectory(term, 25)) {
+        for (const p of people) {
             const key = (p.email || '').toLowerCase();
-            if (!key || seen.has(key) || key === (req.user.email || '').toLowerCase()) continue;
-            seen.add(key);
+            if (!key || key === me) continue;
+            const u = byEmail.get(key);
             results.push({
-                id: null,                 // no Orbit account yet
+                // Identity and profile: from CampusOne.
                 email: p.email,
                 name: p.name,
                 role: p.role,
@@ -605,11 +641,20 @@ app.get('/api/directory/search', auth.requireAuth, async (req, res) => {
                 cohort: p.cohort || null,
                 campus: p.campus || null,
                 regno: p.regno || null,
-                in_orbit: false,
+                is_hod: p.is_hod || false,
+                // Messaging state: from CU Orbit, when they have used it.
+                id: u ? u.id : null,
+                avatarUrl: u ? u.avatarUrl : null,
+                presence: u ? u.presence : null,
+                last_seen_at: u ? u.last_seen_at : null,
+                in_orbit: Boolean(u),
             });
         }
 
-        res.json({ results: results.slice(0, 40), directory_available: campus.configured() });
+        res.json({
+            results,
+            directory_available: campus.configured(),
+        });
     } catch (e) {
         console.error('[DIRECTORY-SEARCH]', e.message);
         res.status(500).json({ error: 'server_error', results: [] });
@@ -632,20 +677,24 @@ app.get('/api/directory/person', auth.requireAuth, async (req, res) => {
 
         res.json({
             person: {
-                id: user?.id || null,
                 email: key || null,
-                name: user?.name || entry?.name || null,
-                role: user?.role || entry?.role || 'student',
-                avatarUrl: user?.avatarUrl || null,
-                presence: user?.presence || null,
-                bio: user?.bio || null,
-                status_text: user?.status_text || null,
-                cohort: user?.cohort || entry?.cohort || null,
-                campus: user?.campus || entry?.campus || null,
+                // CampusOne is authoritative for who someone is; the Orbit row
+                // is only a fallback for accounts predating the directory link.
+                name: entry?.name || user?.name || null,
+                role: entry?.role || user?.role || 'student',
+                cohort: entry?.cohort || user?.cohort || null,
+                campus: entry?.campus || user?.campus || null,
                 department: entry?.department || null,
                 school: entry?.school || null,
                 regno: entry?.regno || null,
                 is_hod: entry?.is_hod || false,
+                // App state, which only CU Orbit knows.
+                id: user?.id || null,
+                avatarUrl: user?.avatarUrl || null,
+                presence: user?.presence || null,
+                last_seen_at: user?.last_seen_at || null,
+                bio: user?.bio || null,
+                status_text: user?.status_text || null,
                 in_orbit: Boolean(user),
             },
         });
@@ -692,6 +741,96 @@ app.post('/api/directory/dm', auth.requireAuth, async (req, res) => {
         res.json({ dm_id: [req.user.id, user.id].sort().join('_'), user });
     } catch (e) {
         console.error('[DIRECTORY-DM]', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
+/**
+ * Mark a conversation read up to now.
+ *
+ * Records a MessageRead row per message for group read counts, and flips
+ * Message.status for DMs so the sender's ticks turn blue. Idempotent.
+ */
+app.post('/api/conversations/:containerId/read', auth.requireAuth, async (req, res) => {
+    try {
+        const containerId = req.params.containerId;
+        if (!(await canAccessContainer(req.user.id, containerId))) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
+
+        const unread = await Message.findAll({
+            where: {
+                [Op.or]: [{ channelId: containerId }, { dm_id: containerId }],
+                senderId: { [Op.ne]: req.user.id },
+            },
+            attributes: ['id'],
+            limit: 500,          // a very old conversation is caught up over a few calls
+            order: [['timestamp', 'DESC']],
+        });
+        if (!unread.length) return res.json({ success: true, marked: 0 });
+
+        const rows = unread.map((m) => ({
+            message_id: m.id, container_id: containerId, user_id: req.user.id, read_at: new Date(),
+        }));
+        // ignoreDuplicates so re-reading a conversation is a no-op rather than an error.
+        await MessageRead.bulkCreate(rows, { ignoreDuplicates: true });
+
+        const isDm = containerId.includes('_');
+        if (isDm) {
+            await Message.update(
+                { status: 'read' },
+                { where: { dm_id: containerId, senderId: { [Op.ne]: req.user.id }, status: { [Op.ne]: 'read' } } }
+            );
+        } else {
+            // In a channel, "read" once every other member has read it.
+            const memberCount = await ChannelMember.count({ where: { channelId: containerId } });
+            for (const m of unread) {
+                const reads = await MessageRead.count({ where: { message_id: m.id } });
+                if (memberCount > 1 && reads >= memberCount - 1) {
+                    await Message.update({ status: 'read' }, { where: { id: m.id } });
+                }
+            }
+        }
+
+        res.json({ success: true, marked: rows.length });
+    } catch (e) {
+        console.error('[MARK-READ]', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
+/** Who has read a message — the "seen by" list on a group message. */
+app.get('/api/messages/:id/reads', auth.requireAuth, async (req, res) => {
+    try {
+        const msg = await Message.findByPk(req.params.id);
+        if (!msg) return res.status(404).json({ error: 'not_found' });
+
+        const containerId = msg.channelId || msg.dm_id;
+        if (!(await canAccessContainer(req.user.id, containerId))) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
+
+        const reads = await MessageRead.findAll({ where: { message_id: msg.id }, order: [['read_at', 'ASC']] });
+        const ids = reads.map((r) => r.user_id);
+        const users = ids.length ? await User.findAll({ where: { id: { [Op.in]: ids } }, attributes: ['id', 'name', 'avatarUrl'] }) : [];
+        const byId = new Map(users.map((u) => [u.id, u]));
+
+        // Total possible readers, so the client can show "3 of 7".
+        const audience = containerId.includes('_')
+            ? 1
+            : Math.max(await ChannelMember.count({ where: { channelId: containerId } }) - 1, 0);
+
+        res.json({
+            read_count: reads.length,
+            audience,
+            readers: reads.map((r) => ({
+                id: r.user_id,
+                name: byId.get(r.user_id)?.name || 'Unknown',
+                avatarUrl: byId.get(r.user_id)?.avatarUrl || null,
+                read_at: r.read_at,
+            })),
+        });
+    } catch (e) {
         res.status(500).json({ error: 'server_error' });
     }
 });

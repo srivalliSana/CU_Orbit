@@ -76,12 +76,20 @@ function bearer(req) {
  * Express middleware — populates req.user or rejects with 401.
  * Every route that touches user data must sit behind this.
  */
+// Called with the user id on every authenticated request. Set by server.js to
+// refresh last_seen; kept as a hook so this module stays free of database
+// concerns.
+let onAuthenticated = null;
+const setOnAuthenticated = (fn) => { onAuthenticated = fn; };
+
 function requireAuth(req, res, next) {
     const token = bearer(req);
     if (!token) return res.status(401).json({ error: 'unauthorized', message: 'Missing bearer token' });
     try {
         const claims = verifySession(token);
         req.user = { id: claims.sub, email: claims.email, role: claims.role };
+        // Must never break the request it is observing.
+        try { onAuthenticated?.(req.user.id); } catch (e) { /* ignore */ }
         next();
     } catch (e) {
         const expired = e.name === 'TokenExpiredError';
@@ -100,4 +108,4 @@ function requireRole(...roles) {
     };
 }
 
-module.exports = { verifyHandoff, issueSession, verifySession, requireAuth, requireRole, assertSecrets, AUDIENCE };
+module.exports = { verifyHandoff, issueSession, verifySession, requireAuth, requireRole, assertSecrets, setOnAuthenticated, AUDIENCE };
