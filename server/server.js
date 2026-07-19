@@ -25,15 +25,14 @@ app.use((req, res, next) => {
 });
 
 // STATIC FOLDERS
-const uploadDir \u003d path.join(__dirname, \u0027uploads\u0027);
+const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
-app.use(\u0027/uploads\u0027, express.static(uploadDir));
+app.use('/uploads', express.static(uploadDir));
 
-// Serve the React Web App (Frontend)
-app.use(express.static(path.join(__dirname, \u0027public\u0027)));
+// Serve the Web App assets (css/js). index:false so express.static does not
+// auto-serve public/index.html at '/', which would shadow the landing page route below.
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
-// Fallback for React Routing (Directs all non-API routes to the React App)
-app.get(\u0027*\u0027, (req, res, next) \u003d\u003e {\n    if (req.path.startsWith(\u0027/api\u0027)) return next();\n    res.sendFile(path.join(__dirname, \u0027public\u0027, \u0027index.html\u0027));\n});\n
 // FILE UPLOAD SETUP
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, uploadDir),
@@ -237,10 +236,23 @@ app.get('/', async (req, res) => {
     else if (userAgent.indexOf("Mac") != -1) osName = "macOS Device";
     else if (userAgent.indexOf("Linux") != -1) osName = "Linux System";
 
-    const history = await Release.findAll({ order: [['build_number', 'DESC']] });
+    // Degrade to an empty version list if the DB is unreachable — the landing page
+    // must still render rather than taking the process down with it.
+    let history = [];
+    try {
+        history = await Release.findAll({ order: [['build_number', 'DESC']] });
+    } catch (e) {
+        console.error('Landing page: could not load release history —', e.message);
+    }
 
     if (req.query.download === 'true') {
-        const release = await Release.findOne({ where: { version: req.query.v } }) || history[0];
+        let release = null;
+        try {
+            release = await Release.findOne({ where: { version: req.query.v } });
+        } catch (e) {
+            console.error('Landing page: could not look up release —', e.message);
+        }
+        release = release || history[0];
         const apkPath = path.join(__dirname, 'downloads', release ? release.filename : 'cu_orbit.apk');
         return res.download(apkPath, release ? release.filename : 'CU_Orbit.apk');
     }
@@ -833,6 +845,13 @@ app.get('/api/channels/:id/typing', async (req, res) => {
 app.post('/api/upload', upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).send('No file uploaded.');
     res.json({ url: `/uploads/${req.file.filename}` });
+});
+
+// SPA FALLBACK — must stay last, after every route above, so it only catches
+// paths no real route claimed. API 404s are left to Express.
+app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 const PORT = 3000;
