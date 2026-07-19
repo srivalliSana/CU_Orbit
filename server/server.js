@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
 require('dotenv').config();
+const auth = require('./lib/auth');
 
 const app = express();
 app.use(express.json());
@@ -62,7 +63,14 @@ const sequelize = new Sequelize(dbConfig.name, dbConfig.user, dbConfig.pass, {
 
 const User = sequelize.define('User', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-    phone: { type: DataTypes.STRING, unique: true },
+    // Link to CampusOne, which is the authority for identity. Nullable so an
+    // account can exist before it is claimed via SSO; unique so it can never
+    // point at two Orbit users.
+    campus_email: { type: DataTypes.STRING, unique: true, allowNull: true },
+    role: { type: DataTypes.ENUM('student', 'faculty', 'admin'), defaultValue: 'student' },
+    // Phone is no longer an identity key — retained as contact detail and as the
+    // join key for matching legacy rows against roster.mobile.
+    phone: { type: DataTypes.STRING, unique: true, allowNull: true },
     name: DataTypes.STRING,
     handle: { type: DataTypes.STRING, unique: true },
     email: DataTypes.STRING,
@@ -405,7 +413,90 @@ app.get('/portal', (req, res) => {
 // --- ROUTES ---
 
 // AUTH
-app.post('/api/auth/login', async (req, res) => {
+
+/**
+ * SSO exchange — the only way in.
+ *
+ * CampusOne mints a short-lived handoff token for the signed-in user; we verify
+ * it, project that person into our Users table, and hand back an Orbit session
+ * token. The handoff token is never stored and is good for one exchange.
+ */
+app.post('/api/auth/sso', async (req, res) => {
+    try {
+        const { token } = req.body;
+        if (!token) return res.status(400).json({ error: 'bad_request', message: 'token required' });
+
+        let claims;
+        try {
+            claims = auth.verifyHandoff(token);
+        } catch (e) {
+            console.warn('[sso] rejected handoff token:', e.message);
+            return res.status(401).json({ error: 'invalid_token', message: e.message });
+        }
+
+        const campusEmail = String(claims.email).toLowerCase();
+        const role = ['student', 'faculty', 'admin'].includes(claims.role) ? claims.role : 'student';
+
+        // Find by campus link first; fall back to a legacy row matched on email
+        // so pre-SSO accounts adopt their CampusOne identity instead of forking.
+        let user = await User.findOne({ where: { campus_email: campusEmail } });
+        if (!user) user = await User.findOne({ where: { email: campusEmail } });
+
+        if (user) {
+            user.campus_email = campusEmail;
+            user.name = claims.name || user.name;
+            user.role = role;
+            await user.save();
+        } else {
+            const base = (claims.name || campusEmail.split('@')[0]).toLowerCase().replace(/\s+/g, '_');
+            user = await User.create({
+                campus_email: campusEmail,
+                email: campusEmail,
+                name: claims.name || campusEmail.split('@')[0],
+                role,
+                handle: `${base}_${crypto.randomBytes(2).toString('hex')}`,
+            });
+        }
+
+        // Everyone lands in #general.
+        const gen = await Channel.findOne({ where: { name: 'general' } });
+        if (gen) {
+            await ChannelMember.findOrCreate({
+                where: { channelId: gen.id, userId: user.id },
+                defaults: { channelId: gen.id, userId: user.id, role: 'member' },
+            });
+        }
+
+        res.json({ success: true, session: auth.issueSession(user), user });
+    } catch (e) {
+        console.error('[sso] exchange failed:', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
+/** Who am I — cheap way for clients to validate a stored session. */
+app.get('/api/auth/me', auth.requireAuth, async (req, res) => {
+    const user = await User.findByPk(req.user.id);
+    if (!user) return res.status(404).json({ error: 'not_found' });
+    res.json({ user });
+});
+
+/**
+ * Legacy passwordless auth. Returns any user for a posted phone number — no
+ * credential of any kind — so it is off unless explicitly enabled. The Android
+ * client still depends on it; keep ALLOW_LEGACY_AUTH=true only until that app
+ * ships SSO, and never on an internet-facing deployment.
+ */
+const legacyAuthEnabled = process.env.ALLOW_LEGACY_AUTH === 'true';
+const legacyAuthGate = (req, res, next) => {
+    if (legacyAuthEnabled) return next();
+    res.status(410).json({
+        error: 'endpoint_retired',
+        message: 'Passwordless login is disabled. Sign in through CampusOne (POST /api/auth/sso).',
+    });
+};
+
+app.post('/api/auth/login', legacyAuthGate, async (req, res) => {
     try {
         const { email, phone } = req.body;
         let user;
@@ -429,7 +520,7 @@ app.post('/api/auth/login', async (req, res) => {
     } catch (e) { res.status(500).json(e); }
 });
 
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', legacyAuthGate, async (req, res) => {
     try {
         const { name, phone, email, avatarUrl, bio } = req.body;
         const handle = name.toLowerCase().replace(/\s+/g, '_') + '_' + phone.slice(-4);
@@ -456,7 +547,7 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 // HOME FEED
-app.get('/api/home/:userId/:workspaceId', async (req, res) => {
+app.get('/api/home/:userId/:workspaceId', auth.requireAuth, async (req, res) => {
     try {
         const { userId, workspaceId } = req.params;
         const memberships = await ChannelMember.findAll({ where: { userId: userId } });
@@ -520,7 +611,7 @@ app.get('/api/home/:userId/:workspaceId', async (req, res) => {
     }
 });
 
-app.get('/api/home/quick-access/:userId', async (req, res) => {
+app.get('/api/home/quick-access/:userId', auth.requireAuth, async (req, res) => {
     try {
         const { userId } = req.params;
         const mentions = await Mention.count({ where: { mentioned_user_id: userId, is_read: false } });
@@ -531,7 +622,7 @@ app.get('/api/home/quick-access/:userId', async (req, res) => {
 });
 
 // PREFS
-app.post('/api/conversations/:id/prefs', async (req, res) => {
+app.post('/api/conversations/:id/prefs', auth.requireAuth, async (req, res) => {
     try {
         const { userId, action, value } = req.body;
         const containerId = req.params.id;
@@ -553,7 +644,7 @@ app.post('/api/conversations/:id/prefs', async (req, res) => {
 });
 
 // MESSAGES
-app.get('/api/messages/:containerId', async (req, res) => {
+app.get('/api/messages/:containerId', auth.requireAuth, async (req, res) => {
     try {
         const { containerId } = req.params;
         const messages = await Message.findAll({
@@ -590,7 +681,7 @@ app.get('/api/messages/:containerId', async (req, res) => {
     }
 });
 
-app.post('/api/messages', async (req, res) => {
+app.post('/api/messages', auth.requireAuth, async (req, res) => {
     try {
         const { senderId, senderName, body, channelId, type, senderAvatarUrl, mediaUrl, mentions, enrichedMentions } = req.body;
         if (channelId && !channelId.includes('_')) {
@@ -641,7 +732,7 @@ app.post('/api/messages', async (req, res) => {
     }
 });
 
-app.put('/api/messages/:id', async (req, res) => {
+app.put('/api/messages/:id', auth.requireAuth, async (req, res) => {
     try {
         const { body, status } = req.body;
         const msg = await Message.findByPk(req.params.id);
@@ -653,7 +744,7 @@ app.put('/api/messages/:id', async (req, res) => {
     } catch (e) { res.status(500).json(e); }
 });
 
-app.get('/api/mentions/:userId', async (req, res) => {
+app.get('/api/mentions/:userId', auth.requireAuth, async (req, res) => {
     try {
         const mentions = await Mention.findAll({ where: { mentioned_user_id: req.params.userId }, order: [['createdAt', 'DESC']] });
         const results = await Promise.all(mentions.map(async (m) => {
@@ -674,7 +765,7 @@ app.get('/api/mentions/:userId', async (req, res) => {
     } catch (e) { res.status(500).json(e); }
 });
 
-app.post('/api/mentions/read-all', async (req, res) => {
+app.post('/api/mentions/read-all', auth.requireAuth, async (req, res) => {
     try {
         const { userId, containerId } = req.body;
         await Mention.update({ is_read: true }, { where: { mentioned_user_id: userId, source_channel_id: containerId } });
@@ -682,7 +773,7 @@ app.post('/api/mentions/read-all', async (req, res) => {
     } catch (e) { res.status(500).json(e); }
 });
 
-app.post('/api/mentions/:id/read', async (req, res) => {
+app.post('/api/mentions/:id/read', auth.requireAuth, async (req, res) => {
     try {
         const mention = await Mention.findByPk(req.params.id);
         if (mention) { mention.is_read = true; await mention.save(); }
@@ -691,11 +782,11 @@ app.post('/api/mentions/:id/read', async (req, res) => {
 });
 
 // STATUS
-app.get('/api/status', async (req, res) => {
+app.get('/api/status', auth.requireAuth, async (req, res) => {
     try { res.json(await Status.findAll({ order: [['createdAt', 'DESC']] })); } catch (e) { res.json([]); }
 });
 
-app.post('/api/status', async (req, res) => {
+app.post('/api/status', auth.requireAuth, async (req, res) => {
     try {
         const { userId, userName, type, mediaUrl, caption, mentions } = req.body;
         const status = await Status.create({
@@ -710,11 +801,11 @@ app.post('/api/status', async (req, res) => {
 });
 
 // USERS
-app.get('/api/users', async (req, res) => {
+app.get('/api/users', auth.requireAuth, async (req, res) => {
     try { res.json(await User.findAll()); } catch (e) { res.json([]); }
 });
 
-app.get('/api/users/:identifier', async (req, res) => {
+app.get('/api/users/:identifier', auth.requireAuth, async (req, res) => {
     try {
         const user = await User.findOne({ where: { [Op.or]: [{ phone: req.params.identifier }, { id: req.params.identifier }] } });
         if (!user) return res.status(404).json({ error: 'User not found' });
@@ -722,7 +813,7 @@ app.get('/api/users/:identifier', async (req, res) => {
     } catch (e) { res.status(500).json(e); }
 });
 
-app.put('/api/users/:phone', async (req, res) => {
+app.put('/api/users/:phone', auth.requireAuth, async (req, res) => {
     try {
         const user = await User.findOne({ where: { phone: req.params.phone } });
         if (!user) return res.status(404).json({ error: 'User not found' });
@@ -738,11 +829,11 @@ app.put('/api/users/:phone', async (req, res) => {
 });
 
 // WORKSPACES
-app.get('/api/workspaces', async (req, res) => {
+app.get('/api/workspaces', auth.requireAuth, async (req, res) => {
     try { res.json(await Workspace.findAll({ include: [{ model: Channel, as: 'channels' }] })); } catch (e) { res.json([]); }
 });
 
-app.post('/api/workspaces/:workspaceId/channels', async (req, res) => {
+app.post('/api/workspaces/:workspaceId/channels', auth.requireAuth, async (req, res) => {
     try {
         const { name, type, userId, description } = req.body;
         const channel = await Channel.create({
@@ -755,11 +846,11 @@ app.post('/api/workspaces/:workspaceId/channels', async (req, res) => {
 });
 
 // CHANNELS
-app.get('/api/channels/:id', async (req, res) => {
+app.get('/api/channels/:id', auth.requireAuth, async (req, res) => {
     try { const ch = await Channel.findByPk(req.params.id); res.json(ch); } catch (e) { res.status(500).json(e); }
 });
 
-app.put('/api/channels/:id', async (req, res) => {
+app.put('/api/channels/:id', auth.requireAuth, async (req, res) => {
     try {
         const { restricted_messaging, info_edit_restricted, approval_required, topic, name } = req.body;
         const channel = await Channel.findByPk(req.params.id);
@@ -775,7 +866,7 @@ app.put('/api/channels/:id', async (req, res) => {
     } catch (e) { res.status(500).json(e); }
 });
 
-app.get('/api/channels/:id/members', async (req, res) => {
+app.get('/api/channels/:id/members', auth.requireAuth, async (req, res) => {
     try {
         const members = await ChannelMember.findAll({ where: { channelId: req.params.id } });
         const userPhones = members.map(m => m.userId);
@@ -787,7 +878,7 @@ app.get('/api/channels/:id/members', async (req, res) => {
     } catch (e) { res.json([]); }
 });
 
-app.post('/api/channels/:id/members', async (req, res) => {
+app.post('/api/channels/:id/members', auth.requireAuth, async (req, res) => {
     try {
         const { userId, role, addedBy, adderName } = req.body;
         const [member, created] = await ChannelMember.findOrCreate({ where: { channelId: req.params.id, userId: userId }, defaults: { channelId: req.params.id, userId: userId, role: role || 'member' } });
@@ -800,7 +891,7 @@ app.post('/api/channels/:id/members', async (req, res) => {
     } catch (e) { res.status(500).json(e); }
 });
 
-app.delete('/api/channels/:id/members/:userId', async (req, res) => {
+app.delete('/api/channels/:id/members/:userId', auth.requireAuth, async (req, res) => {
     try {
         const deleted = await ChannelMember.destroy({ where: { channelId: req.params.id, userId: req.params.userId } });
         if (deleted) {
@@ -811,7 +902,7 @@ app.delete('/api/channels/:id/members/:userId', async (req, res) => {
     } catch (e) { res.status(500).json(e); }
 });
 
-app.post('/api/channels/join-by-link', async (req, res) => {
+app.post('/api/channels/join-by-link', auth.requireAuth, async (req, res) => {
     try {
         const { inviteCode, userId } = req.body;
         const channel = await Channel.findOne({ where: { invite_code: inviteCode } });
@@ -826,7 +917,7 @@ app.post('/api/channels/join-by-link', async (req, res) => {
     } catch (e) { res.status(500).json(e); }
 });
 
-app.post('/api/channels/:id/typing', async (req, res) => {
+app.post('/api/channels/:id/typing', auth.requireAuth, async (req, res) => {
     try {
         const { userId, userName } = req.body;
         await TypingStatus.upsert({ channelId: req.params.id, userId, userName, lastTypedAt: Date.now() });
@@ -834,7 +925,7 @@ app.post('/api/channels/:id/typing', async (req, res) => {
     } catch (e) { res.status(500).json(e); }
 });
 
-app.get('/api/channels/:id/typing', async (req, res) => {
+app.get('/api/channels/:id/typing', auth.requireAuth, async (req, res) => {
     try {
         const fiveSecondsAgo = Date.now() - 5000;
         const typing = await TypingStatus.findAll({ where: { channelId: req.params.id, lastTypedAt: { [Op.gt]: fiveSecondsAgo } } });
@@ -842,7 +933,7 @@ app.get('/api/channels/:id/typing', async (req, res) => {
     } catch (e) { res.json([]); }
 });
 
-app.post('/api/upload', upload.single('file'), (req, res) => {
+app.post('/api/upload', auth.requireAuth, upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).send('No file uploaded.');
     res.json({ url: `/uploads/${req.file.filename}` });
 });
