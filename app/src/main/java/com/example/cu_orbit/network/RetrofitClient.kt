@@ -1,5 +1,8 @@
 package com.example.cu_orbit.network
 
+import com.example.cu_orbit.BuildConfig
+
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -43,15 +46,38 @@ object RetrofitClient {
         return if (path.startsWith("/")) cleanBase + path else "$cleanBase/$path"
     }
 
+    /** Raised when the server rejects our session, so the UI can send the user back to sign-in. */
+    var onUnauthorized: (() -> Unit)? = null
+
     private fun createService(): ApiService {
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            // BODY logs request bodies, which includes the bearer token and message
+            // contents. Fine while debugging, never in a release build.
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC
+                    else HttpLoggingInterceptor.Level.NONE
+        }
+
+        // Every API call carries the session; the server derives the user from it.
+        val auth = Interceptor { chain ->
+            val token = SessionManager.token
+            val request = if (token.isNullOrBlank()) chain.request()
+                else chain.request().newBuilder()
+                    .header("Authorization", "Bearer $token")
+                    .build()
+
+            val response = chain.proceed(request)
+            if (response.code == 401) {
+                SessionManager.clear()
+                onUnauthorized?.invoke()
+            }
+            response
         }
 
         val client = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
+            .addInterceptor(auth)
             .addInterceptor(logging)
             .build()
 

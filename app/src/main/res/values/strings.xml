@@ -47,4 +47,7 @@
     <string name="status_busy">Busy</string>
     <string name="status_at_work">At Work</string>
     <string name="status_in_meeting">In a Meeting</string>
+    <string name="sign_in_with_campusone">Sign in with CampusOne</string>
+    <string name="campusone_url">https://campusone.cutm.ac.in</string>
+    <string name="login_welcome">Welcome to CU Orbit</string>
 </resources>

@@ -237,8 +237,8 @@ class HomeAdapter(
                     val context = holder.itemView.context
                     val prefs = context.getSharedPreferences("CU_ORBIT_PREFS", android.content.Context.MODE_PRIVATE)
                     val currentUserId = prefs.getString("USER_ID", "")
-                    val contactName = com.example.cu_orbit.utils.ContactUtils.getContactName(context, user.phone)
-                    name = if (user.phone == currentUserId) "You" else (contactName ?: user.name ?: user.phone)
+                    val contactName = user.phone?.let { com.example.cu_orbit.utils.ContactUtils.getContactName(context, it) }
+                    name = if (user.id == currentUserId) "You" else (contactName ?: user.name)
                     unreadCount = user.unreadCount
                     hasMention = false
                     avatarUrl = user.avatarUrl
@@ -248,7 +248,7 @@ class HomeAdapter(
                     senderIsSelf = false
                     isPinned = false
                     onClick = { 
-                        onUserClick(DirectMessage(user.phone, user.id, user.name, user.avatarUrl, user.presence, user.unreadCount, false, false, false))
+                        onUserClick(DirectMessage(user.id, user.id, user.name, user.avatarUrl, user.presence, user.unreadCount, false, false, false))
                     }
                 }
 

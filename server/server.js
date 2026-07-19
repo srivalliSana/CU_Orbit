@@ -217,7 +217,9 @@ Channel.hasMany(ChannelMember, { foreignKey: 'channelId', as: 'members' });
 
 Message.hasMany(Mention, { foreignKey: 'message_id', as: 'mentions' });
 Mention.belongsTo(Message, { foreignKey: 'message_id' });
-Mention.belongsTo(User, { foreignKey: 'mentioned_user_id', targetKey: 'phone', as: 'user' });
+// mentioned_user_id holds a User.id; joining on phone returned nothing once
+// identity moved off phone numbers.
+Mention.belongsTo(User, { foreignKey: 'mentioned_user_id', targetKey: 'id', as: 'user' });
 
 // SYNC
 sequelize.authenticate()
@@ -812,7 +814,7 @@ app.get('/api/messages/:containerId', auth.requireAuth, async (req, res) => {
             include: [{
                 model: Mention,
                 as: 'mentions',
-                include: [{ model: User, as: 'user', attributes: ['id', 'name', 'phone'] }]
+                include: [{ model: User, as: 'user', attributes: ['id', 'name', 'handle'] }]
             }]
         });
         res.json(messages.map(m => ({
@@ -879,23 +881,30 @@ app.post('/api/messages', auth.requireAuth, async (req, res) => {
             senderAvatarUrl, dm_id: (channelId && channelId.includes('_')) ? channelId : null,
             attachments: mediaUrl ? [{ type: type, url: mediaUrl }] : []
         });
+        // Mentions are keyed on User.id. This block previously ran entirely on
+        // phone numbers — comparing normalized UUIDs, and looking up members by
+        // phone with a UUID — so no mention resolved once identity moved.
         const mentionedIds = new Set();
         if (enrichedMentions && Array.isArray(enrichedMentions)) {
-            for (const mData of enrichedMentions) { mentionedIds.add(mData.phone); }
+            for (const mData of enrichedMentions) {
+                const id = mData.user_id || mData.userId;
+                if (id && id !== senderId) mentionedIds.add(id);
+            }
         }
         if (body && (body.toLowerCase().includes('@all') || body.toLowerCase().includes('@everyone'))) {
             const members = await ChannelMember.findAll({ where: { channelId: channelId } });
             for (const member of members) {
-                if (normalizePhone(member.userId) !== normalizePhone(senderId)) { mentionedIds.add(member.userId); }
+                if (member.userId !== senderId) mentionedIds.add(member.userId);
             }
         }
         if (mentionedIds.size === 0 && body && body.includes('@')) {
             const members = await ChannelMember.findAll({ where: { channelId } });
-            for (const m of members) {
-                if (normalizePhone(m.userId) === normalizePhone(senderId)) continue;
-                const user = await User.findOne({ where: { phone: m.userId } });
-                if (user && body.toLowerCase().includes(`@${user.name.toLowerCase()}`)) { mentionedIds.add(user.phone); }
-                else if (user && user.handle && body.toLowerCase().includes(`@${user.handle.toLowerCase()}`)) { mentionedIds.add(user.phone); }
+            const ids = members.map((m) => m.userId).filter((id) => id !== senderId);
+            const users = ids.length ? await User.findAll({ where: { id: { [Op.in]: ids } } }) : [];
+            const text = body.toLowerCase();
+            for (const user of users) {
+                if (user.name && text.includes(`@${user.name.toLowerCase()}`)) mentionedIds.add(user.id);
+                else if (user.handle && text.includes(`@${user.handle.toLowerCase()}`)) mentionedIds.add(user.id);
             }
         }
         for (const uid of mentionedIds) {
@@ -903,7 +912,7 @@ app.post('/api/messages', auth.requireAuth, async (req, res) => {
                 where: { message_id: msg.id, mentioned_user_id: uid },
                 defaults: { source_channel_id: channelId, is_read: false }
             });
-            const user = await User.findOne({ where: { phone: uid } });
+            const user = await User.findByPk(uid);
             if (user) routeMentionNotification(user, msg);
         }
         res.json(msg);
@@ -1120,11 +1129,11 @@ app.put('/api/channels/:id', auth.requireAuth, async (req, res) => {
 app.get('/api/channels/:id/members', auth.requireAuth, async (req, res) => {
     try {
         const members = await ChannelMember.findAll({ where: { channelId: req.params.id } });
-        const userPhones = members.map(m => m.userId);
-        const users = await User.findAll({ where: { phone: { [Op.in]: userPhones } } });
+        const memberIds = members.map(m => m.userId);
+        const users = memberIds.length ? await User.findAll({ where: { id: { [Op.in]: memberIds } } }) : [];
         res.json(users.map(u => {
-            const member = members.find(m => m.userId === u.phone);
-            return { ...u.toJSON(), role: member.role };
+            const member = members.find(m => m.userId === u.id);
+            return { ...u.toJSON(), role: member ? member.role : 'member' };
         }));
     } catch (e) { res.json([]); }
 });

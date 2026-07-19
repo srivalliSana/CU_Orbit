@@ -280,7 +280,7 @@ class ChatFragment : Fragment() {
                     .setItems(names) { _, which ->
                         val selected = users[which]
                         lifecycleScope.launch {
-                            repository.addChannelMember(channelId, selected.phone, currentUserId, currentUserName)
+                            repository.addChannelMember(channelId, selected.id, currentUserId, currentUserName)
                         }
                     }.show()
             } catch (e: Exception) {}

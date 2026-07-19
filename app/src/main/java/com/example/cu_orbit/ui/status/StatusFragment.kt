@@ -100,7 +100,7 @@ class StatusFragment : Fragment() {
             try {
                 val users = repository.getUsers().filter { it.phone != userId }
                 val names = users.map { u ->
-                    val contact = com.example.cu_orbit.utils.ContactUtils.getContactName(requireContext(), u.phone)
+                    val contact = u.phone?.let { com.example.cu_orbit.utils.ContactUtils.getContactName(requireContext(), it) }
                     contact ?: u.name
                 }.toTypedArray()
 
@@ -114,7 +114,7 @@ class StatusFragment : Fragment() {
                     .setPositiveButton("Post") { _, _ ->
                         val selectedPhones = mutableListOf<String>()
                         for (i in checkedItems.indices) {
-                            if (checkedItems[i]) selectedPhones.add(users[i].phone)
+                            if (checkedItems[i]) users[i].phone?.let { selectedPhones.add(it) }
                         }
                         val limitedTagging = selectedPhones.take(5)
                         viewModel.postStatus(userId, userName, "image", serverUrl, null, limitedTagging)

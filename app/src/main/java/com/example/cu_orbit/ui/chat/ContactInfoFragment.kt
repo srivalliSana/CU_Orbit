@@ -65,7 +65,7 @@ class ContactInfoFragment : Fragment() {
                 // Fetch full user details from server
                 val user = repository.getUser(targetPhone)
                 
-                val contactName = ContactUtils.getContactName(requireContext(), user.phone)
+                val contactName = user.phone?.let { ContactUtils.getContactName(requireContext(), it) }
                 nameText.text = contactName ?: user.name ?: user.phone
                 phoneText.text = user.phone
                 bioText.text = if (user.bio.isNullOrEmpty()) "No status available" else user.bio

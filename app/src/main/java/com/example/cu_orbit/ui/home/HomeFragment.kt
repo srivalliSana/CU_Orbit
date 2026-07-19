@@ -104,7 +104,7 @@ class HomeFragment : Fragment() {
                 val containerId = when (item) {
                     is Channel -> item.id
                     is DirectMessage -> item.id
-                    is User -> if (userId < item.phone) "${userId}_${item.phone}" else "${item.phone}_$userId"
+                    is User -> listOf(userId, item.id).sorted().joinToString("_")
                     else -> ""
                 }
                 

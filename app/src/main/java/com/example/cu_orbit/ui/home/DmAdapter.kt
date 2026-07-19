@@ -32,7 +32,7 @@ class DmAdapter(private val users: List<User>, private val onClick: (User) -> Un
     override fun onBindViewHolder(holder: DmViewHolder, position: Int) {
         val user = users[position]
         
-        val contactName = ContactUtils.getContactName(holder.itemView.context, user.phone)
+        val contactName = user.phone?.let { ContactUtils.getContactName(holder.itemView.context, it) }
         holder.name.text = contactName ?: user.name
 
         val rawTime = user.lastMessageTime ?: ""

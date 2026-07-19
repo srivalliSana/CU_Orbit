@@ -155,11 +155,11 @@ class ChannelInfoFragment : Fragment() {
             try {
                 when (action) {
                     "remove" -> {
-                        repository.removeChannelMember(channelId, user.phone)
+                        repository.removeChannelMember(channelId, user.id)
                         loadChannelDetails(requireView())
                     }
                     "promote" -> {
-                        repository.updateMemberRole(channelId, user.phone, "admin")
+                        repository.updateMemberRole(channelId, user.id, "admin")
                         loadChannelDetails(requireView())
                     }
                 }
@@ -221,7 +221,7 @@ class ChannelInfoFragment : Fragment() {
                             user?.let {
                                 addedCount++
                                 lifecycleScope.launch {
-                                    try { repository.addChannelMember(channelId, it.phone, currentUserId, currentUserName) } catch (e: Exception) {}
+                                    try { repository.addChannelMember(channelId, it.id, currentUserId, currentUserName) } catch (e: Exception) {}
                                 }
                             }
                         }
@@ -292,7 +292,7 @@ class MemberManagementAdapter(
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val user = members[position]
         val context = holder.itemView.context
-        val contactName = com.example.cu_orbit.utils.ContactUtils.getContactName(context, user.phone)
+        val contactName = user.phone?.let { com.example.cu_orbit.utils.ContactUtils.getContactName(context, it) }
         val nameToDisplay = if (user.phone == currentUserId) "You" else (contactName ?: user.name)
         
         holder.name.text = nameToDisplay

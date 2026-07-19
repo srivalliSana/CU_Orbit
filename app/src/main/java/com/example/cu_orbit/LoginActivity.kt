@@ -1,144 +1,172 @@
 package com.example.cu_orbit
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
-import android.view.inputmethod.InputMethodManager
+import android.view.View
 import android.widget.Button
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.lifecycle.lifecycleScope
 import com.example.cu_orbit.network.RetrofitClient
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.api.ApiException
-import com.google.android.material.textfield.TextInputEditText
+import com.example.cu_orbit.network.SessionManager
 import kotlinx.coroutines.launch
 
+/**
+ * Sign-in via CampusOne.
+ *
+ * CU Orbit has no login of its own any more — CampusOne is the identity source.
+ * We open its /connect/mobile page in a Custom Tab; it authenticates the user
+ * with whatever method CampusOne uses (Google today), mints a 60-second handoff
+ * token, and redirects back to cuorbit://auth?token=… which lands in
+ * onNewIntent below.
+ *
+ * A Custom Tab rather than a WebView, deliberately: it shares the system
+ * browser's cookies, so anyone already signed into CampusOne is not asked
+ * again, and credentials are never typed inside our app.
+ */
 class LoginActivity : AppCompatActivity() {
 
-    private val RC_SIGN_IN = 9001
+    private lateinit var statusText: TextView
+    private lateinit var signInButton: Button
+    private var progress: View? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_login)
+        SessionManager.init(this)
 
-        val editEmail: TextInputEditText = findViewById(R.id.edit_email)
-        val buttonContinue: Button = findViewById(R.id.button_continue)
-        val buttonGoogle: Button = findViewById(R.id.button_google)
-        val signTitle: android.widget.TextView = findViewById(R.id.text_welcome)
+        statusText = findViewById(R.id.text_welcome)
+        signInButton = findViewById(R.id.button_google)
+        progress = findViewById(R.id.login_progress)
 
-        var tapCount = 0
-        signTitle.setOnClickListener {
-            tapCount++
-            if (tapCount >= 5) {
-                tapCount = 0
-                showIpDialog()
-            }
-        }
+        // The email box and Continue button drove the retired passwordless
+        // flow; sign-in now goes through CampusOne.
+        findViewById<View>(R.id.layout_email)?.visibility = View.GONE
+        findViewById<View>(R.id.button_continue)?.visibility = View.GONE
+        findViewById<View>(R.id.text_or)?.visibility = View.GONE
 
-        buttonContinue.setOnClickListener {
-            val email = editEmail.text.toString().trim().lowercase()
-            if (isValidUniversityEmail(email)) {
-                hideKeyboard()
-                buttonContinue.isEnabled = false
-                loginWithEmail(email, buttonContinue)
-            } else {
-                Toast.makeText(this, "Only @cutm.ac.in or @cutmap.ac.in emails are allowed", Toast.LENGTH_SHORT).show()
-            }
-        }
+        signInButton.text = getString(R.string.sign_in_with_campusone)
+        signInButton.setOnClickListener { startCampusOneSignIn() }
 
-        buttonGoogle.setOnClickListener {
-            signInWithGoogle()
+        // Hidden entry point for pointing the app at a local server.
+        var taps = 0
+        statusText.setOnClickListener { if (++taps >= 5) { taps = 0; showServerDialog() } }
+
+        when {
+            intent?.data != null -> handleAuthRedirect(intent)
+            SessionManager.isSignedIn -> validateExistingSession()
         }
     }
 
-    private fun isValidUniversityEmail(email: String): Boolean {
-        return email.endsWith("@cutm.ac.in") || email.endsWith("@cutmap.ac.in")
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleAuthRedirect(intent)
     }
 
-    private fun signInWithGoogle() {
-        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestEmail()
-            .requestProfile()
-            .build()
-        val googleSignInClient = GoogleSignIn.getClient(this, gso)
-        startActivityForResult(googleSignInClient.signInIntent, RC_SIGN_IN)
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == RC_SIGN_IN) {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
+    private fun startCampusOneSignIn() {
+        val campus = getString(R.string.campusone_url).trimEnd('/')
+        val url = "$campus/connect/mobile?redirect_uri=" + Uri.encode(AUTH_REDIRECT)
+        try {
+            CustomTabsIntent.Builder().setShowTitle(true).build()
+                .launchUrl(this, Uri.parse(url))
+        } catch (e: Exception) {
+            // No Custom Tab provider — fall back to any browser.
             try {
-                val account = task.getResult(ApiException::class.java)
-                val email = account?.email ?: ""
-                if (isValidUniversityEmail(email)) {
-                    loginWithEmail(email, findViewById(R.id.button_google))
-                } else {
-                    GoogleSignIn.getClient(this, GoogleSignInOptions.DEFAULT_SIGN_IN).signOut()
-                    Toast.makeText(this, "Only @cutm.ac.in or @cutmap.ac.in emails are allowed", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: ApiException) {
-                Toast.makeText(this, "Google sign in failed", Toast.LENGTH_SHORT).show()
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            } catch (e2: Exception) {
+                toast("No browser available to sign in.")
             }
         }
     }
 
-    private fun showIpDialog() {
-        val input = android.widget.EditText(this).apply { 
-            hint = "192.168.x.x"
-            setText(RetrofitClient.baseUrl.replace("http://", "").replace(":3000/api/", ""))
+    /** Handles cuorbit://auth?token=… coming back from CampusOne. */
+    private fun handleAuthRedirect(intent: Intent?) {
+        val token = intent?.data
+            ?.takeIf { it.scheme == "cuorbit" }
+            ?.getQueryParameter("token")
+            ?: return
+
+        busy(true, "Signing you in…")
+        lifecycleScope.launch {
+            try {
+                val res = RetrofitClient.instance.ssoExchange(mapOf("token" to token))
+                val session = res.session
+                val user = res.user
+                if (session.isNullOrBlank() || user == null) {
+                    busy(false, getString(R.string.login_welcome))
+                    toast("Sign-in failed. Please try again.")
+                    return@launch
+                }
+                SessionManager.token = session
+                SessionManager.saveUser(user.id, user.name, user.campusEmail ?: user.email, user.role, user.avatarUrl)
+                goToMain()
+            } catch (e: Exception) {
+                busy(false, getString(R.string.login_welcome))
+                toast(e.message ?: "Could not sign in.")
+            }
+        }
+    }
+
+    /** A stored session may have expired while the app was closed. */
+    private fun validateExistingSession() {
+        busy(true, "Signing you in…")
+        lifecycleScope.launch {
+            try {
+                val user = RetrofitClient.instance.me().user
+                if (user != null) {
+                    SessionManager.saveUser(user.id, user.name, user.campusEmail ?: user.email, user.role, user.avatarUrl)
+                    goToMain()
+                } else {
+                    SessionManager.clear()
+                    busy(false, getString(R.string.login_welcome))
+                }
+            } catch (e: Exception) {
+                SessionManager.clear()
+                busy(false, getString(R.string.login_welcome))
+            }
+        }
+    }
+
+    private fun goToMain() {
+        startActivity(
+            Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        )
+        finish()
+    }
+
+    private fun busy(on: Boolean, message: String? = null) {
+        progress?.visibility = if (on) View.VISIBLE else View.GONE
+        signInButton.isEnabled = !on
+        message?.let { statusText.text = it }
+    }
+
+    private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+
+    private fun showServerDialog() {
+        val input = android.widget.EditText(this).apply {
+            hint = "192.168.1.5  or  https://host"
+            setText(RetrofitClient.baseUrl)
         }
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Change Server IP")
+            .setTitle("Server address")
             .setView(input)
-            .setPositiveButton("Update") { _, _ ->
-                val ip = input.text.toString().trim()
-                if (ip.isNotEmpty()) {
-                    RetrofitClient.updateBaseUrl(ip)
-                    Toast.makeText(this, "IP Updated to $ip", Toast.LENGTH_SHORT).show()
+            .setPositiveButton("Save") { _, _ ->
+                val value = input.text.toString().trim()
+                if (value.isNotEmpty()) {
+                    RetrofitClient.updateBaseUrl(value)
+                    toast("Server set to ${RetrofitClient.baseUrl}")
                 }
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
-    private fun hideKeyboard() {
-        val view = this.currentFocus
-        if (view != null) {
-            val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-            imm.hideSoftInputFromWindow(view.windowToken, 0)
-        }
-    }
-
-    private fun loginWithEmail(email: String, button: Button) {
-        lifecycleScope.launch {
-            try {
-                val response = RetrofitClient.instance.login(mapOf("email" to email))
-                if (response["success"] == true) {
-                    val isNewUser = response["isNewUser"] as? Boolean ?: true
-                    val prefs = getSharedPreferences("CU_ORBIT_PREFS", MODE_PRIVATE)
-                    
-                    prefs.edit().apply {
-                        putString("USER_EMAIL", email)
-                        (response["user"] as? Map<*, *>)?.let { user ->
-                            putString("USER_ID", user["phone"]?.toString())
-                            putString("USER_NAME", user["name"]?.toString())
-                        }
-                    }.apply()
-
-                    if (isNewUser) {
-                        startActivity(Intent(this@LoginActivity, ProfileSetupActivity::class.java).putExtra("EMAIL", email))
-                    } else {
-                        startActivity(Intent(this@LoginActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
-                    }
-                    finish()
-                }
-            } catch (e: Exception) {
-                Toast.makeText(this@LoginActivity, "Connection failed. Check your IP.", Toast.LENGTH_LONG).show()
-            } finally {
-                button.isEnabled = true
-            }
-        }
+    companion object {
+        const val AUTH_REDIRECT = "cuorbit://auth"
     }
 }

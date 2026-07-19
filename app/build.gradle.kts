@@ -30,6 +30,11 @@ android {
             }
         }
     }
+    buildFeatures {
+        // RetrofitClient gates HTTP body logging on BuildConfig.DEBUG.
+        buildConfig = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -111,6 +116,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.livedata.ktx)
     implementation("com.google.android.gms:play-services-auth:21.2.0")
     implementation("io.coil-kt:coil:2.5.0")
+    // Custom Tabs for the CampusOne sign-in handoff
+    implementation("androidx.browser:browser:1.8.0")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)

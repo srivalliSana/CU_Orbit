@@ -5,6 +5,14 @@ import retrofit2.http.*
 
 interface ApiService {
     // AUTH
+    // Exchanges a CampusOne handoff token for a CU Orbit session.
+    @POST("auth/sso")
+    suspend fun ssoExchange(@Body body: Map<String, String>): SsoResponse
+
+    // Validates a stored session and returns the current user.
+    @GET("auth/me")
+    suspend fun me(): MeResponse
+
     @POST("auth/login")
     suspend fun login(@Body body: Map<String, String>): Map<String, Any>
 

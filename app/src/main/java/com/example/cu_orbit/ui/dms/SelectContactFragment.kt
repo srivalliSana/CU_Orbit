@@ -84,7 +84,7 @@ class SelectContactFragment : Fragment() {
                 currentHeader = item
                 hasContentForHeader = false
             } else if (item is User) {
-                if (item.name.lowercase().contains(lower) || item.phone.contains(lower)) {
+                if (item.name.lowercase().contains(lower) || (item.phone ?: "").contains(lower)) {
                     if (currentHeader != null && !hasContentForHeader) {
                         filtered.add(currentHeader)
                         hasContentForHeader = true
@@ -144,12 +144,12 @@ class SelectContactFragment : Fragment() {
                     if (u.phone == currentUserId) {
                         u.copy(name = "You (Message Yourself)")
                     } else {
-                        val contactName = com.example.cu_orbit.utils.ContactUtils.getContactName(requireContext(), u.phone)
+                        val contactName = u.phone?.let { com.example.cu_orbit.utils.ContactUtils.getContactName(requireContext(), it) }
                         u.copy(name = contactName ?: u.name)
                     }
                 }
                 registeredPhones.clear()
-                registeredPhones.addAll(registeredUsers.map { it.phone })
+                registeredPhones.addAll(registeredUsers.mapNotNull { it.phone })
                 displayList.addAll(appUsers)
 
                 displayList.add("Invite to CU Orbit")
