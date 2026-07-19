@@ -488,9 +488,13 @@ app.post('/api/system/register-release', async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
-// Web Portal Route
+// Web Portal — the React client built from web/ into public/app. Falls back to
+// the legacy portal if the app has not been built yet, so a missing build
+// degrades instead of 404ing.
+const APP_INDEX = path.join(__dirname, 'public', 'app', 'index.html');
+const LEGACY_INDEX = path.join(__dirname, 'public', 'index.html');
 app.get('/portal', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(fs.existsSync(APP_INDEX) ? APP_INDEX : LEGACY_INDEX);
 });
 
 // --- ROUTES ---
@@ -694,15 +698,18 @@ app.get('/api/home/:userId/:workspaceId', auth.requireAuth, async (req, res) => 
                     text: lastMsg.body || "",
                     sent_at: lastMsg.timestamp,
                     type: lastMsg.type,
-                    sender_is_self: normalizePhone(lastMsg.senderId) === normalizePhone(userId)
+                    sender_is_self: lastMsg.senderId === userId
                 } : null,
                 unread_count: unreadCount,
                 has_unread_mention: hasUnreadMention
             };
         }));
-        const users = await User.findAll({ where: { phone: { [Op.ne]: userId } } });
+        // Identity is the UUID now. The previous filter compared phone to a user
+        // id and, because SQL drops NULLs from a != comparison, returned nobody
+        // once accounts arrived via SSO without a phone number.
+        const users = await User.findAll({ where: { id: { [Op.ne]: userId } } });
         const dms = await Promise.all(users.map(async (u) => {
-            const dmId = userId < u.phone ? `${userId}_${u.phone}` : `${u.phone}_${userId}`;
+            const dmId = [userId, u.id].sort().join('_');
             const pref = await ConversationPref.findOne({ where: { userId, containerId: dmId } });
             const lastMsg = await Message.findOne({ where: { dm_id: dmId }, order: [['timestamp', 'DESC']] });
             if (pref && pref.isHidden && !lastMsg) return null;
@@ -710,7 +717,7 @@ app.get('/api/home/:userId/:workspaceId', auth.requireAuth, async (req, res) => 
             const hasUnreadMention = await Mention.count({ where: { mentioned_user_id: userId, source_channel_id: dmId, is_read: false } }) > 0;
             return {
                 id: dmId,
-                other_user_id: u.phone,
+                other_user_id: u.id,
                 other_user_name: u.name,
                 other_user_avatar_url: u.avatarUrl,
                 presence: u.presence,
@@ -719,7 +726,7 @@ app.get('/api/home/:userId/:workspaceId', auth.requireAuth, async (req, res) => 
                 unread_count: await Message.count({ where: { dm_id: dmId, senderId: { [Op.ne]: userId }, status: { [Op.ne]: 'read' } } }),
                 has_unread_mention: hasUnreadMention,
                 last_message_preview: lastMsg ? {
-                    sender_is_self: normalizePhone(lastMsg.senderId) === normalizePhone(userId),
+                    sender_is_self: lastMsg.senderId === userId,
                     text: lastMsg.body || "",
                     sent_at: lastMsg.timestamp,
                     type: lastMsg.type

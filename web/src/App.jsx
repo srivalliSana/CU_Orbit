@@ -1,18 +1,75 @@
-import React from 'react';
-import { useDeviceDetect } from './hooks/useDeviceDetect';
-import LandingPage from './pages/LandingPage';
-import DesktopApp from './pages/DesktopApp';
+import React, { useCallback, useEffect, useState } from 'react';
+import { signIn } from './api/auth';
+import { getHome } from './api/chat';
+import ChatList from './components/ChatList';
+import ChatWindow from './components/ChatWindow';
+import EmptyState from './components/EmptyState';
 
-const App = () => {
-  const { isMobile, os } = useDeviceDetect();
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [status, setStatus] = useState('signing-in');   // signing-in | ready | error
+  const [error, setError] = useState(null);
+  const [chats, setChats] = useState({ channels: [], dms: [] });
+  const [active, setActive] = useState(null);
 
-  // If on mobile/tablet, show the landing/download page
-  if (isMobile) {
-    return <LandingPage os={os} />;
+  useEffect(() => {
+    signIn()
+      .then((u) => {
+        if (!u) return;              // standalone redirect in flight
+        setUser(u);
+        setStatus('ready');
+      })
+      .catch((e) => { setError(e.message); setStatus('error'); });
+  }, []);
+
+  const refreshChats = useCallback(() => {
+    getHome().then(setChats).catch(() => {});
+  }, []);
+
+  useEffect(() => { if (status === 'ready') refreshChats(); }, [status, refreshChats]);
+
+  // Until the realtime layer lands, the chat list refreshes on a slow interval.
+  // The open conversation polls faster, inside ChatWindow.
+  useEffect(() => {
+    if (status !== 'ready') return;
+    const t = setInterval(refreshChats, 10000);
+    return () => clearInterval(t);
+  }, [status, refreshChats]);
+
+  if (status === 'signing-in') {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div className="text-center">
+          <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
+          <p className="text-sm text-slate-500">Connecting to CU Orbit…</p>
+        </div>
+      </div>
+    );
   }
 
-  // If on desktop/laptop, show the full web application
-  return <DesktopApp os={os} />;
-};
+  if (status === 'error') {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50 p-6 dark:bg-slate-950">
+        <div className="max-w-sm text-center">
+          <p className="text-lg font-semibold text-slate-800 dark:text-slate-100">Can’t open messaging</p>
+          <p className="mt-2 text-sm text-slate-500">{error}</p>
+          <button
+            onClick={() => location.reload()}
+            className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-export default App;
+  return (
+    <div className="flex h-screen overflow-hidden bg-slate-100 dark:bg-slate-950">
+      <ChatList user={user} chats={chats} activeId={active?.id} onSelect={setActive} />
+      {active
+        ? <ChatWindow key={active.id} chat={active} user={user} onSent={refreshChats} />
+        : <EmptyState user={user} />}
+    </div>
+  );
+}
