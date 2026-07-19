@@ -3,115 +3,190 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CU Orbit | Web Portal</title>
+    <title>CU Orbit | Desktop</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="/css/style.css" rel="stylesheet">
 </head>
 <body class="bg-[#0f172a] text-white overflow-hidden">
-    <!-- Main App Container -->
-    <div id="app" class="h-screen flex flex-col">
-        <!-- Auth View -->
-        <div id="auth-view" class="flex-1 flex items-center justify-center hidden">
-            <div class="bg-[#1e293b] p-10 rounded-2xl w-full max-w-md shadow-2xl border border-slate-700">
-                <div class="text-center mb-8">
-                    <h1 class="text-4xl font-bold text-[#38bdf8] mb-2">CU Orbit</h1>
-                    <p class="text-slate-400">Sign in to your university workspace</p>
-                </div>
-                <input id="login-phone" type="tel" placeholder="Phone Number" class="w-full bg-[#0f172a] border border-slate-700 p-4 rounded-xl mb-4 focus:ring-2 focus:ring-[#38bdf8] outline-none">
-                <button onclick="handleLogin()" class="w-full bg-[#38bdf8] text-[#0f172a] font-bold p-4 rounded-xl hover:scale-[1.02] transition-transform">Sign In</button>
+
+    <div id="app-root" class="h-screen flex flex-col">
+        <!-- GLOBAL LOADER -->
+        <div id="global-loader" class="fixed inset-0 bg-slate-950 z-[100] flex items-center justify-center transition-opacity duration-500">
+            <div class="flex flex-col items-center">
+                <i class="fa-solid fa-satellite-dish text-5xl text-blue-500 animate-bounce mb-4"></i>
+                <div class="text-xl font-bold tracking-widest text-blue-400">CU ORBIT</div>
             </div>
         </div>
 
-        <!-- Main Dashboard View -->
-        <div id="main-view" class="flex-1 flex hidden">
-            <!-- Sidebar -->
-            <div class="w-72 bg-[#1e293b] flex flex-col border-r border-slate-700">
-                <div class="p-4 border-b border-slate-700 flex items-center justify-between">
-                    <div id="active-workspace" class="font-bold truncate text-lg">CU Orbit</div>
-                    <i class="fa-solid fa-chevron-down text-slate-500 cursor-pointer"></i>
+        <!-- PAGE: LOGIN -->
+        <div id="page-login" class="page hidden flex-1 items-center justify-center bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/20 to-slate-950">
+            <div class="bg-[#1e293b] p-12 rounded-[2.5rem] w-full max-w-md shadow-2xl border border-slate-700/50 text-center">
+                <h1 class="text-5xl font-extrabold text-white mb-2">Login</h1>
+                <p class="text-slate-400 mb-10">Enter your registered university number</p>
+                <div class="space-y-4">
+                    <input id="input-login-phone" type="tel" placeholder="Phone Number (10 digits)" class="w-full bg-slate-900 border border-slate-700 p-5 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all text-lg text-center tracking-widest">
+                    <button onclick="handleLogin()" class="w-full bg-blue-500 hover:bg-blue-400 text-slate-950 font-extrabold p-5 rounded-2xl shadow-lg shadow-blue-500/20 transition-all active:scale-95">CONTINUE</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MAIN LAYOUT (Home, Chat, Profile share this) -->
+        <div id="layout-main" class="page hidden flex-1 flex overflow-hidden">
+            <!-- SIDEBAR -->
+            <div class="w-80 bg-[#1e293b] flex flex-col border-r border-slate-800 shadow-xl z-20">
+                <!-- Workspace Header -->
+                <div class="p-6 flex items-center justify-between border-b border-slate-800/50">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center font-bold text-slate-950">CU</div>
+                        <div class="font-black text-xl tracking-tight">Orbit</div>
+                    </div>
+                    <i class="fa-solid fa-bell text-slate-500 hover:text-white cursor-pointer transition-colors"></i>
                 </div>
 
-                <div class="flex-1 overflow-y-auto custom-scrollbar">
-                    <!-- Quick Access -->
-                    <div class="p-2 space-y-1">
-                        <div class="flex items-center space-x-3 p-2 rounded-lg hover:bg-slate-800 cursor-pointer text-slate-300">
-                            <i class="fa-solid fa-at w-5 text-center"></i>
-                            <span>Mentions</span>
+                <!-- Nav Tabs -->
+                <div class="flex border-b border-slate-800/50">
+                    <button onclick="switchTab('chats')" id="tab-chats" class="flex-1 p-4 font-bold text-sm border-b-2 border-blue-500 text-blue-400">CHATS</button>
+                    <button onclick="switchTab('mentions')" id="tab-mentions" class="flex-1 p-4 font-bold text-sm text-slate-500 hover:text-white transition-colors">MENTIONS</button>
+                </div>
+
+                <!-- List Content -->
+                <div class="flex-1 overflow-y-auto custom-scrollbar bg-slate-900/20">
+                    <!-- Section: Channels -->
+                    <div class="py-4">
+                        <div class="px-6 flex items-center justify-between mb-2">
+                            <span class="text-[10px] font-black text-slate-500 tracking-widest">CHANNELS</span>
+                            <i class="fa-solid fa-plus text-xs text-slate-500 hover:text-white cursor-pointer" onclick="showCreateChannel()"></i>
                         </div>
+                        <div id="list-channels"></div>
                     </div>
 
-                    <!-- Channels -->
-                    <div class="mt-4">
-                        <div class="px-4 text-xs font-bold text-slate-500 flex justify-between items-center mb-2">
-                            <span>CHANNELS</span>
-                            <i class="fa-solid fa-plus cursor-pointer hover:text-white"></i>
+                    <!-- Section: DMs -->
+                    <div class="py-4">
+                        <div class="px-6 flex items-center justify-between mb-2">
+                            <span class="text-[10px] font-black text-slate-500 tracking-widest">DIRECT MESSAGES</span>
+                            <i class="fa-solid fa-user-plus text-xs text-slate-500 hover:text-white cursor-pointer" onclick="showContacts()"></i>
                         </div>
-                        <div id="channel-list" class="space-y-0.5"></div>
-                    </div>
-
-                    <!-- DMs -->
-                    <div class="mt-6">
-                        <div class="px-4 text-xs font-bold text-slate-500 flex justify-between items-center mb-2">
-                            <span>DIRECT MESSAGES</span>
-                            <i class="fa-solid fa-plus cursor-pointer hover:text-white" onclick="showContacts()"></i>
-                        </div>
-                        <div id="dm-list" class="space-y-0.5"></div>
+                        <div id="list-dms"></div>
                     </div>
                 </div>
 
-                <!-- Profile Footer -->
-                <div class="p-4 bg-[#0f172a] flex items-center space-x-3 border-t border-slate-700">
-                    <img id="user-avatar" src="/ic_person.xml" class="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 object-cover">
-                    <div class="flex-1 min-w-0">
-                        <div id="user-name" class="font-bold truncate text-sm">Srivalli Sana</div>
-                        <div class="text-[10px] text-green-500 flex items-center">
-                            <span class="w-2 h-2 bg-green-500 rounded-full mr-1"></span> Online
-                        </div>
+                <!-- User Footer -->
+                <div class="p-4 bg-slate-950/30 flex items-center space-x-4 border-t border-slate-800">
+                    <div class="relative group cursor-pointer" onclick="navigateTo('profile')">
+                        <img id="me-avatar" src="" class="w-12 h-12 rounded-2xl bg-slate-800 border border-slate-700 object-cover group-hover:opacity-80">
+                        <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-4 border-[#1e293b] rounded-full"></div>
                     </div>
-                    <i onclick="handleLogout()" class="fa-solid fa-right-from-bracket text-slate-500 hover:text-red-400 cursor-pointer p-2"></i>
+                    <div class="flex-1 min-w-0 cursor-pointer" onclick="navigateTo('profile')">
+                        <div id="me-name" class="font-bold truncate text-sm">Loading...</div>
+                        <div id="me-status" class="text-[10px] text-slate-500 truncate">✨ Update status</div>
+                    </div>
+                    <button onclick="handleLogout()" class="w-10 h-10 rounded-xl hover:bg-red-500/10 text-slate-500 hover:text-red-400 transition-all">
+                        <i class="fa-solid fa-power-off"></i>
+                    </button>
                 </div>
             </div>
 
-            <!-- Chat Area -->
-            <div class="flex-1 flex flex-col bg-[#0f172a]">
-                <div class="h-[52px] border-b border-slate-700 flex items-center px-6 justify-between bg-[#1e293b]">
-                    <div class="flex flex-col min-w-0">
-                        <h2 id="chat-title" class="font-bold text-lg leading-tight"># general</h2>
-                        <span id="chat-subtitle" class="text-xs text-slate-500">15 members</span>
+            <!-- CONTENT AREA -->
+            <div id="content-container" class="flex-1 flex flex-col bg-[#0f172a] relative">
+                <!-- VIEW: EMPTY STATE -->
+                <div id="view-empty" class="view flex-1 flex flex-col items-center justify-center text-center p-12">
+                    <div class="w-32 h-32 bg-slate-900 rounded-[2.5rem] flex items-center justify-center mb-8 border border-slate-800 shadow-2xl">
+                        <i class="fa-solid fa-comments text-4xl text-slate-700"></i>
                     </div>
-                    <div class="flex items-center space-x-4">
-                        <i class="fa-solid fa-phone text-slate-400 hover:text-white cursor-pointer"></i>
-                        <i class="fa-solid fa-info-circle text-slate-400 hover:text-white cursor-pointer" onclick="toggleInfo()"></i>
-                    </div>
+                    <h2 class="text-3xl font-bold mb-3">Welcome to CU Orbit</h2>
+                    <p class="text-slate-500 max-w-md">Select a conversation from the sidebar to start messaging your university mates.</p>
                 </div>
 
-                <!-- Messages -->
-                <div id="message-container" class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar flex flex-col">
-                    <div class="flex-1"></div>
-                    <!-- Messages will be injected here -->
-                </div>
-
-                <!-- Input Area -->
-                <div class="p-4 bg-[#0f172a]">
-                    <div class="bg-[#1e293b] rounded-xl border border-slate-700 p-2 shadow-lg">
-                        <textarea id="message-input" rows="1" placeholder="Message #general" class="w-full bg-transparent p-3 outline-none resize-none text-slate-200 custom-scrollbar"></textarea>
-                        <div class="flex items-center justify-between mt-2 px-2">
-                            <div class="flex items-center space-x-3 text-slate-400">
-                                <i class="fa-solid fa-plus-circle hover:text-white cursor-pointer"></i>
-                                <i class="fa-solid fa-bold hover:text-white cursor-pointer border-r border-slate-700 pr-3"></i>
-                                <i class="fa-solid fa-smile hover:text-white cursor-pointer"></i>
-                                <i class="fa-solid fa-at hover:text-white cursor-pointer"></i>
+                <!-- VIEW: CHAT -->
+                <div id="view-chat" class="view hidden flex-1 flex flex-col overflow-hidden">
+                    <!-- Chat Header -->
+                    <div class="h-20 border-b border-slate-800 flex items-center px-8 justify-between bg-slate-900/40 backdrop-blur-md">
+                        <div class="flex items-center space-x-4 cursor-pointer hover:opacity-80 transition-opacity" onclick="showInfo()">
+                            <div id="chat-icon" class="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-500 font-bold text-xl">#</div>
+                            <div class="flex flex-col min-w-0">
+                                <h2 id="chat-title" class="font-extrabold text-xl leading-tight truncate"># general</h2>
+                                <span id="chat-subtitle" class="text-xs text-slate-500">Connecting...</span>
                             </div>
-                            <button id="send-button" onclick="handleSendMessage()" class="bg-[#38bdf8] text-[#0f172a] px-5 py-2 rounded-lg font-bold opacity-50 cursor-not-allowed" disabled>Send</button>
+                        </div>
+                        <div class="flex items-center space-x-6">
+                            <i class="fa-solid fa-magnifying-glass text-slate-400 hover:text-white cursor-pointer"></i>
+                            <i class="fa-solid fa-ellipsis-vertical text-slate-400 hover:text-white cursor-pointer" onclick="showInfo()"></i>
                         </div>
                     </div>
+
+                    <!-- Messages -->
+                    <div id="message-container" class="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
+                        <!-- Date separators and messages here -->
+                    </div>
+
+                    <!-- Typing Indicator Area -->
+                    <div id="typing-box" class="px-8 py-2 text-xs italic text-blue-400 font-medium h-8"></div>
+
+                    <!-- Input Area -->
+                    <div class="p-8 pt-2">
+                        <div class="bg-slate-900 rounded-[2rem] border border-slate-800 p-3 shadow-2xl focus-within:border-blue-500/50 transition-colors">
+                            <div class="flex items-end">
+                                <button class="w-12 h-12 rounded-full hover:bg-slate-800 text-slate-500 transition-colors mb-0.5">
+                                    <i class="fa-solid fa-plus"></i>
+                                </button>
+                                <textarea id="msg-input" rows="1" placeholder="Type a message..." class="flex-1 bg-transparent p-3 outline-none resize-none text-slate-200 text-lg leading-relaxed custom-scrollbar max-h-40"></textarea>
+                                <button id="btn-send" onclick="sendMessage()" class="w-12 h-12 rounded-2xl bg-blue-500 hover:bg-blue-400 text-slate-950 transition-all flex items-center justify-center shadow-lg shadow-blue-500/20 disabled:opacity-20 mb-0.5" disabled>
+                                    <i class="fa-solid fa-paper-plane"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VIEW: PROFILE (YOU) -->
+                <div id="view-profile" class="view hidden flex-1 flex flex-col items-center justify-center p-12 overflow-y-auto custom-scrollbar">
+                     <div class="w-full max-w-xl bg-slate-900/50 rounded-[3rem] border border-slate-800 p-12 text-center">
+                         <div class="relative inline-block mb-8">
+                             <img id="prof-avatar" src="" class="w-40 h-40 rounded-[2.5rem] object-cover border-4 border-slate-800 shadow-2xl bg-slate-800">
+                             <label class="absolute bottom-2 right-2 w-12 h-12 bg-blue-500 rounded-2xl flex items-center justify-center cursor-pointer hover:bg-blue-400 shadow-xl transition-all">
+                                 <i class="fa-solid fa-camera text-slate-950"></i>
+                                 <input type="file" id="avatar-upload" class="hidden" accept="image/*">
+                             </label>
+                         </div>
+                         <h2 id="prof-name" class="text-4xl font-black mb-2 tracking-tight">User Name</h2>
+                         <p id="prof-phone" class="text-slate-500 font-mono mb-8 uppercase tracking-widest">91XXXXXXXX</p>
+
+                         <div class="grid grid-cols-1 gap-4 text-left">
+                             <div class="p-6 bg-slate-950/50 rounded-3xl border border-slate-800">
+                                 <span class="text-[10px] font-black text-slate-500 block mb-2 uppercase tracking-widest">About / Bio</span>
+                                 <p id="prof-bio" class="text-slate-300">University Student</p>
+                             </div>
+                             <div class="p-6 bg-slate-950/50 rounded-3xl border border-slate-800 flex items-center justify-between">
+                                 <div>
+                                     <span class="text-[10px] font-black text-slate-500 block mb-1 uppercase tracking-widest">Current Status</span>
+                                     <span id="prof-status-text" class="text-slate-300 italic">None set</span>
+                                 </div>
+                                 <button class="bg-blue-500/10 text-blue-400 font-bold px-4 py-2 rounded-xl text-xs hover:bg-blue-500/20">EDIT</button>
+                             </div>
+                         </div>
+                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Modals \u0026 Context menus -->\n    <div id="overlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center" onclick="closeModal(event)">\n        <div id="contacts-modal" class="bg-[#1e293b] w-full max-w-md rounded-2xl p-6 border border-slate-700 shadow-2xl flex flex-col max-h-[80vh]">\n             <div class="flex items-center justify-between mb-4">\n                 <h3 class="text-xl font-bold text-[#38bdf8]">Select Contact</h3>\n                 <i class="fa-solid fa-times cursor-pointer hover:text-white" onclick="closeModal()"></i>\n             </div>\n             <input id="contact-search" type="text" placeholder="Search contacts..." class="w-full bg-[#0f172a] border border-slate-700 p-3 rounded-xl mb-4 outline-none">\n             <div id="contacts-list" class="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2">\n                 <!-- Contacts injected here -->\n             </div>\n        </div>\n    </div>\n
+    <!-- MODALS OVERLAY -->
+    <div id="modal-overlay" class="fixed inset-0 bg-slate-950/90 backdrop-blur-xl z-[90] hidden items-center justify-center p-6" onclick="closeModal(event)">
+        <!-- MODAL: CONTACTS -->
+        <div id="modal-contacts" class="modal-card bg-[#1e293b] w-full max-w-lg rounded-[2.5rem] p-10 border border-slate-700 shadow-2xl flex flex-col max-h-[85vh] hidden">
+             <div class="flex items-center justify-between mb-8">
+                 <h3 class="text-3xl font-black text-blue-400 tracking-tighter">Directory</h3>
+                 <i class="fa-solid fa-times text-slate-500 cursor-pointer hover:text-white p-2" onclick="closeModal()"></i>
+             </div>
+             <div class="relative mb-6">
+                <i class="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-600"></i>
+                <input id="search-contacts" type="text" placeholder="Search by name or number..." class="w-full bg-slate-900 border border-slate-800 p-4 pl-12 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm">
+             </div>
+             <div id="contacts-list" class="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2"></div>
+        </div>
+    </div>
+
     <script src="/js/app.js"></script>
 </body>
 </html>

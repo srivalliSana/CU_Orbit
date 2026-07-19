@@ -17,8 +17,8 @@ android {
         applicationId = "com.example.cu_orbit"
         minSdk = 24
         targetSdk = 36
-        versionCode = 22
-        versionName = "1.0.21"
+        versionCode = 23
+        versionName = "1.0.22"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -41,19 +41,24 @@ tasks.register("publishApkToServer") {
     group = "distribution"
     description = "Builds the APK, copies it to server, and registers the release"
     dependsOn("assembleDebug")
-    
+
+    // Capture values during configuration to be compatible with Configuration Cache
+    val versionName = android.defaultConfig.versionName ?: "1.0.0"
+    val versionCode = android.defaultConfig.versionCode ?: 1
+    val sourceApk = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk")
+    val destDirectory = layout.projectDirectory.dir("../server/downloads")
+
     doLast {
-        val version = android.defaultConfig.versionName
-        val build = android.defaultConfig.versionCode
+        val version = versionName
+        val build = versionCode
         val fileName = "cu_orbit_v$version.apk"
-        val sourceFile = file("build/outputs/apk/debug/app-debug.apk")
-        val destDir = file("../server/downloads")
+        val sourceFile = sourceApk.get().asFile
+        val destDir = destDirectory.asFile
         
         if (!destDir.exists()) destDir.mkdirs()
         
-        // 1. Copy the file using standard Java File constructor to avoid Gradle's file() ambiguity
+        // 1. Copy the file
         sourceFile.copyTo(File(destDir, fileName), overwrite = true)
-        // Also copy as 'latest' for direct links
         sourceFile.copyTo(File(destDir, "cu_orbit.apk"), overwrite = true)
         
         println("✅ APK copied as $fileName and cu_orbit.apk")
