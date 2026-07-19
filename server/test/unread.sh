@@ -23,12 +23,29 @@ TB=$(echo "$SB"|field session); IB=$(echo "$SB"|field user.id)
 TC=$(echo "$SC"|field session); IC=$(echo "$SC"|field user.id)
 [ -n "$TA" ] && [ -n "$TB" ] || { echo "PRECONDITION FAILED: sign-in"; exit 1; }
 
-unread() { curl -s -H "Authorization: Bearer $1" $B/api/unread | field total; }
+unread() {
+  local body; body=$(curl -s -H "Authorization: Bearer $1" $B/api/unread)
+  local err; err=$(echo "$body" | field error)
+  # /api/unread used to swallow failures and report zero; never let that pass
+  # silently again.
+  [ -n "$err" ] && echo "      !! /api/unread failed: $(echo "$body" | head -c 200)" >&2
+  echo "$body" | field total
+}
+
+send() { # token containerId text -> asserts the send worked
+  local body; body=$(curl -s -X POST $B/api/messages -H "Authorization: Bearer $1" \
+      -H 'Content-Type: application/json' -d "{\"body\":\"$3\",\"channelId\":\"$2\"}")
+  local id; id=$(echo "$body" | field id)
+  if [ -z "$id" ]; then
+    echo "PRECONDITION FAILED: message not sent — $(echo "$body" | head -c 250)" >&2
+    exit 1
+  fi
+}
 
 echo "--- direct message ---"
 DM="$(printf '%s\n%s' "$IA" "$IB" | sort | tr '\n' '_' | sed 's/_$//')"
 BEFORE=$(unread "$TB")
-curl -s -o /dev/null -X POST $B/api/messages -H "Authorization: Bearer $TA" -H 'Content-Type: application/json' -d "{\"body\":\"hi\",\"channelId\":\"$DM\"}"
+send "$TA" "$DM" "hi"
 chk "recipient's unread rises"        "$((BEFORE+1))" "$(unread "$TB")"
 chk "sender's own message is not unread" "0"          "$(unread "$TA")"
 curl -s -o /dev/null -X POST "$B/api/conversations/$DM/read" -H "Authorization: Bearer $TB" -H 'Content-Type: application/json' -d '{}'
@@ -40,7 +57,7 @@ G=$(curl -s -X POST $B/api/workspaces/default/channels -H "Authorization: Bearer
 GID=$(echo "$G"|field id)
 [ -n "$GID" ] || { echo "PRECONDITION FAILED: group not created — $(echo "$G"|head -c 200)"; exit 1; }
 
-curl -s -o /dev/null -X POST $B/api/messages -H "Authorization: Bearer $TA" -H 'Content-Type: application/json' -d "{\"body\":\"team\",\"channelId\":\"$GID\"}"
+send "$TA" "$GID" "team"
 chk "member B sees it unread" "1" "$(unread "$TB")"
 chk "member C sees it unread" "1" "$(unread "$TC")"
 

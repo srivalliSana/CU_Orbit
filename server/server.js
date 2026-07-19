@@ -879,7 +879,9 @@ app.get('/api/unread', auth.requireAuth, async (req, res) => {
 
         res.json({ total: channelUnread + dmUnread, channels: channelUnread, dms: dmUnread });
     } catch (e) {
-        res.json({ total: 0, channels: 0, dms: 0 });
+        // Returning zero silently made a broken query look like "nothing unread".
+        console.error('[UNREAD]', e.message, e.parent?.sqlMessage || '');
+        res.status(500).json({ error: 'server_error', message: e.message, total: 0 });
     }
 });
 
