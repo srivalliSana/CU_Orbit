@@ -1,7 +1,10 @@
 import React from 'react';
 
 /** Right pane before a conversation is chosen. */
+const CAN_CREATE_GROUPS = ['faculty', 'admin', 'examcell', 'coordinator'];
+
 export default function EmptyState({ user, onNewGroup }) {
+  const canCreate = CAN_CREATE_GROUPS.includes(user?.role);
   return (
     <section className="hidden flex-1 items-center justify-center bg-slate-50 md:flex dark:bg-slate-950">
       <div className="max-w-sm px-6 text-center">
@@ -14,14 +17,14 @@ export default function EmptyState({ user, onNewGroup }) {
           {user?.name ? `Welcome, ${user.name.split(' ')[0]}` : 'CU Orbit'}
         </h1>
         <p className="mt-2 text-sm text-slate-500">
-          Pick a channel or a person on the left, or start a new group.
+          {canCreate ? 'Pick a channel or a person on the left, or start a new group.' : 'Pick a channel or a person on the left to start messaging.'}
         </p>
-        <button
+        {canCreate && <button
           onClick={onNewGroup}
           className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
         >
           New group
-        </button>
+        </button>}
       </div>
     </section>
   );

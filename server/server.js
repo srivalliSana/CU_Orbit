@@ -1031,8 +1031,19 @@ app.get('/api/workspaces', auth.requireAuth, async (req, res) => {
     try { res.json(await Workspace.findAll({ include: [{ model: Channel, as: 'channels' }] })); } catch (e) { res.json([]); }
 });
 
+// Who may create groups. Students are excluded by default; override with
+// GROUP_CREATE_ROLES if that policy changes.
+const GROUP_CREATE_ROLES = (process.env.GROUP_CREATE_ROLES || 'faculty,admin,examcell,coordinator')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+
 app.post('/api/workspaces/:workspaceId/channels', auth.requireAuth, async (req, res) => {
     try {
+        if (!GROUP_CREATE_ROLES.includes(req.user.role)) {
+            return res.status(403).json({
+                error: 'forbidden',
+                message: 'Only faculty and staff can create groups.',
+            });
+        }
         const { name, type, description, members } = req.body;
 
         const clean = String(name || '').trim().replace(/^#/, '');
@@ -1068,7 +1079,12 @@ app.post('/api/workspaces/:workspaceId/channels', auth.requireAuth, async (req, 
         await channel.update({ member_count: added + 1 });
 
         res.json(channel);
-    } catch (e) { console.error(e); res.status(500).json(e); }
+    } catch (e) {
+        // A bare json(e) serialises a Sequelize error to {}, which made this
+        // fail silently in testing. Name the cause.
+        console.error('[CHANNEL-CREATE-ERROR]', e.message, e.parent?.sqlMessage || '');
+        res.status(500).json({ error: 'server_error', message: e.message, detail: e.parent?.sqlMessage });
+    }
 });
 
 // CHANNELS
