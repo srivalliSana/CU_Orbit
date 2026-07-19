@@ -309,10 +309,22 @@ app.get('/', async (req, res) => {
         release = release || history[0];
         // Re-validate at the point of use: rows predating the check above, or
         // written by any other path, must not be able to escape the directory.
-        const name = release && isSafeApkName(release.filename) ? release.filename : 'cu_orbit.apk';
-        const apkPath = path.join(__dirname, 'downloads', name);
-        if (!apkPath.startsWith(path.join(__dirname, 'downloads') + path.sep)) {
+        const downloads = path.join(__dirname, 'downloads');
+        let name = release && isSafeApkName(release.filename) ? release.filename : 'cu_orbit.apk';
+        let apkPath = path.join(downloads, name);
+        if (!apkPath.startsWith(downloads + path.sep)) {
             return res.status(400).send('Invalid release');
+        }
+        // Only cu_orbit.apk is tracked in git; per-version copies exist on the
+        // build machine but not necessarily here. Registering a release must not
+        // break the download, so fall back to the current build.
+        if (!fs.existsSync(apkPath)) {
+            console.warn(`[download] ${name} is registered but missing — serving cu_orbit.apk`);
+            name = 'cu_orbit.apk';
+            apkPath = path.join(downloads, name);
+        }
+        if (!fs.existsSync(apkPath)) {
+            return res.status(404).send('No build is available to download yet.');
         }
         return res.download(apkPath, name);
     }
