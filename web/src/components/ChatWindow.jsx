@@ -2,10 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import Avatar from './Avatar';
 import MessageBubble from './MessageBubble';
 import Composer from './Composer';
-import { getMessages, getTyping, markConversationRead, sendMessage, uploadFile } from '../api/chat';
+import { getMessages, markConversationRead, sendMessage, uploadFile } from '../api/chat';
 import { dayLabel, lastSeenLabel } from '../lib/format';
+import { join, leave, on, sendTyping } from '../api/socket';
 
-const POLL_MS = 3000;
+// The socket delivers messages; this is only a safety net for a dropped
+// connection, so it can be slow.
+const POLL_MS = 20000;
+const TYPING_TTL_MS = 4000;
 
 export default function ChatWindow({ chat, user, onSent, onOpenContact }) {
   const [messages, setMessages] = useState([]);
@@ -15,7 +19,38 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact }) {
   const scroller = useRef(null);
   const atBottom = useRef(true);
 
-  // Poll this conversation. Replaced by sockets in the realtime phase.
+  // Live updates for this conversation.
+  useEffect(() => {
+    join(chat.id);
+    const offMessage = on('message', (m) => {
+      if (m.container_id !== chat.id) return;
+      setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+    });
+    const offRead = on('read', (r) => {
+      if (r.container_id !== chat.id || r.reader_id === user?.id) return;
+      // Someone read our messages: turn the ticks blue without a refetch.
+      setMessages((prev) => prev.map((m) => (m.sender_id === user?.id ? { ...m, status: 'read' } : m)));
+    });
+    const offTyping = on('typing', (t) => {
+      if (t.containerId !== chat.id || t.userId === user?.id) return;
+      setTyping((prev) => {
+        const next = prev.filter((x) => x.userId !== t.userId);
+        return [...next, { userId: t.userId, userName: t.name, at: Date.now() }];
+      });
+    });
+    return () => { offMessage(); offRead(); offTyping(); leave(chat.id); };
+  }, [chat.id, user?.id]);
+
+  // Typing indicators expire on their own; the server never sends a "stopped".
+  useEffect(() => {
+    const t = setInterval(
+      () => setTyping((prev) => prev.filter((x) => Date.now() - (x.at || 0) < TYPING_TTL_MS)),
+      1000
+    );
+    return () => clearInterval(t);
+  }, []);
+
+  // Fallback poll, in case the socket is down.
   useEffect(() => {
     let alive = true;
     const load = async () => {
@@ -38,15 +73,6 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact }) {
     if (!incoming) return;
     markConversationRead(chat.id).then(() => onSent?.());
   }, [messages, chat.id, user?.id]);
-
-  useEffect(() => {
-    if (chat.kind !== 'channel') return;
-    const t = setInterval(async () => {
-      const list = await getTyping(chat.id);
-      setTyping((list || []).filter((x) => x.userId !== user?.id));
-    }, POLL_MS);
-    return () => clearInterval(t);
-  }, [chat.id, chat.kind, user?.id]);
 
   // Only auto-scroll if the reader is already at the bottom, so arriving
   // messages never yank them away from history they are reading.
@@ -152,7 +178,12 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact }) {
         </p>
       )}
 
-      <Composer chatId={chat.id} isChannel={chat.kind === 'channel'} onSend={handleSend} />
+      <Composer
+        chatId={chat.id}
+        isChannel={chat.kind === 'channel'}
+        onSend={handleSend}
+        onTyping={() => sendTyping(chat.id, user?.name)}
+      />
     </section>
   );
 }

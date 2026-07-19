@@ -9,6 +9,7 @@ const crypto = require('crypto');
 require('dotenv').config();
 const auth = require('./lib/auth');
 const campus = require('./lib/campus');
+const realtime = require('./lib/realtime');
 
 const app = express();
 app.use(express.json());
@@ -792,6 +793,13 @@ app.post('/api/conversations/:containerId/read', auth.requireAuth, async (req, r
             }
         }
 
+        realtime.toContainer(containerId, 'read', {
+            container_id: containerId,
+            reader_id: req.user.id,
+            read_at: new Date().toISOString(),
+        });
+        realtime.toUser(req.user.id, 'unread-changed', { container_id: containerId });
+
         res.json({ success: true, marked: rows.length });
     } catch (e) {
         console.error('[MARK-READ]', e.message);
@@ -1216,6 +1224,11 @@ app.post('/api/messages', auth.requireAuth, async (req, res) => {
         // Mentions are keyed on User.id. This block previously ran entirely on
         // phone numbers — comparing normalized UUIDs, and looking up members by
         // phone with a UUID — so no mention resolved once identity moved.
+        // Who should see a badge update: channel members, or the DM partner.
+        const recipientIds = channelId && channelId.includes('_')
+            ? channelId.split('_')
+            : (await ChannelMember.findAll({ where: { channelId } })).map((m) => m.userId);
+
         const mentionedIds = new Set();
         if (enrichedMentions && Array.isArray(enrichedMentions)) {
             for (const mData of enrichedMentions) {
@@ -1247,6 +1260,25 @@ app.post('/api/messages', auth.requireAuth, async (req, res) => {
             const user = await User.findByPk(uid);
             if (user) routeMentionNotification(user, msg);
         }
+        // Push to everyone in the conversation. Recipients also get a badge
+        // signal on their own channel, so a closed conversation still counts.
+        const container = channelId;
+        realtime.toContainer(container, 'message', {
+            id: msg.id,
+            container_id: container,
+            sender_id: msg.senderId,
+            sender_name: msg.senderName,
+            sender_avatar_url: msg.senderAvatarUrl,
+            text: msg.body,
+            type: msg.type,
+            attachments: msg.attachments,
+            sent_at: Number(msg.timestamp),
+            status: msg.status,
+        });
+        for (const uid of recipientIds) {
+            if (uid !== senderId) realtime.toUser(uid, 'unread-changed', { container_id: container });
+        }
+
         res.json(msg);
     } catch (e) {
         console.error('[MSG-ERROR]', e);
@@ -1428,6 +1460,10 @@ app.post('/api/workspaces/:workspaceId/channels', auth.requireAuth, async (req, 
         }
         await channel.update({ member_count: added + 1 });
 
+        for (const m of await ChannelMember.findAll({ where: { channelId: channel.id } })) {
+            realtime.toUser(m.userId, 'channel-added', { id: channel.id, name: channel.name, topic: channel.topic });
+        }
+
         res.json(channel);
     } catch (e) {
         // A bare json(e) serialises a Sequelize error to {}, which made this
@@ -1562,4 +1598,18 @@ app.get('*', (req, res, next) => {
 });
 
 const PORT = 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 CU Orbit Server ready on port ${PORT}`));
+const httpServer = require('http').createServer(app);
+
+// Sockets share the HTTP server, so there is one port, one TLS termination and
+// one set of CORS rules.
+realtime.init(httpServer, {
+    canAccess: canAccessContainer,
+    onPresence: (userId, online) => {
+        User.update(
+            { presence: online ? 'online' : 'offline', last_seen_at: new Date() },
+            { where: { id: userId } }
+        ).catch(() => { /* presence is best-effort */ });
+    },
+});
+
+httpServer.listen(PORT, '0.0.0.0', () => console.log(`🚀 CU Orbit Server ready on port ${PORT} (realtime enabled)`));

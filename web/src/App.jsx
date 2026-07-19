@@ -7,6 +7,7 @@ import EmptyState from './components/EmptyState';
 import NewGroupModal from './components/NewGroupModal';
 import ContactPanel from './components/ContactPanel';
 import { notifyMessage, permission, requestPermission, setBadge } from './lib/notify';
+import { connect, disconnect, on } from './api/socket';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -69,13 +70,32 @@ export default function App() {
     if (status === 'ready' && permission() === 'default') setAskNotify(true);
   }, [status]);
 
-  // Until the realtime layer lands, the chat list refreshes on a slow interval.
-  // The open conversation polls faster, inside ChatWindow.
+  // Realtime: refresh the list when something actually changes, rather than on
+  // a timer. The interval below is a fallback for a dropped socket.
   useEffect(() => {
     if (status !== 'ready') return;
-    const t = setInterval(refreshChats, 10000);
+    connect();
+    const offs = [
+      on('message', refreshChats),
+      on('unread-changed', refreshChats),
+      on('channel-added', refreshChats),
+      on('presence', ({ userId, presence }) => {
+        setChats((prev) => ({
+          ...prev,
+          dms: (prev.dms || []).map((d) => (d.other_user_id === userId ? { ...d, presence } : d)),
+        }));
+      }),
+    ];
+    return () => { offs.forEach((off) => off()); };
+  }, [status, refreshChats]);
+
+  useEffect(() => {
+    if (status !== 'ready') return;
+    const t = setInterval(refreshChats, 30000);
     return () => clearInterval(t);
   }, [status, refreshChats]);
+
+  useEffect(() => () => disconnect(), []);
 
   if (status === 'signing-in') {
     return (

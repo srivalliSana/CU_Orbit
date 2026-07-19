@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
-import { setTyping } from '../api/chat';
 
-export default function Composer({ chatId, isChannel, onSend }) {
+
+export default function Composer({ chatId, isChannel, onSend, onTyping }) {
   const [text, setText] = useState('');
   const [file, setFile] = useState(null);
   const fileInput = useRef(null);
@@ -32,10 +32,10 @@ export default function Composer({ chatId, isChannel, onSend }) {
   const onChange = (e) => {
     setText(e.target.value);
     grow(e.target);
-    // Throttle typing pings to one every 2s rather than one per keystroke.
-    if (isChannel && Date.now() - lastTyped.current > 2000) {
+    // Throttle to one ping every 2s rather than one per keystroke.
+    if (Date.now() - lastTyped.current > 2000) {
       lastTyped.current = Date.now();
-      setTyping(chatId);
+      onTyping?.();
     }
   };
 
