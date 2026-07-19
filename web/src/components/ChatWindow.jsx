@@ -64,15 +64,25 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact }) {
     return () => { alive = false; clearInterval(t); };
   }, [chat.id]);
 
-  // Marking read is deliberately tied to the messages we have actually shown,
-  // not merely to opening the chat, so a receipt means it was on screen.
+  // Marking read is tied to the messages actually rendered, not merely to
+  // opening the chat, so a receipt means it was on screen.
+  //
+  // Message.status cannot be the trigger: in a channel it stays 'sent' until
+  // everyone has read, so keying off it would re-POST on every poll. Track what
+  // we have already reported instead.
+  const marked = useRef(new Set());
   useEffect(() => {
-    if (!messages.length) return;
-    if (document.visibilityState !== 'visible') return;
-    const incoming = messages.some((m) => m.sender_id !== user?.id && m.status !== 'read');
-    if (!incoming) return;
+    if (!messages.length || document.visibilityState !== 'visible') return;
+    const fresh = messages.filter(
+      (m) => m.sender_id !== user?.id && !m.pending && !marked.current.has(m.id)
+    );
+    if (!fresh.length) return;
+    fresh.forEach((m) => marked.current.add(m.id));
     markConversationRead(chat.id).then(() => onSent?.());
   }, [messages, chat.id, user?.id]);
+
+  // A different conversation has its own history.
+  useEffect(() => { marked.current = new Set(); }, [chat.id]);
 
   // Only auto-scroll if the reader is already at the bottom, so arriving
   // messages never yank them away from history they are reading.

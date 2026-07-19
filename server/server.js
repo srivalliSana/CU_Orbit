@@ -843,6 +843,25 @@ app.get('/api/messages/:id/reads', auth.requireAuth, async (req, res) => {
     }
 });
 
+/**
+ * Messages in a container that this user has not read.
+ *
+ * Message.status is one value for the whole message, so it cannot answer "have
+ * *I* read this" in a group — it only flips once everyone has. Unread is
+ * therefore derived from MessageReads, which holds a row per reader.
+ */
+function unreadWhere(userId, containerFilter) {
+    return {
+        ...containerFilter,
+        senderId: { [Op.ne]: userId },
+        id: {
+            [Op.notIn]: sequelize.literal(
+                `(SELECT message_id FROM MessageReads WHERE user_id = ${sequelize.escape(userId)})`
+            ),
+        },
+    };
+}
+
 /** Unread total for the signed-in user — drives the CampusOne menu badge. */
 app.get('/api/unread', auth.requireAuth, async (req, res) => {
     try {
@@ -850,22 +869,12 @@ app.get('/api/unread', auth.requireAuth, async (req, res) => {
         const channelIds = memberships.map((m) => m.channelId);
 
         const channelUnread = channelIds.length
-            ? await Message.count({
-                where: {
-                    channelId: { [Op.in]: channelIds },
-                    senderId: { [Op.ne]: req.user.id },
-                    status: { [Op.ne]: 'read' },
-                },
-            })
+            ? await Message.count({ where: unreadWhere(req.user.id, { channelId: { [Op.in]: channelIds } }) })
             : 0;
 
         // DM rooms are "<uuid>_<uuid>", so ours are the ones containing our id.
         const dmUnread = await Message.count({
-            where: {
-                dm_id: { [Op.like]: `%${req.user.id}%` },
-                senderId: { [Op.ne]: req.user.id },
-                status: { [Op.ne]: 'read' },
-            },
+            where: unreadWhere(req.user.id, { dm_id: { [Op.like]: `%${req.user.id}%` } }),
         });
 
         res.json({ total: channelUnread + dmUnread, channels: channelUnread, dms: dmUnread });
@@ -1051,7 +1060,7 @@ app.get('/api/home/:userId/:workspaceId', auth.requireAuth, async (req, res) => 
             const pref = await ConversationPref.findOne({ where: { userId, containerId: ch.id } });
             if (pref && pref.isHidden) return null;
             const lastMsg = await Message.findOne({ where: { channelId: ch.id }, order: [['timestamp', 'DESC']] });
-            const unreadCount = await Message.count({ where: { channelId: ch.id, senderId: { [Op.ne]: userId }, status: { [Op.ne]: 'read' } } });
+            const unreadCount = await Message.count({ where: unreadWhere(userId, { channelId: ch.id }) });
             const hasUnreadMention = await Mention.count({ where: { mentioned_user_id: userId, source_channel_id: ch.id, is_read: false } }) > 0;
             return {
                 ...ch.get({ plain: true }),
@@ -1088,7 +1097,7 @@ app.get('/api/home/:userId/:workspaceId', auth.requireAuth, async (req, res) => 
                 presence: u.presence,
                 is_pinned: pref ? pref.isPinned : false,
                 is_muted: pref ? pref.isMuted : false,
-                unread_count: await Message.count({ where: { dm_id: dmId, senderId: { [Op.ne]: userId }, status: { [Op.ne]: 'read' } } }),
+                unread_count: await Message.count({ where: unreadWhere(userId, { dm_id: dmId }) }),
                 has_unread_mention: hasUnreadMention,
                 last_message_preview: lastMsg ? {
                     sender_is_self: lastMsg.senderId === userId,
