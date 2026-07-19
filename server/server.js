@@ -25,11 +25,15 @@ app.use((req, res, next) => {
 });
 
 // STATIC FOLDERS
-const uploadDir = path.join(__dirname, 'uploads');
+const uploadDir \u003d path.join(__dirname, \u0027uploads\u0027);
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
-app.use('/uploads', express.static(uploadDir));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(\u0027/uploads\u0027, express.static(uploadDir));
 
+// Serve the React Web App (Frontend)
+app.use(express.static(path.join(__dirname, \u0027public\u0027)));
+
+// Fallback for React Routing (Directs all non-API routes to the React App)
+app.get(\u0027*\u0027, (req, res, next) \u003d\u003e {\n    if (req.path.startsWith(\u0027/api\u0027)) return next();\n    res.sendFile(path.join(__dirname, \u0027public\u0027, \u0027index.html\u0027));\n});\n
 // FILE UPLOAD SETUP
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, uploadDir),
