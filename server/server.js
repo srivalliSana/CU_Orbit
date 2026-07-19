@@ -295,15 +295,24 @@ sequelize.authenticate()
             }
         }
 
-        const users = await User.findAll();
+        // Membership is keyed on User.id. This used u.phone, which is null for
+        // every SSO account — so it threw on the first such user and abandoned
+        // the rest of the loop, leaving people out of #general entirely.
+        const users = await User.findAll({ attributes: ['id'] });
         for (const u of users) {
             await ChannelMember.findOrCreate({
-                where: { channelId: genChannel.id, userId: u.phone },
-                defaults: { channelId: genChannel.id, userId: u.phone, role: 'member' }
-            });
+                where: { channelId: genChannel.id, userId: u.id },
+                defaults: { channelId: genChannel.id, userId: u.id, role: 'member' }
+            }).catch((e) => console.warn(`[seed] could not add ${u.id} to #general:`, e.message));
         }
     })
-    .catch(err => console.warn('⚠️ MySQL Offline:', err.message));
+    .catch(err => {
+        // Not necessarily a connection problem: seeding and schema errors land
+        // here too, and calling them all "MySQL Offline" sent us looking in the
+        // wrong place.
+        const connectionIssue = /ECONNREFUSED|Access denied|ETIMEDOUT|getaddrinfo/i.test(err.message);
+        console.warn(connectionIssue ? '⚠️ MySQL Offline:' : '⚠️ Startup error:', err.message);
+    });
 
 // --- NOTIFICATION ROUTER SIMULATION ---
 async function routeMentionNotification(user, message) {
@@ -1061,8 +1070,8 @@ app.post('/api/auth/login', legacyAuthGate, async (req, res) => {
             const gen = await Channel.findOne({ where: { name: 'general' } });
             if (gen) {
                 await ChannelMember.findOrCreate({
-                    where: { channelId: gen.id, userId: user.phone },
-                    defaults: { role: 'member' }
+                    where: { channelId: gen.id, userId: user.id },
+                    defaults: { channelId: gen.id, userId: user.id, role: 'member' }
                 });
             }
         }
