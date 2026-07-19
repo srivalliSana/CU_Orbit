@@ -282,6 +282,19 @@ sequelize.authenticate()
             }
         });
 
+        // Schema drift is silent otherwise: a missing table only shows up as a
+        // failing endpoint later, which is how MessageReads went unnoticed.
+        for (const model of [User, Channel, Message, MessageRead, ChannelMember]) {
+            const table = model.getTableName();
+            const [rows] = await sequelize.query(
+                `SELECT COUNT(*) AS n FROM information_schema.TABLES
+                  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '${table}'`
+            );
+            if (!Number(rows[0]?.n)) {
+                console.error(`❌ Missing table '${table}'. Run the migrations in server/migrations/ before serving traffic.`);
+            }
+        }
+
         const users = await User.findAll();
         for (const u of users) {
             await ChannelMember.findOrCreate({
