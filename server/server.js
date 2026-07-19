@@ -430,6 +430,16 @@ app.get('/portal', (req, res) => {
  */
 const ROLES = ['student', 'faculty', 'admin', 'examcell', 'coordinator'];
 
+/**
+ * May this user read/write the given container?
+ * A container id is either a channel UUID or a DM room id ("uuidA_uuidB").
+ */
+async function canAccessContainer(userId, containerId) {
+    if (!containerId) return false;
+    if (containerId.includes('_')) return containerId.split('_').includes(userId);
+    return !!(await ChannelMember.findOne({ where: { channelId: containerId, userId } }));
+}
+
 app.post('/api/auth/sso', async (req, res) => {
     try {
         const { token } = req.body;
@@ -562,7 +572,11 @@ app.post('/api/auth/register', legacyAuthGate, async (req, res) => {
 // HOME FEED
 app.get('/api/home/:userId/:workspaceId', auth.requireAuth, async (req, res) => {
     try {
-        const { userId, workspaceId } = req.params;
+        // :userId is ignored — kept only so existing clients keep working. The
+        // session decides whose home this is, otherwise any signed-in user could
+        // read another user's channel list by editing the path.
+        const userId = req.user.id;
+        const { workspaceId } = req.params;
         const memberships = await ChannelMember.findAll({ where: { userId: userId } });
         const channelIds = memberships.map(m => m.channelId);
         const channels = await Channel.findAll({ where: { workspace_id: workspaceId, id: { [Op.in]: channelIds } } });
@@ -626,7 +640,7 @@ app.get('/api/home/:userId/:workspaceId', auth.requireAuth, async (req, res) => 
 
 app.get('/api/home/quick-access/:userId', auth.requireAuth, async (req, res) => {
     try {
-        const { userId } = req.params;
+        const userId = req.user.id;   // :userId ignored — see /api/home/:userId
         const mentions = await Mention.count({ where: { mentioned_user_id: userId, is_read: false } });
         res.json({ threads: 0, mentions, drafts: 0 });
     } catch (e) {
@@ -637,7 +651,8 @@ app.get('/api/home/quick-access/:userId', auth.requireAuth, async (req, res) => 
 // PREFS
 app.post('/api/conversations/:id/prefs', auth.requireAuth, async (req, res) => {
     try {
-        const { userId, action, value } = req.body;
+        const { action, value } = req.body;
+        const userId = req.user.id;      // preferences are per-user and personal
         const containerId = req.params.id;
         const isTrue = (value === 'true' || value === true);
         const [pref] = await ConversationPref.findOrCreate({
@@ -660,6 +675,9 @@ app.post('/api/conversations/:id/prefs', auth.requireAuth, async (req, res) => {
 app.get('/api/messages/:containerId', auth.requireAuth, async (req, res) => {
     try {
         const { containerId } = req.params;
+        if (!(await canAccessContainer(req.user.id, containerId))) {
+            return res.status(403).json({ error: 'forbidden', message: 'Not a participant in this conversation' });
+        }
         const messages = await Message.findAll({
             where: { [Op.or]: [{ channelId: containerId }, { dm_id: containerId }] },
             order: [['timestamp', 'ASC']],
@@ -696,7 +714,29 @@ app.get('/api/messages/:containerId', auth.requireAuth, async (req, res) => {
 
 app.post('/api/messages', auth.requireAuth, async (req, res) => {
     try {
-        const { senderId, senderName, body, channelId, type, senderAvatarUrl, mediaUrl, mentions, enrichedMentions } = req.body;
+        const { body, channelId, type, mediaUrl, mentions, enrichedMentions } = req.body;
+
+        // Sender identity comes from the session, never the request body — a
+        // client-supplied senderId let anyone post as anyone. Display fields are
+        // read from the user record for the same reason.
+        const sender = await User.findByPk(req.user.id);
+        if (!sender) return res.status(401).json({ error: 'unauthorized', message: 'Unknown user' });
+        const senderId = sender.id;
+        const senderName = sender.name;
+        const senderAvatarUrl = sender.avatarUrl;
+
+        // Membership check: a channel id addresses a channel, an id containing
+        // '_' addresses a DM room. Both must include the sender.
+        if (channelId) {
+            if (channelId.includes('_')) {
+                if (!channelId.split('_').includes(senderId)) {
+                    return res.status(403).json({ error: 'forbidden', message: 'Not a participant in this conversation' });
+                }
+            } else {
+                const member = await ChannelMember.findOne({ where: { channelId, userId: senderId } });
+                if (!member) return res.status(403).json({ error: 'forbidden', message: 'Not a member of this channel' });
+            }
+        }
         if (channelId && !channelId.includes('_')) {
              const ch = await Channel.findByPk(channelId);
              if (ch && ch.restricted_messaging) {
@@ -750,8 +790,26 @@ app.put('/api/messages/:id', auth.requireAuth, async (req, res) => {
         const { body, status } = req.body;
         const msg = await Message.findByPk(req.params.id);
         if (!msg) return res.status(404).json({ error: 'Message not found' });
-        if (body) msg.body = body;
-        if (status) msg.status = status;
+
+        // Editing content is the author's alone.
+        if (body !== undefined) {
+            if (msg.senderId !== req.user.id) {
+                return res.status(403).json({ error: 'forbidden', message: 'Only the author can edit a message' });
+            }
+            msg.body = body;
+            msg.edited_at = new Date();
+        }
+
+        // Status is a read receipt, so recipients set it — but only forward, and
+        // never on their own message. Without the sender check, anyone could mark
+        // another person's message as read on their behalf.
+        if (status !== undefined) {
+            if (!['sent', 'delivered', 'read'].includes(status)) {
+                return res.status(400).json({ error: 'bad_request', message: 'Invalid status' });
+            }
+            if (msg.senderId !== req.user.id) msg.status = status;
+        }
+
         await msg.save();
         res.json(msg);
     } catch (e) { res.status(500).json(e); }
@@ -759,7 +817,8 @@ app.put('/api/messages/:id', auth.requireAuth, async (req, res) => {
 
 app.get('/api/mentions/:userId', auth.requireAuth, async (req, res) => {
     try {
-        const mentions = await Mention.findAll({ where: { mentioned_user_id: req.params.userId }, order: [['createdAt', 'DESC']] });
+        // :userId ignored — your mentions are yours.
+        const mentions = await Mention.findAll({ where: { mentioned_user_id: req.user.id }, order: [['createdAt', 'DESC']] });
         const results = await Promise.all(mentions.map(async (m) => {
             const msg = await Message.findByPk(m.message_id);
             if (!msg) return null;
@@ -780,8 +839,8 @@ app.get('/api/mentions/:userId', auth.requireAuth, async (req, res) => {
 
 app.post('/api/mentions/read-all', auth.requireAuth, async (req, res) => {
     try {
-        const { userId, containerId } = req.body;
-        await Mention.update({ is_read: true }, { where: { mentioned_user_id: userId, source_channel_id: containerId } });
+        const { containerId } = req.body;
+        await Mention.update({ is_read: true }, { where: { mentioned_user_id: req.user.id, source_channel_id: containerId } });
         res.json({ success: true });
     } catch (e) { res.status(500).json(e); }
 });
@@ -789,6 +848,9 @@ app.post('/api/mentions/read-all', auth.requireAuth, async (req, res) => {
 app.post('/api/mentions/:id/read', auth.requireAuth, async (req, res) => {
     try {
         const mention = await Mention.findByPk(req.params.id);
+        if (mention && mention.mentioned_user_id !== req.user.id) {
+            return res.status(403).json({ error: 'forbidden', message: 'Not your mention' });
+        }
         if (mention) { mention.is_read = true; await mention.save(); }
         res.json({ success: true });
     } catch (e) { res.status(500).json(e); }
@@ -801,9 +863,11 @@ app.get('/api/status', auth.requireAuth, async (req, res) => {
 
 app.post('/api/status', auth.requireAuth, async (req, res) => {
     try {
-        const { userId, userName, type, mediaUrl, caption, mentions } = req.body;
+        const { type, mediaUrl, caption, mentions } = req.body;
+        const poster = await User.findByPk(req.user.id);
+        if (!poster) return res.status(401).json({ error: 'unauthorized' });
         const status = await Status.create({
-            userId, userName, type, mediaUrl, caption, mentions: mentions || [],
+            userId: poster.id, userName: poster.name, type, mediaUrl, caption, mentions: mentions || [],
             expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
         });
         if (mentions && Array.isArray(mentions)) {
@@ -828,10 +892,12 @@ app.get('/api/users/:identifier', auth.requireAuth, async (req, res) => {
 
 app.put('/api/users/:phone', auth.requireAuth, async (req, res) => {
     try {
-        const user = await User.findOne({ where: { phone: req.params.phone } });
+        // The path param is not trusted: you may only edit your own profile.
+        const user = await User.findByPk(req.user.id);
         if (!user) return res.status(404).json({ error: 'User not found' });
         const { name, bio, avatarUrl, status_emoji, status_text } = req.body;
-        if (name) user.name = name;
+        // name comes from CampusOne for linked accounts and must not drift.
+        if (name && !user.campus_email) user.name = name;
         if (bio) user.bio = bio;
         if (avatarUrl) user.avatarUrl = avatarUrl;
         if (status_emoji) user.status_emoji = status_emoji;
@@ -893,12 +959,26 @@ app.get('/api/channels/:id/members', auth.requireAuth, async (req, res) => {
 
 app.post('/api/channels/:id/members', auth.requireAuth, async (req, res) => {
     try {
-        const { userId, role, addedBy, adderName } = req.body;
+        // userId is the person being added; the adder is always the session user
+        // (addedBy/adderName from the body were spoofable in the audit trail).
+        const { userId, role } = req.body;
+        if (!userId) return res.status(400).json({ error: 'bad_request', message: 'userId required' });
+
+        const adder = await User.findByPk(req.user.id);
+        if (!adder) return res.status(401).json({ error: 'unauthorized' });
+
+        const me = await ChannelMember.findOne({ where: { channelId: req.params.id, userId: req.user.id } });
+        if (!me) return res.status(403).json({ error: 'forbidden', message: 'Join the channel before adding others' });
+        // Granting admin is an admin-only act; otherwise any member could escalate.
+        if (role === 'admin' && me.role !== 'admin') {
+            return res.status(403).json({ error: 'forbidden', message: 'Only channel admins can grant admin' });
+        }
+
         const [member, created] = await ChannelMember.findOrCreate({ where: { channelId: req.params.id, userId: userId }, defaults: { channelId: req.params.id, userId: userId, role: role || 'member' } });
         if (created) {
             const channel = await Channel.findByPk(req.params.id);
             if (channel) await channel.increment('member_count');
-            await Message.create({ channelId: req.params.id, senderId: addedBy || 'system', senderName: adderName || 'System', body: `ADD_MEMBER:${userId}`, type: 'system', timestamp: Date.now() });
+            await Message.create({ channelId: req.params.id, senderId: adder.id, senderName: adder.name, body: `ADD_MEMBER:${userId}`, type: 'system', timestamp: Date.now() });
         }
         res.json({ success: true });
     } catch (e) { res.status(500).json(e); }
@@ -906,7 +986,16 @@ app.post('/api/channels/:id/members', auth.requireAuth, async (req, res) => {
 
 app.delete('/api/channels/:id/members/:userId', auth.requireAuth, async (req, res) => {
     try {
-        const deleted = await ChannelMember.destroy({ where: { channelId: req.params.id, userId: req.params.userId } });
+        // Removing someone else requires channel-admin rights; anyone may remove
+        // themselves (leaving). Previously any caller could evict any member.
+        const target = req.params.userId;
+        if (target !== req.user.id) {
+            const me = await ChannelMember.findOne({ where: { channelId: req.params.id, userId: req.user.id } });
+            if (!me || me.role !== 'admin') {
+                return res.status(403).json({ error: 'forbidden', message: 'Only channel admins can remove members' });
+            }
+        }
+        const deleted = await ChannelMember.destroy({ where: { channelId: req.params.id, userId: target } });
         if (deleted) {
             const channel = await Channel.findByPk(req.params.id);
             if (channel) await channel.decrement('member_count');
@@ -932,8 +1021,9 @@ app.post('/api/channels/join-by-link', auth.requireAuth, async (req, res) => {
 
 app.post('/api/channels/:id/typing', auth.requireAuth, async (req, res) => {
     try {
-        const { userId, userName } = req.body;
-        await TypingStatus.upsert({ channelId: req.params.id, userId, userName, lastTypedAt: Date.now() });
+        const typist = await User.findByPk(req.user.id);
+        if (!typist) return res.status(401).json({ error: 'unauthorized' });
+        await TypingStatus.upsert({ channelId: req.params.id, userId: typist.id, userName: typist.name, lastTypedAt: Date.now() });
         res.json({ success: true });
     } catch (e) { res.status(500).json(e); }
 });
