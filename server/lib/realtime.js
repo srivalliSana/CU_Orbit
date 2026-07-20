@@ -28,7 +28,7 @@ function roomFor(containerId) {
 
 /**
  * @param httpServer         node http server to attach to
- * @param deps.canAccess     (userId, containerId) => Promise<boolean>
+ * @param deps.canAccess     (userId, containerId, user) => Promise<boolean>
  * @param deps.onPresence    (userId, isOnline) => void
  */
 function init(httpServer, deps = {}) {
@@ -73,7 +73,12 @@ function init(httpServer, deps = {}) {
         // subscribe to a conversation the same user could not read over REST.
         socket.on('join', async (containerId, ack) => {
             try {
-                if (!(await canAccess(userId, containerId))) return ack?.({ ok: false, error: 'forbidden' });
+                // Pass the role so role-based visibility matches REST exactly;
+                // otherwise an admin could read a group's history but receive no
+                // live updates in it.
+                if (!(await canAccess(userId, containerId, { id: userId, role: socket.data.role }))) {
+                    return ack?.({ ok: false, error: 'forbidden' });
+                }
                 socket.join(roomFor(containerId));
                 ack?.({ ok: true });
             } catch (e) {
@@ -89,7 +94,7 @@ function init(httpServer, deps = {}) {
         // Typing is transient and never stored: broadcast to the room, skipping
         // the sender, and let it expire on the client.
         socket.on('typing', async ({ containerId, name }) => {
-            if (!(await canAccess(userId, containerId))) return;
+            if (!(await canAccess(userId, containerId, { id: userId, role: socket.data.role }))) return;
             socket.to(roomFor(containerId)).emit('typing', { containerId, userId, name });
         });
 

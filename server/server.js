@@ -813,7 +813,7 @@ app.post('/api/directory/dm', auth.requireAuth, async (req, res) => {
 app.post('/api/conversations/:containerId/read', auth.requireAuth, async (req, res) => {
     try {
         const containerId = req.params.containerId;
-        if (!(await canAccessContainer(req.user.id, containerId))) {
+        if (!(await canAccessContainer(req.user.id, containerId, req.user))) {
             return res.status(403).json({ error: 'forbidden' });
         }
 
@@ -872,7 +872,7 @@ app.get('/api/messages/:id/reads', auth.requireAuth, async (req, res) => {
         if (!msg) return res.status(404).json({ error: 'not_found' });
 
         const containerId = msg.channelId || msg.dm_id;
-        if (!(await canAccessContainer(req.user.id, containerId))) {
+        if (!(await canAccessContainer(req.user.id, containerId, req.user))) {
             return res.status(403).json({ error: 'forbidden' });
         }
 
@@ -944,6 +944,13 @@ app.get('/api/unread', auth.requireAuth, async (req, res) => {
 });
 
 /**
+ * Admins oversee every group. Deliberately narrow: this grants visibility of
+ * channels only. Direct messages stay private to their two participants no
+ * matter what role the caller holds.
+ */
+const isGroupAdmin = (user) => user?.role === 'admin';
+
+/**
  * Clients should not have to know the workspace UUID to ask for "my stuff", so
  * 'default' (and anything unrecognised) resolves to the first workspace.
  */
@@ -970,9 +977,12 @@ async function resolveWorkspaceId(given) {
  * May this user read/write the given container?
  * A container id is either a channel UUID or a DM room id ("uuidA_uuidB").
  */
-async function canAccessContainer(userId, containerId) {
+async function canAccessContainer(userId, containerId, user = null) {
     if (!containerId) return false;
+    // A DM room is addressed by its two participants and is never accessible to
+    // anyone else, admins included.
     if (containerId.includes('_')) return containerId.split('_').includes(userId);
+    if (isGroupAdmin(user)) return true;
     return !!(await ChannelMember.findOne({ where: { channelId: containerId, userId } }));
 }
 
@@ -1115,7 +1125,16 @@ app.get('/api/home/:userId/:workspaceId', auth.requireAuth, async (req, res) => 
         const workspaceId = await resolveWorkspaceId(req.params.workspaceId);
         const memberships = await ChannelMember.findAll({ where: { userId: userId } });
         const channelIds = memberships.map(m => m.channelId);
-        const channels = await Channel.findAll({ where: { workspace_id: workspaceId, id: { [Op.in]: channelIds } } });
+
+        // Faculty and students see the groups they belong to. Admins see every
+        // group in the workspace, so they can oversee and join without waiting
+        // to be added. Direct messages are never included for anyone but their
+        // participants, regardless of role.
+        const channels = isGroupAdmin(req.user)
+            ? await Channel.findAll({ where: { workspace_id: workspaceId } })
+            : await Channel.findAll({ where: { workspace_id: workspaceId, id: { [Op.in]: channelIds } } });
+
+        const memberOf = new Set(channelIds);
         const channelsData = await Promise.all(channels.map(async (ch) => {
             const pref = await ConversationPref.findOne({ where: { userId, containerId: ch.id } });
             if (pref && pref.isHidden) return null;
@@ -1124,6 +1143,7 @@ app.get('/api/home/:userId/:workspaceId', auth.requireAuth, async (req, res) => 
             const hasUnreadMention = await Mention.count({ where: { mentioned_user_id: userId, source_channel_id: ch.id, is_read: false } }) > 0;
             return {
                 ...ch.get({ plain: true }),
+                is_member: memberOf.has(ch.id),
                 is_muted: pref ? pref.isMuted : !!ch.is_muted,
                 is_pinned: pref ? pref.isPinned : false,
                 last_message_preview: lastMsg ? {
@@ -1214,7 +1234,7 @@ app.post('/api/conversations/:id/prefs', auth.requireAuth, async (req, res) => {
 app.get('/api/messages/:containerId', auth.requireAuth, async (req, res) => {
     try {
         const { containerId } = req.params;
-        if (!(await canAccessContainer(req.user.id, containerId))) {
+        if (!(await canAccessContainer(req.user.id, containerId, req.user))) {
             return res.status(403).json({ error: 'forbidden', message: 'Not a participant in this conversation' });
         }
         const messages = await Message.findAll({
