@@ -1,0 +1,76 @@
+// Ported near-unchanged from web/src/lib/format.js.
+
+// Timestamps arrive as epoch milliseconds (Message.timestamp is a BIGINT).
+const asDate = (t: number) => new Date(Number(t));
+
+const sameDay = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+export const clockLabel = (t: number) =>
+  asDate(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+/** Chat-list stamp: time today, "Yesterday", weekday this week, else a date. */
+export function timeLabel(t: number): string {
+  const d = asDate(t);
+  const now = new Date();
+  if (sameDay(d, now)) return clockLabel(t);
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (sameDay(d, yesterday)) return "Yesterday";
+
+  if (now.getTime() - d.getTime() < 7 * 864e5) return d.toLocaleDateString([], { weekday: "short" });
+  return d.toLocaleDateString([], { day: "2-digit", month: "2-digit", year: "2-digit" });
+}
+
+/** Divider label between days in a conversation. */
+export function dayLabel(t: number): string {
+  const d = asDate(t);
+  const now = new Date();
+  if (sameDay(d, now)) return "Today";
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (sameDay(d, yesterday)) return "Yesterday";
+
+  return d.toLocaleDateString([], { day: "numeric", month: "long", year: "numeric" });
+}
+
+/** Deterministic colour per name, so an avatar keeps its colour between loads. */
+export function colorFor(name = ""): string {
+  const palette = ["#2563eb", "#7c3aed", "#db2777", "#ea580c", "#16a34a", "#0891b2", "#c026d3", "#4f46e5"];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return palette[h % palette.length];
+}
+
+export const initials = (name = ""): string =>
+  name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0] || "")
+    .join("")
+    .toUpperCase() || "?";
+
+/** "last seen today at 14:03" / "online" — WhatsApp-style presence line. */
+export function lastSeenLabel(presence: string, lastSeenAt?: string | number | null): string {
+  if (presence === "online") return "online";
+  if (!lastSeenAt) return "";
+  const d = new Date(lastSeenAt);
+  if (Number.isNaN(d.getTime())) return "";
+
+  const now = new Date();
+  const mins = Math.floor((now.getTime() - d.getTime()) / 60000);
+  if (mins < 1) return "last seen just now";
+  if (mins < 60) return `last seen ${mins} min ago`;
+
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (sameDay(d, now)) return `last seen today at ${time}`;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (sameDay(d, yesterday)) return `last seen yesterday at ${time}`;
+
+  return `last seen ${d.toLocaleDateString([], { day: "numeric", month: "short" })} at ${time}`;
+}

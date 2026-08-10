@@ -1,0 +1,85 @@
+{
+  "expo": {
+    "name": "CU Orbit",
+    "slug": "cuorbit",
+    "scheme": "cuorbit",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ac.in.cutm.cuorbit",
+      "associatedDomains": [
+        "applinks:cuorbit.app"
+      ]
+    },
+    "android": {
+      "package": "ac.in.cutm.cuorbit",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "cuorbit.app",
+              "pathPrefix": "/join"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-image",
+      "expo-sharing",
+      "expo-audio",
+      "expo-dev-client",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "CU Orbit accesses your photos so you can share them in chat.",
+          "cameraPermission": "CU Orbit uses your camera so you can capture and share photos.",
+          "microphonePermission": "CU Orbit uses your microphone to record voice messages."
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "CU Orbit uses your contacts to help you find people to message."
+        }
+      ],
+      "expo-asset"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "486a0bc9-c135-4b94-89e4-7ea68c375edd"
+      }
+    },
+    "owner": "gttech"
+  }
+}
