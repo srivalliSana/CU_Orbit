@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { signIn } from './api/auth';
 import { getHome } from './api/chat';
+import { getWorkspaces } from './api/workspaces';
 import ChatList from './components/ChatList';
 import ChatWindow from './components/ChatWindow';
 import EmptyState from './components/EmptyState';
@@ -9,16 +11,19 @@ import ContactPanel from './components/ContactPanel';
 import { notifyMessage, permission, requestPermission, setBadge } from './lib/notify';
 import { connect, disconnect, on } from './api/socket';
 
+const DEFAULT_WORKSPACE_ID = 'default';
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [status, setStatus] = useState('signing-in');   // signing-in | ready | error
   const [error, setError] = useState(null);
-  const [chats, setChats] = useState({ channels: [], dms: [] });
+  const [workspaceId, setWorkspaceId] = useState(null);   // null until the real list loads
   const [active, setActive] = useState(null);
   const [newGroup, setNewGroup] = useState(false);
   const [askNotify, setAskNotify] = useState(false);
   const [contact, setContact] = useState(null);   // { id?, email } shown in the side panel
   const seen = useRef(null);   // last-seen unread snapshot, for notifications
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     signIn()
@@ -30,14 +35,36 @@ export default function App() {
       .catch((e) => { setError(e.message); setStatus('error'); });
   }, []);
 
-  const refreshChats = useCallback(() => {
-    getHome().then(setChats).catch(() => {});
-  }, []);
+  const { data: workspaces } = useQuery({
+    queryKey: ['workspaces'],
+    queryFn: getWorkspaces,
+    enabled: status === 'ready',
+  });
 
-  useEffect(() => { if (status === 'ready') refreshChats(); }, [status, refreshChats]);
+  // Today there is only ever one workspace ("cu-orbit"), so this just picks
+  // it automatically; the switcher only renders as a real control if a
+  // second workspace ever exists.
+  useEffect(() => {
+    if (workspaceId || !workspaces?.length) return;
+    setWorkspaceId(workspaces[0].id);
+  }, [workspaces, workspaceId]);
+
+  const effectiveWorkspaceId = workspaceId || DEFAULT_WORKSPACE_ID;
+  const homeQueryKey = ['home', effectiveWorkspaceId];
+  const { data: chats } = useQuery({
+    queryKey: homeQueryKey,
+    queryFn: () => getHome(effectiveWorkspaceId),
+    enabled: status === 'ready',
+    refetchInterval: 30000,
+  });
+  const chatsData = chats || { channels: [], dms: [] };
+
+  const refreshChats = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['home'] });
+  }, [queryClient]);
 
   useEffect(() => {
-    if (status !== 'ready') return;
+    if (status !== 'ready' || !chats) return;
     const rows = [...(chats.channels || []), ...(chats.dms || [])];
     const total = rows.reduce((n, r) => n + (r.unread_count || 0), 0);
     setBadge(total);
@@ -71,7 +98,7 @@ export default function App() {
   }, [status]);
 
   // Realtime: refresh the list when something actually changes, rather than on
-  // a timer. The interval below is a fallback for a dropped socket.
+  // a timer. The interval in the query above is a fallback for a dropped socket.
   useEffect(() => {
     if (status !== 'ready') return;
     connect();
@@ -80,20 +107,15 @@ export default function App() {
       on('unread-changed', refreshChats),
       on('channel-added', refreshChats),
       on('presence', ({ userId, presence }) => {
-        setChats((prev) => ({
-          ...prev,
-          dms: (prev.dms || []).map((d) => (d.other_user_id === userId ? { ...d, presence } : d)),
+        queryClient.setQueryData(homeQueryKey, (prevData) => prevData && ({
+          ...prevData,
+          dms: (prevData.dms || []).map((d) => (d.other_user_id === userId ? { ...d, presence } : d)),
         }));
       }),
     ];
     return () => { offs.forEach((off) => off()); };
-  }, [status, refreshChats]);
-
-  useEffect(() => {
-    if (status !== 'ready') return;
-    const t = setInterval(refreshChats, 30000);
-    return () => clearInterval(t);
-  }, [status, refreshChats]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, refreshChats, effectiveWorkspaceId]);
 
   useEffect(() => () => disconnect(), []);
 
@@ -129,7 +151,10 @@ export default function App() {
     <div className="relative flex h-screen overflow-hidden bg-slate-100 dark:bg-slate-950">
       <ChatList
         user={user}
-        chats={chats}
+        chats={chatsData}
+        workspaces={workspaces || []}
+        workspaceId={effectiveWorkspaceId}
+        onSwitchWorkspace={setWorkspaceId}
         activeId={active?.id}
         onSelect={setActive}
         onNewGroup={() => setNewGroup(true)}
@@ -163,6 +188,7 @@ export default function App() {
       {newGroup && (
         <NewGroupModal
           user={user}
+          workspaceId={effectiveWorkspaceId}
           onClose={() => setNewGroup(false)}
           onCreated={(channel) => {
             setNewGroup(false);

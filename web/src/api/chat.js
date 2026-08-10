@@ -21,10 +21,6 @@ export const setTyping = (channelId) =>
 export const getTyping = (channelId) =>
   api(`/api/channels/${encodeURIComponent(channelId)}/typing`).catch(() => []);
 
-export const markRead = (messageId) =>
-  api(`/api/messages/${messageId}`, { method: 'PUT', body: JSON.stringify({ status: 'read' }) })
-    .catch(() => {});
-
 export async function uploadFile(file) {
   const form = new FormData();
   form.append('file', file);
@@ -41,8 +37,8 @@ export async function uploadFile(file) {
 
 export const listUsers = () => api('/api/users');
 
-export const createGroup = ({ name, description, type, members }) =>
-  api('/api/workspaces/default/channels', {
+export const createGroup = ({ workspaceId, name, description, type, members }) =>
+  api(`/api/workspaces/${encodeURIComponent(workspaceId || 'default')}/channels`, {
     method: 'POST',
     body: JSON.stringify({ name, description, type, members }),
   });
@@ -66,5 +62,3 @@ export const markConversationRead = (containerId) =>
     .catch(() => {});   // best-effort; never block the UI
 
 export const getReads = (messageId) => api(`/api/messages/${messageId}/reads`);
-
-export const getUnread = () => api('/api/unread').catch(() => ({ total: 0 }));

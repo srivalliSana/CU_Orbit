@@ -8,7 +8,7 @@ import { searchDirectory } from '../api/chat';
 // only avoids showing an action that would be refused.
 const CAN_CREATE_GROUPS = ['faculty', 'admin', 'examcell', 'coordinator'];
 
-export default function ChatList({ user, chats, activeId, onSelect, onNewGroup, onOpenContact }) {
+export default function ChatList({ user, chats, workspaces, workspaceId, onSwitchWorkspace, activeId, onSelect, onNewGroup, onOpenContact }) {
   const canCreate = CAN_CREATE_GROUPS.includes(user?.role);
   const [q, setQ] = useState('');
   const [tab, setTab] = useState('all');   // all | channels | dms
@@ -57,7 +57,20 @@ export default function ChatList({ user, chats, activeId, onSelect, onNewGroup, 
         <Avatar name={user?.name} url={user?.avatarUrl} size={40} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{user?.name || 'You'}</p>
-          <p className="truncate text-xs text-slate-500">{user?.campus_email || user?.email}</p>
+          {workspaces?.length > 1 ? (
+            <select
+              value={workspaceId}
+              onChange={(e) => onSwitchWorkspace(e.target.value)}
+              aria-label="Workspace"
+              className="mt-0.5 w-full truncate rounded bg-transparent text-xs text-slate-500 outline-none"
+            >
+              {workspaces.map((w) => (
+                <option key={w.id} value={w.id}>{w.name}</option>
+              ))}
+            </select>
+          ) : (
+            <p className="truncate text-xs text-slate-500">{user?.campus_email || user?.email}</p>
+          )}
         </div>
         {canCreate && <button
           onClick={onNewGroup}

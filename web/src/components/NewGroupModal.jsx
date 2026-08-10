@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Avatar from './Avatar';
 import { createGroup, listUsers } from '../api/chat';
 
-export default function NewGroupModal({ user, onClose, onCreated }) {
+export default function NewGroupModal({ user, workspaceId, onClose, onCreated }) {
   const [name, setName] = useState('');
   const [topic, setTopic] = useState('');
   const [isPrivate, setIsPrivate] = useState(false);
@@ -38,6 +38,7 @@ export default function NewGroupModal({ user, onClose, onCreated }) {
     setError(null);
     try {
       const channel = await createGroup({
+        workspaceId,
         name: clean,
         description: topic.trim(),
         type: isPrivate ? 'private' : 'public',
