@@ -1,11 +1,12 @@
 import { useEffect } from "react";
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Button, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { useMessages } from "../../hooks/useMessages";
 import { useChannelSocket } from "../../hooks/useSocket";
 import { useTyping } from "../../hooks/useTyping";
 import { markConversationRead } from "../../api/messages";
+import { apiErrorMessage } from "../../api/client";
 import { useAuthStore } from "../../state/authStore";
 import MessageBubble from "../../components/MessageBubble";
 import Composer from "../../components/Composer";
@@ -16,7 +17,7 @@ type Props = NativeStackScreenProps<HomeStackParamList, "Chat">;
 
 export default function ChatScreen({ route, navigation }: Props) {
   const { containerId, title } = route.params;
-  const { data: messages, isLoading, send, react, remove } = useMessages(containerId);
+  const { data: messages, isLoading, error, refetch, send, react, remove } = useMessages(containerId);
   const { typingName, notifyTyping } = useTyping(containerId);
   const selfId = useAuthStore((s) => s.user?.id);
 
@@ -34,6 +35,17 @@ export default function ChatScreen({ route, navigation }: Props) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>{apiErrorMessage(error, "Couldn't load this chat.")}</Text>
+        <View style={styles.retryButton}>
+          <Button title="Try again" onPress={() => refetch()} color={colors.primary} />
+        </View>
       </View>
     );
   }
@@ -74,6 +86,15 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    padding: 24,
+    gap: 12,
+  },
+  errorText: {
+    color: colors.danger,
+    textAlign: "center",
+  },
+  retryButton: {
+    marginTop: 4,
   },
   list: {
     paddingVertical: 12,

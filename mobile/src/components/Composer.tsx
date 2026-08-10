@@ -45,8 +45,11 @@ export default function Composer({
     try {
       const { url } = await uploadFile(file);
       onSend({ body: "", type, mediaUrl: url });
-    } catch {
-      Alert.alert("Upload failed", "Couldn't send that attachment. Please try again.");
+    } catch (e) {
+      Alert.alert(
+        "Upload failed",
+        e instanceof Error ? e.message : "Couldn't send that attachment. Please try again."
+      );
     } finally {
       setUploading(false);
     }
