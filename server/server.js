@@ -1405,6 +1405,84 @@ app.put('/api/messages/:id', auth.requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json(e); }
 });
 
+/**
+ * Toggle a reaction. The Android app has called this route since it shipped
+ * (ApiService.kt's reactToMessage) but the server never implemented it, so
+ * every reaction attempt has 404'd in production until now.
+ *
+ * Identity comes from the session, not the request body — same reasoning as
+ * POST /api/messages: a client-supplied userId would let anyone react as
+ * anyone. One reaction per (user, emoji) pair; posting the same emoji again
+ * removes it, mirroring how Slack/WhatsApp-style reaction toggles behave.
+ */
+app.post('/api/messages/:id/reactions', auth.requireAuth, async (req, res) => {
+    try {
+        const { emoji } = req.body;
+        if (!emoji) return res.status(400).json({ error: 'bad_request', message: 'emoji required' });
+
+        const msg = await Message.findByPk(req.params.id);
+        if (!msg) return res.status(404).json({ error: 'not_found', message: 'Message not found' });
+
+        const userId = req.user.id;
+        const sender = await User.findByPk(userId);
+        const userName = sender ? sender.name : req.user.email;
+
+        const existing = msg.reactions || [];
+        const already = existing.some((r) => r.userId === userId && r.emoji === emoji);
+        const reactions = already
+            ? existing.filter((r) => !(r.userId === userId && r.emoji === emoji))
+            : [...existing, { userId, userName, emoji }];
+
+        msg.reactions = reactions;
+        await msg.save();
+
+        const containerId = msg.channelId || msg.dm_id;
+        realtime.toContainer(containerId, 'message', {
+            id: msg.id,
+            container_id: containerId,
+            sender_id: msg.senderId,
+            sender_name: msg.senderName,
+            sender_avatar_url: msg.senderAvatarUrl,
+            text: msg.body,
+            type: msg.type,
+            attachments: msg.attachments,
+            reactions: msg.reactions,
+            sent_at: Number(msg.timestamp),
+            status: msg.status,
+        });
+
+        res.json(msg);
+    } catch (e) {
+        console.error('[REACTION-ERROR]', e);
+        res.status(500).json(e);
+    }
+});
+
+/**
+ * Same story as reactions above: the Android app has called DELETE on this
+ * route since it shipped, and it has always 404'd — never implemented here.
+ */
+app.delete('/api/messages/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const msg = await Message.findByPk(req.params.id);
+        if (!msg) return res.status(404).json({ error: 'not_found', message: 'Message not found' });
+        if (msg.senderId !== req.user.id) {
+            return res.status(403).json({ error: 'forbidden', message: 'Only the author can delete a message' });
+        }
+        const containerId = msg.channelId || msg.dm_id;
+        await msg.destroy();
+        // No dedicated "deleted" realtime event exists on any client yet — the
+        // next poll (web's 20s fallback, mobile's 3s) picks up the removal
+        // since a destroyed row simply stops appearing in GET /api/messages.
+        // Cheap enough at these intervals; a live-remove event can be added
+        // later if it's ever worth the added client-side complexity.
+        res.json({ success: true, id: req.params.id, container_id: containerId });
+    } catch (e) {
+        console.error('[DELETE-MESSAGE-ERROR]', e);
+        res.status(500).json(e);
+    }
+});
+
 app.get('/api/mentions/:userId', auth.requireAuth, async (req, res) => {
     try {
         // :userId ignored — your mentions are yours.
