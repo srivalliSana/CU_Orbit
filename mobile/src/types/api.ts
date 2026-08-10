@@ -78,5 +78,7 @@ export interface Message {
   attachments: Array<{ type: string; url: string }>;
   reactions: Reaction[];
   status: string;
+  is_pinned?: boolean;
+  edited_at?: string | null;
   enriched_mentions: EnrichedMention[];
 }

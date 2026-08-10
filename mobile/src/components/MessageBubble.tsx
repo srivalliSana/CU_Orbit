@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 
 import ReactionPicker from "./ReactionPicker";
+import EditMessageModal from "./EditMessageModal";
 import { resolveMediaUrl } from "../constants/config";
 import { clockLabel } from "../lib/format";
 import { colors } from "../theme/colors";
@@ -12,13 +13,18 @@ export default function MessageBubble({
   isOwn,
   onReact,
   onDelete,
+  onEdit,
+  onPin,
 }: {
   message: Message;
   isOwn: boolean;
   onReact: (emoji: string) => void;
   onDelete: () => void;
+  onEdit: (text: string) => void;
+  onPin: (pinned: boolean) => void;
 }) {
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [editVisible, setEditVisible] = useState(false);
 
   const reactionCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -35,9 +41,11 @@ export default function MessageBubble({
   }
 
   const attachmentUrl = resolveMediaUrl(message.attachments?.[0]?.url);
+  const canEdit = isOwn && message.type === "text";
 
   return (
     <View style={[styles.row, isOwn ? styles.rowOwn : styles.rowOther]}>
+      {message.is_pinned ? <Text style={styles.pinnedLabel}>📌 Pinned</Text> : null}
       <Pressable
         onLongPress={() => setPickerVisible(true)}
         style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}
@@ -56,7 +64,10 @@ export default function MessageBubble({
         ) : null}
 
         {message.text ? <Text style={styles.text}>{message.text}</Text> : null}
-        <Text style={styles.time}>{clockLabel(message.sent_at)}</Text>
+        <View style={styles.metaRow}>
+          {message.edited_at ? <Text style={styles.edited}>edited</Text> : null}
+          <Text style={styles.time}>{clockLabel(message.sent_at)}</Text>
+        </View>
 
         {reactionCounts.length > 0 ? (
           <View style={styles.reactionsRow}>
@@ -73,10 +84,21 @@ export default function MessageBubble({
 
       <ReactionPicker
         visible={pickerVisible}
+        canEdit={canEdit}
         canDelete={isOwn}
+        isPinned={!!message.is_pinned}
         onSelect={onReact}
+        onEdit={() => setEditVisible(true)}
         onDelete={onDelete}
+        onPin={() => onPin(!message.is_pinned)}
         onClose={() => setPickerVisible(false)}
+      />
+
+      <EditMessageModal
+        visible={editVisible}
+        initialText={message.text}
+        onSave={onEdit}
+        onClose={() => setEditVisible(false)}
       />
     </View>
   );
@@ -92,6 +114,12 @@ const styles = StyleSheet.create({
   },
   rowOther: {
     alignItems: "flex-start",
+  },
+  pinnedLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: colors.textMuted,
+    marginBottom: 2,
   },
   bubble: {
     maxWidth: "80%",
@@ -136,11 +164,21 @@ const styles = StyleSheet.create({
     color: colors.primary,
     maxWidth: 180,
   },
+  metaRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
+  },
+  edited: {
+    fontSize: 10,
+    fontStyle: "italic",
+    color: colors.textMuted,
+  },
   time: {
     fontSize: 10,
     color: colors.textMuted,
-    alignSelf: "flex-end",
-    marginTop: 4,
   },
   reactionsRow: {
     flexDirection: "row",

@@ -17,7 +17,7 @@ type Props = NativeStackScreenProps<HomeStackParamList, "Chat">;
 
 export default function ChatScreen({ route, navigation }: Props) {
   const { containerId, title } = route.params;
-  const { data: messages, isLoading, error, refetch, send, react, remove } = useMessages(containerId);
+  const { data: messages, isLoading, error, refetch, send, react, remove, edit, pin } = useMessages(containerId);
   const { typingName, notifyTyping } = useTyping(containerId);
   const selfId = useAuthStore((s) => s.user?.id);
 
@@ -65,6 +65,8 @@ export default function ChatScreen({ route, navigation }: Props) {
             isOwn={item.sender_id === selfId}
             onReact={(emoji) => react.mutate({ messageId: item.id, emoji })}
             onDelete={() => remove.mutate(item.id)}
+            onEdit={(text) => edit.mutate({ messageId: item.id, body: text })}
+            onPin={(pinned) => pin.mutate({ messageId: item.id, pinned })}
           />
         )}
         contentContainerStyle={styles.list}

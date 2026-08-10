@@ -36,3 +36,9 @@ export const reactToMessage = (messageId: string, emoji: string) =>
 
 export const deleteMessage = (messageId: string) =>
   client.delete(`/messages/${messageId}`).then((res) => res.data);
+
+export const editMessage = (messageId: string, body: string) =>
+  client.put<Message>(`/messages/${messageId}`, { body }).then((res) => res.data);
+
+export const setMessagePinned = (messageId: string, pinned: boolean) =>
+  client.put<Message>(`/messages/${messageId}`, { pinned }).then((res) => res.data);

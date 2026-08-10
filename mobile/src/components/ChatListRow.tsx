@@ -14,6 +14,7 @@ export interface ChatRowItem {
   unreadCount: number;
   hasMention: boolean;
   isPinned?: boolean;
+  isMuted?: boolean;
   presence?: string;
 }
 
@@ -33,6 +34,7 @@ export default function ChatListRow({
         <Text style={styles.title} numberOfLines={1}>
           {item.isPinned ? "📌 " : ""}
           {item.kind === "channel" ? `# ${item.title}` : item.title}
+          {item.isMuted ? " 🔕" : ""}
         </Text>
         <Text style={styles.preview} numberOfLines={1}>
           {item.previewText}

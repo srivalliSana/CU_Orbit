@@ -1,7 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useIsFocused } from "@react-navigation/native";
 
-import { deleteMessage, getMessages, reactToMessage, sendMessage } from "../api/messages";
+import {
+  deleteMessage,
+  editMessage,
+  getMessages,
+  reactToMessage,
+  sendMessage,
+  setMessagePinned,
+} from "../api/messages";
 
 export function useMessages(containerId: string) {
   const isFocused = useIsFocused();
@@ -41,5 +48,21 @@ export function useMessages(containerId: string) {
     },
   });
 
-  return { ...query, send, react, remove };
+  const edit = useMutation({
+    mutationFn: (params: { messageId: string; body: string }) =>
+      editMessage(params.messageId, params.body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["messages", containerId] });
+    },
+  });
+
+  const pin = useMutation({
+    mutationFn: (params: { messageId: string; pinned: boolean }) =>
+      setMessagePinned(params.messageId, params.pinned),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["messages", containerId] });
+    },
+  });
+
+  return { ...query, send, react, remove, edit, pin };
 }

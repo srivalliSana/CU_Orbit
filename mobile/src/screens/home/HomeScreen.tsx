@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -10,13 +10,16 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useQuery } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { useHome } from "../../hooks/useHome";
 import { useMentions } from "../../hooks/useMentions";
 import { useChatActions } from "../../hooks/useChatActions";
+import { searchMessages, type SearchResult } from "../../api/search";
 import ChatListRow, { type ChatRowItem } from "../../components/ChatListRow";
 import { channelToRow, dmToRow } from "../../lib/chatRows";
+import { timeLabel } from "../../lib/format";
 import { colors } from "../../theme/colors";
 import type { HomeStackParamList } from "../../navigation/types";
 
@@ -25,13 +28,31 @@ type Props = NativeStackScreenProps<HomeStackParamList, "List">;
 type ListItem =
   | { kind: "shortcut"; id: string; label: string; icon: string; badge?: number; onPress: () => void }
   | { kind: "sectionHeader"; id: string; label: string; onAdd?: () => void }
-  | { kind: "row"; id: string; row: ChatRowItem };
+  | { kind: "row"; id: string; row: ChatRowItem }
+  | { kind: "message"; id: string; result: SearchResult };
+
+/** Debounces a fast-changing value — mirrors web's 250ms directory-search debounce. */
+function useDebounced<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+}
 
 export default function HomeScreen({ navigation }: Props) {
   const { data, isLoading, isRefetching, refetch, error } = useHome();
   const { data: mentions } = useMentions();
   const { onLongPress } = useChatActions();
   const [query, setQuery] = useState("");
+  const debouncedQuery = useDebounced(query.trim(), 300);
+
+  const { data: messageResults } = useQuery({
+    queryKey: ["search", debouncedQuery],
+    queryFn: () => searchMessages(debouncedQuery),
+    enabled: debouncedQuery.length >= 2,
+  });
 
   const unreadMentionCount = useMemo(
     () => (mentions ?? []).filter((m) => !m.is_read).length,
@@ -76,6 +97,13 @@ export default function HomeScreen({ navigation }: Props) {
         onPress: () => navigation.navigate("Mentions"),
       });
     }
+    if (term.length >= 2 && messageResults && messageResults.length > 0) {
+      list.push({ kind: "sectionHeader", id: "messages-header", label: "Messages" });
+      list.push(
+        ...messageResults.map((r) => ({ kind: "message" as const, id: `msg-${r.id}`, result: r }))
+      );
+    }
+
     list.push({
       kind: "sectionHeader",
       id: "channels-header",
@@ -86,7 +114,7 @@ export default function HomeScreen({ navigation }: Props) {
     list.push({ kind: "sectionHeader", id: "dms-header", label: "Direct messages" });
     list.push(...dmRows.map((row) => ({ kind: "row" as const, id: row.id, row })));
     return list;
-  }, [data, query, unreadMentionCount, navigation]);
+  }, [data, query, unreadMentionCount, navigation, messageResults]);
 
   if (isLoading) {
     return (
@@ -140,6 +168,27 @@ export default function HomeScreen({ navigation }: Props) {
                   </Pressable>
                 ) : null}
               </View>
+            );
+          }
+          if (item.kind === "message") {
+            const r = item.result;
+            return (
+              <Pressable
+                style={styles.messageRow}
+                onPress={() =>
+                  navigation.navigate("Chat", {
+                    containerId: r.container_id,
+                    title: r.sender_name,
+                    kind: r.container_id.includes("_") ? "dm" : "channel",
+                  })
+                }
+              >
+                <Text style={styles.messageSender}>{r.sender_name}</Text>
+                <Text style={styles.messageText} numberOfLines={2}>
+                  {r.text}
+                </Text>
+                <Text style={styles.messageTime}>{timeLabel(r.sent_at)}</Text>
+              </Pressable>
             );
           }
           return (
@@ -249,6 +298,24 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: "700",
     paddingHorizontal: 6,
+  },
+  messageRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 2,
+  },
+  messageSender: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  messageText: {
+    fontSize: 13,
+    color: colors.textMuted,
+  },
+  messageTime: {
+    fontSize: 11,
+    color: colors.textMuted,
   },
   fab: {
     position: "absolute",

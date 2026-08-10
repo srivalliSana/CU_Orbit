@@ -1259,6 +1259,8 @@ app.get('/api/messages/:containerId', auth.requireAuth, async (req, res) => {
             attachments: m.attachments || [],
             reactions: m.reactions || [],
             status: m.status,
+            is_pinned: m.is_pinned,
+            edited_at: m.edited_at,
             enriched_mentions: (m.mentions || []).map(mn => ({
                 user_id: mn.user ? mn.user.id : '',
                 display_name: mn.user ? mn.user.name : '',
@@ -1268,6 +1270,59 @@ app.get('/api/messages/:containerId', auth.requireAuth, async (req, res) => {
     } catch (e) {
         console.error(e);
         res.json([]);
+    }
+});
+
+/**
+ * Message-content search, scoped to conversations the caller can actually
+ * read — the same channel-membership + DM-participant rule as everywhere
+ * else, so this can never surface a message from a container the user
+ * couldn't open directly.
+ */
+app.get('/api/search', auth.requireAuth, async (req, res) => {
+    try {
+        const q = String(req.query.q || '').trim();
+        if (q.length < 2) return res.json({ messages: [] });
+
+        const userId = req.user.id;
+        const memberships = await ChannelMember.findAll({ where: { userId } });
+        const channelIds = memberships.map((m) => m.channelId);
+        const allChannelIds = isGroupAdmin(req.user)
+            ? (await Channel.findAll({ attributes: ['id'] })).map((c) => c.id)
+            : channelIds;
+
+        const messages = await Message.findAll({
+            where: {
+                body: { [Op.like]: `%${q}%` },
+                [Op.or]: [
+                    { channelId: { [Op.in]: allChannelIds } },
+                    { dm_id: { [Op.like]: `%${userId}%` } },
+                ],
+            },
+            order: [['timestamp', 'DESC']],
+            limit: 50,
+        });
+
+        // The DM half of the OR above is a coarse pre-filter (dm_id contains
+        // the id as a substring); confirm the caller is actually one of the
+        // two participants before it goes back over the wire.
+        const filtered = messages.filter(
+            (m) => !m.dm_id || m.dm_id.split('_').includes(userId)
+        );
+
+        res.json({
+            messages: filtered.map((m) => ({
+                id: m.id,
+                container_id: m.channelId || m.dm_id,
+                sender_name: m.senderName,
+                text: m.body,
+                sent_at: m.timestamp,
+                type: m.type,
+            })),
+        });
+    } catch (e) {
+        console.error('[SEARCH-ERROR]', e);
+        res.status(500).json({ messages: [] });
     }
 });
 
@@ -1377,7 +1432,7 @@ app.post('/api/messages', auth.requireAuth, async (req, res) => {
 
 app.put('/api/messages/:id', auth.requireAuth, async (req, res) => {
     try {
-        const { body, status } = req.body;
+        const { body, status, pinned } = req.body;
         const msg = await Message.findByPk(req.params.id);
         if (!msg) return res.status(404).json({ error: 'Message not found' });
 
@@ -1398,6 +1453,17 @@ app.put('/api/messages/:id', auth.requireAuth, async (req, res) => {
                 return res.status(400).json({ error: 'bad_request', message: 'Invalid status' });
             }
             if (msg.senderId !== req.user.id) msg.status = status;
+        }
+
+        // Pinning is a container-wide flag ("important, everyone should see
+        // this"), not per-user — anyone with access to the conversation may
+        // set it, same bar as reading it at all.
+        if (pinned !== undefined) {
+            const containerId = msg.channelId || msg.dm_id;
+            if (!(await canAccessContainer(req.user.id, containerId, req.user))) {
+                return res.status(403).json({ error: 'forbidden', message: 'Not a participant in this conversation' });
+            }
+            msg.is_pinned = !!pinned;
         }
 
         await msg.save();

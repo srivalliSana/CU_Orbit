@@ -6,15 +6,23 @@ const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
 export default function ReactionPicker({
   visible,
+  canEdit,
   canDelete,
+  isPinned,
   onSelect,
+  onEdit,
   onDelete,
+  onPin,
   onClose,
 }: {
   visible: boolean;
+  canEdit: boolean;
   canDelete: boolean;
+  isPinned: boolean;
   onSelect: (emoji: string) => void;
+  onEdit?: () => void;
   onDelete?: () => void;
+  onPin?: () => void;
   onClose: () => void;
 }) {
   return (
@@ -35,9 +43,32 @@ export default function ReactionPicker({
               </Pressable>
             ))}
           </View>
+
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => {
+              onPin?.();
+              onClose();
+            }}
+          >
+            <Text style={styles.actionText}>{isPinned ? "Unpin message" : "Pin message"}</Text>
+          </Pressable>
+
+          {canEdit ? (
+            <Pressable
+              style={styles.actionButton}
+              onPress={() => {
+                onEdit?.();
+                onClose();
+              }}
+            >
+              <Text style={styles.actionText}>Edit message</Text>
+            </Pressable>
+          ) : null}
+
           {canDelete ? (
             <Pressable
-              style={styles.deleteButton}
+              style={styles.actionButton}
               onPress={() => {
                 onDelete?.();
                 onClose();
@@ -63,12 +94,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     borderRadius: 16,
     padding: 16,
-    gap: 12,
+    gap: 4,
     minWidth: 260,
   },
   emojiRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    marginBottom: 8,
   },
   emojiButton: {
     padding: 6,
@@ -76,11 +108,15 @@ const styles = StyleSheet.create({
   emoji: {
     fontSize: 28,
   },
-  deleteButton: {
+  actionButton: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
-    paddingTop: 12,
+    paddingVertical: 12,
     alignItems: "center",
+  },
+  actionText: {
+    color: colors.text,
+    fontWeight: "600",
   },
   deleteText: {
     color: colors.danger,
