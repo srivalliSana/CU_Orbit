@@ -10,9 +10,9 @@ import { useAuthStore } from "../../state/authStore";
 import MessageBubble from "../../components/MessageBubble";
 import Composer from "../../components/Composer";
 import { colors } from "../../theme/colors";
-import type { ChatStackParamList } from "../../navigation/types";
+import type { HomeStackParamList } from "../../navigation/types";
 
-type Props = NativeStackScreenProps<ChatStackParamList, "Chat">;
+type Props = NativeStackScreenProps<HomeStackParamList, "Chat">;
 
 export default function ChatScreen({ route, navigation }: Props) {
   const { containerId, title } = route.params;

@@ -1,0 +1,275 @@
+import { useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+
+import { useHome } from "../../hooks/useHome";
+import { useMentions } from "../../hooks/useMentions";
+import { useChatActions } from "../../hooks/useChatActions";
+import ChatListRow, { type ChatRowItem } from "../../components/ChatListRow";
+import { channelToRow, dmToRow } from "../../lib/chatRows";
+import { colors } from "../../theme/colors";
+import type { HomeStackParamList } from "../../navigation/types";
+
+type Props = NativeStackScreenProps<HomeStackParamList, "List">;
+
+type ListItem =
+  | { kind: "shortcut"; id: string; label: string; icon: string; badge?: number; onPress: () => void }
+  | { kind: "sectionHeader"; id: string; label: string; onAdd?: () => void }
+  | { kind: "row"; id: string; row: ChatRowItem };
+
+export default function HomeScreen({ navigation }: Props) {
+  const { data, isLoading, isRefetching, refetch, error } = useHome();
+  const { data: mentions } = useMentions();
+  const { onLongPress } = useChatActions();
+  const [query, setQuery] = useState("");
+
+  const unreadMentionCount = useMemo(
+    () => (mentions ?? []).filter((m) => !m.is_read).length,
+    [mentions]
+  );
+
+  const items: ListItem[] = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    const match = (title: string) => !term || title.toLowerCase().includes(term);
+
+    const channelRows = (data?.channels ?? [])
+      .map(channelToRow)
+      .filter((r) => match(r.title))
+      .sort((a, b) => {
+        if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+        return (b.sentAt ?? 0) - (a.sentAt ?? 0);
+      });
+
+    const dmRows = (data?.dms ?? [])
+      .map(dmToRow)
+      .filter((r) => match(r.title))
+      .sort((a, b) => {
+        if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+        return (b.sentAt ?? 0) - (a.sentAt ?? 0);
+      });
+
+    const list: ListItem[] = [];
+    if (!term) {
+      list.push({
+        kind: "shortcut",
+        id: "threads",
+        label: "Threads",
+        icon: "💬",
+        onPress: () => navigation.navigate("Threads"),
+      });
+      list.push({
+        kind: "shortcut",
+        id: "mentions",
+        label: "Mentions",
+        icon: "@",
+        badge: unreadMentionCount || undefined,
+        onPress: () => navigation.navigate("Mentions"),
+      });
+    }
+    list.push({
+      kind: "sectionHeader",
+      id: "channels-header",
+      label: "Channels",
+      onAdd: () => navigation.navigate("CreateChannel"),
+    });
+    list.push(...channelRows.map((row) => ({ kind: "row" as const, id: row.id, row })));
+    list.push({ kind: "sectionHeader", id: "dms-header", label: "Direct messages" });
+    list.push(...dmRows.map((row) => ({ kind: "row" as const, id: row.id, row })));
+    return list;
+  }, [data, query, unreadMentionCount, navigation]);
+
+  if (isLoading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>Couldn't load your chats.</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <TextInput
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Jump to a channel, DM, or file"
+        style={styles.search}
+      />
+      <FlatList
+        data={items}
+        keyExtractor={(item) => item.id}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+        renderItem={({ item }) => {
+          if (item.kind === "shortcut") {
+            return (
+              <Pressable style={styles.shortcutRow} onPress={item.onPress}>
+                <Text style={styles.shortcutIcon}>{item.icon}</Text>
+                <Text style={styles.shortcutLabel}>{item.label}</Text>
+                {item.badge ? (
+                  <View style={styles.shortcutBadge}>
+                    <Text style={styles.shortcutBadgeText}>{item.badge}</Text>
+                  </View>
+                ) : null}
+              </Pressable>
+            );
+          }
+          if (item.kind === "sectionHeader") {
+            return (
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionLabel}>{item.label.toUpperCase()}</Text>
+                {item.onAdd ? (
+                  <Pressable onPress={item.onAdd} hitSlop={8}>
+                    <Text style={styles.sectionAdd}>+</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            );
+          }
+          return (
+            <ChatListRow
+              item={item.row}
+              onPress={() =>
+                navigation.navigate("Chat", {
+                  containerId: item.row.id,
+                  title: item.row.title,
+                  kind: item.row.kind,
+                })
+              }
+              onLongPress={() => onLongPress(item.row)}
+            />
+          );
+        }}
+      />
+
+      <Pressable
+        style={styles.fab}
+        onPress={() =>
+          Alert.alert("New", undefined, [
+            { text: "New channel", onPress: () => navigation.navigate("CreateChannel") },
+            { text: "New direct message", onPress: () => navigation.navigate("NewDirectMessage") },
+            { text: "Cancel", style: "cancel" },
+          ])
+        }
+      >
+        <Text style={styles.fabIcon}>+</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  errorText: {
+    color: colors.danger,
+  },
+  search: {
+    margin: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: colors.text,
+  },
+  shortcutRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  shortcutIcon: {
+    width: 22,
+    textAlign: "center",
+    fontSize: 16,
+    color: colors.primary,
+    fontWeight: "700",
+  },
+  shortcutLabel: {
+    fontSize: 15,
+    color: colors.text,
+    flex: 1,
+  },
+  shortcutBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 5,
+  },
+  shortcutBadgeText: {
+    color: colors.primaryText,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 4,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.textMuted,
+    letterSpacing: 0.4,
+  },
+  sectionAdd: {
+    fontSize: 20,
+    color: colors.primary,
+    fontWeight: "700",
+    paddingHorizontal: 6,
+  },
+  fab: {
+    position: "absolute",
+    right: 20,
+    bottom: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  fabIcon: {
+    color: colors.primaryText,
+    fontSize: 28,
+    lineHeight: 30,
+    fontWeight: "400",
+  },
+});

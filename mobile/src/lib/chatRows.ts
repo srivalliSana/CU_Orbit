@@ -28,4 +28,5 @@ export const dmToRow = (d: DmSummary): ChatRowItem & { isPinned: boolean } => ({
   unreadCount: d.unread_count,
   hasMention: d.has_unread_mention,
   isPinned: d.is_pinned,
+  presence: d.presence,
 });

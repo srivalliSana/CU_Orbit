@@ -14,6 +14,7 @@ export interface ChatRowItem {
   unreadCount: number;
   hasMention: boolean;
   isPinned?: boolean;
+  presence?: string;
 }
 
 export default function ChatListRow({
@@ -27,7 +28,7 @@ export default function ChatListRow({
 }) {
   return (
     <Pressable style={styles.row} onPress={onPress} onLongPress={onLongPress}>
-      <Avatar name={item.title} url={item.avatarUrl} />
+      <Avatar name={item.title} url={item.avatarUrl} presence={item.presence} />
       <View style={styles.middle}>
         <Text style={styles.title} numberOfLines={1}>
           {item.isPinned ? "📌 " : ""}
