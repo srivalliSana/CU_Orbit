@@ -72,7 +72,8 @@
           "contactsPermission": "CU Orbit uses your contacts to help you find people to message."
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "expo-font"
     ],
     "extra": {
       "eas": {

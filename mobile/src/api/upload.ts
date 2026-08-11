@@ -1,3 +1,5 @@
+import { File, UploadType } from "expo-file-system";
+
 import { API_BASE_URL } from "../constants/config";
 import { useAuthStore } from "../state/authStore";
 
@@ -8,40 +10,32 @@ export interface PickedFile {
 }
 
 /**
- * Deliberately not using the shared axios `client`: FormData must set its
- * own multipart boundary header, and React Native's fetch handles a
- * { uri, name, type } file part natively (there is no browser File object
- * on this platform). Mirrors web/src/api/chat.js's uploadFile, which
- * bypasses its api() wrapper for the same reason.
+ * Uses expo-file-system's File.upload() rather than fetch()+FormData: RN's
+ * FormData/fetch multipart path throws "Unsupported FormDataPart
+ * implementation" for a { uri, name, type } file part on this RN version —
+ * a known incompatibility, not something fixable on the FormData shape.
+ * File.upload() streams the multipart body natively and sidesteps it.
  */
 export async function uploadFile(file: PickedFile): Promise<{ url: string }> {
-  const form = new FormData();
-  // React Native's FormData accepts this shape even though it isn't a real Blob.
-  form.append("file", {
-    uri: file.uri,
-    name: file.name,
-    type: file.mimeType,
-  } as unknown as Blob);
-
   const token = useAuthStore.getState().token;
-  let res: Response;
+
+  let result;
   try {
-    res = await fetch(`${API_BASE_URL}/upload`, {
-      method: "POST",
+    const fsFile = new File(file.uri);
+    result = await fsFile.upload(`${API_BASE_URL}/upload`, {
+      httpMethod: "POST",
+      uploadType: UploadType.MULTIPART,
+      fieldName: "file",
+      mimeType: file.mimeType,
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      body: form,
     });
   } catch (e) {
-    // A network-level failure (no connection, DNS, TLS) never reaches the
-    // status check below — surface it distinctly from a server rejection.
     throw new Error(`Network error while uploading: ${e instanceof Error ? e.message : String(e)}`);
   }
-  if (!res.ok) {
-    // Surface the server's actual reason (e.g. a reverse-proxy body-size
-    // limit returns 413 with no JSON body) instead of a generic message —
-    // the previous flat "Upload failed" gave no way to diagnose failures.
-    const bodyText = await res.text().catch(() => "");
-    throw new Error(`Upload failed (${res.status}): ${bodyText || res.statusText || "no response body"}`);
+
+  if (!result.status || result.status < 200 || result.status >= 300) {
+    throw new Error(`Upload failed (${result.status}): ${result.body || "no response body"}`);
   }
-  return res.json();
+
+  return JSON.parse(result.body);
 }

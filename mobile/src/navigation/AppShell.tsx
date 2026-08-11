@@ -2,6 +2,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createDrawerNavigator } from "@react-navigation/drawer";
 import { Button, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import type { DrawerContentComponentProps } from "@react-navigation/drawer";
 
 import HomeScreen from "../screens/home/HomeScreen";
@@ -50,10 +51,29 @@ function ActivityStackNavigator() {
   );
 }
 
+const TAB_ICONS: Record<keyof TabParamList, keyof typeof Ionicons.glyphMap> = {
+  HomeTab: "home",
+  ActivityTab: "notifications",
+  ProfileTab: "person",
+};
+
 const Tab = createBottomTabNavigator<TabParamList>();
 function Tabs() {
   return (
-    <Tab.Navigator screenOptions={{ headerShown: false }}>
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarIcon: ({ color, size, focused }) => (
+          <Ionicons
+            name={focused ? TAB_ICONS[route.name] : (`${TAB_ICONS[route.name]}-outline` as keyof typeof Ionicons.glyphMap)}
+            color={color}
+            size={size}
+          />
+        ),
+      })}
+    >
       <Tab.Screen name="HomeTab" component={HomeStackNavigator} options={{ title: "Home" }} />
       <Tab.Screen name="ActivityTab" component={ActivityStackNavigator} options={{ title: "Activity" }} />
       <Tab.Screen name="ProfileTab" component={ProfileScreen} options={{ title: "You" }} />
