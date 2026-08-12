@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { createChannel } from "../../api/channels";
+import { apiErrorMessage } from "../../api/client";
 import { colors } from "../../theme/colors";
 import type { HomeStackParamList } from "../../navigation/types";
 
@@ -49,7 +50,9 @@ export default function CreateChannelScreen({ navigation }: Props) {
         <Switch value={isPrivate} onValueChange={setIsPrivate} />
       </View>
 
-      {create.isError ? <Text style={styles.error}>Couldn't create the channel. Please try again.</Text> : null}
+      {create.isError ? (
+        <Text style={styles.error}>{apiErrorMessage(create.error, "Couldn't create the channel.")}</Text>
+      ) : null}
 
       <Pressable
         onPress={() => create.mutate()}

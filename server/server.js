@@ -951,6 +951,23 @@ app.get('/api/unread', auth.requireAuth, async (req, res) => {
 const isGroupAdmin = (user) => user?.role === 'admin';
 
 /**
+ * Campus-specific proxy for "can create/manage channels": CUTM's email
+ * convention is that student addresses start with a roll number (digits)
+ * and staff addresses start with a name (letters), both on the
+ * cutm.ac.in / cutmap.ac.in domains. Used instead of the CampusOne role
+ * claim for this one permission because that classification is what the
+ * institution actually goes by here.
+ */
+const FACULTY_EMAIL_DOMAINS = ['cutm.ac.in', 'cutmap.ac.in'];
+function isFacultyEmail(email) {
+    if (!email) return false;
+    const [local, domain] = String(email).toLowerCase().split('@');
+    if (!local || !domain) return false;
+    if (!FACULTY_EMAIL_DOMAINS.includes(domain)) return false;
+    return /^[a-z]/.test(local);
+}
+
+/**
  * Clients should not have to know the workspace UUID to ask for "my stuff", so
  * 'default' (and anything unrecognised) resolves to the first workspace.
  */
@@ -1646,17 +1663,12 @@ app.get('/api/workspaces', auth.requireAuth, async (req, res) => {
     try { res.json(await Workspace.findAll({ include: [{ model: Channel, as: 'channels' }] })); } catch (e) { res.json([]); }
 });
 
-// Who may create groups. Students are excluded by default; override with
-// GROUP_CREATE_ROLES if that policy changes.
-const GROUP_CREATE_ROLES = (process.env.GROUP_CREATE_ROLES || 'faculty,admin,examcell,coordinator')
-    .split(',').map((s) => s.trim()).filter(Boolean);
-
 app.post('/api/workspaces/:workspaceId/channels', auth.requireAuth, async (req, res) => {
     try {
-        if (!GROUP_CREATE_ROLES.includes(req.user.role)) {
+        if (!isGroupAdmin(req.user) && !isFacultyEmail(req.user.email)) {
             return res.status(403).json({
                 error: 'forbidden',
-                message: 'Only faculty and staff can create groups.',
+                message: 'Only faculty and staff can create channels.',
             });
         }
         const { name, type, description, members } = req.body;
@@ -1751,16 +1763,35 @@ app.post('/api/channels/:id/members', auth.requireAuth, async (req, res) => {
 
         const me = await ChannelMember.findOne({ where: { channelId: req.params.id, userId: req.user.id } });
         if (!me) return res.status(403).json({ error: 'forbidden', message: 'Join the channel before adding others' });
-        // Granting admin is an admin-only act; otherwise any member could escalate.
-        if (role === 'admin' && me.role !== 'admin') {
+        // Adding people is a channel-admin act, or a faculty-email person's
+        // act — an ordinary student member cannot add others, mirroring the
+        // same rule that gates channel creation.
+        if (me.role !== 'admin' && !isGroupAdmin(req.user) && !isFacultyEmail(req.user.email)) {
+            return res.status(403).json({ error: 'forbidden', message: 'Only channel admins or faculty can add members' });
+        }
+        // Granting admin is a channel-admin-only act; otherwise any member
+        // (once past the check above) could escalate whoever they invite.
+        if (role === 'admin' && me.role !== 'admin' && !isGroupAdmin(req.user)) {
             return res.status(403).json({ error: 'forbidden', message: 'Only channel admins can grant admin' });
+        }
+
+        const channel = await Channel.findByPk(req.params.id);
+        // The person who created the channel is permanent admin — no one,
+        // including another admin, can demote or remove them.
+        if (channel && channel.created_by === userId && role !== undefined && role !== 'admin') {
+            return res.status(403).json({ error: 'forbidden', message: "The channel creator can't be demoted" });
         }
 
         const [member, created] = await ChannelMember.findOrCreate({ where: { channelId: req.params.id, userId: userId }, defaults: { channelId: req.params.id, userId: userId, role: role || 'member' } });
         if (created) {
-            const channel = await Channel.findByPk(req.params.id);
             if (channel) await channel.increment('member_count');
             await Message.create({ channelId: req.params.id, senderId: adder.id, senderName: adder.name, body: `ADD_MEMBER:${userId}`, type: 'system', timestamp: Date.now() });
+        } else if (role !== undefined && role !== member.role) {
+            // Not a fresh add — this is a promote/demote of someone already
+            // in the channel, which findOrCreate's `defaults` silently
+            // ignores on an existing row.
+            member.role = role;
+            await member.save();
         }
         res.json({ success: true });
     } catch (e) { res.status(500).json(e); }
@@ -1777,9 +1808,15 @@ app.delete('/api/channels/:id/members/:userId', auth.requireAuth, async (req, re
                 return res.status(403).json({ error: 'forbidden', message: 'Only channel admins can remove members' });
             }
         }
+        // The channel creator can never be removed — not by another admin,
+        // and not even by leaving themselves, so a channel is never left
+        // with no one permanently responsible for it.
+        const channel = await Channel.findByPk(req.params.id);
+        if (channel && channel.created_by === target) {
+            return res.status(403).json({ error: 'forbidden', message: "The channel creator can't be removed" });
+        }
         const deleted = await ChannelMember.destroy({ where: { channelId: req.params.id, userId: target } });
         if (deleted) {
-            const channel = await Channel.findByPk(req.params.id);
             if (channel) await channel.decrement('member_count');
             res.json({ success: true });
         } else { res.status(404).json({ error: 'Member not found' }); }
