@@ -172,14 +172,22 @@ export default function HomeScreen({ navigation }: Props) {
           }
           if (item.kind === "message") {
             const r = item.result;
+            const isDm = r.container_id.includes("_");
+            // The search endpoint only returns who sent the matched message,
+            // not the container's own name — resolve the real title from
+            // what's already loaded rather than showing the sender's name
+            // as if it were the chat's title.
+            const title = isDm
+              ? data?.dms.find((d) => d.id === r.container_id)?.other_user_name || r.sender_name
+              : data?.channels.find((c) => c.id === r.container_id)?.name || r.sender_name;
             return (
               <Pressable
                 style={styles.messageRow}
                 onPress={() =>
                   navigation.navigate("Chat", {
                     containerId: r.container_id,
-                    title: r.sender_name,
-                    kind: r.container_id.includes("_") ? "dm" : "channel",
+                    title,
+                    kind: isDm ? "dm" : "channel",
                   })
                 }
               >

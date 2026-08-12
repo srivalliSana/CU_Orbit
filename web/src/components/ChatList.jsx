@@ -1,38 +1,41 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Avatar from './Avatar';
 import { timeLabel } from '../lib/format';
-import { searchDirectory } from '../api/chat';
+import { searchDirectory, searchMessages } from '../api/chat';
+import { isFacultyEmail } from '../lib/permissions';
 
 /** Left pane: search, then channels and direct messages. */
-// Mirrors GROUP_CREATE_ROLES on the server. The server is the authority; this
-// only avoids showing an action that would be refused.
-const CAN_CREATE_GROUPS = ['faculty', 'admin', 'examcell', 'coordinator'];
 
 export default function ChatList({ user, chats, workspaces, workspaceId, onSwitchWorkspace, activeId, onSelect, onNewGroup, onOpenContact }) {
-  const canCreate = CAN_CREATE_GROUPS.includes(user?.role);
+  // Mirrors isFacultyEmail() on the server. The server is the authority for
+  // channel creation; this only avoids showing an action that would 403.
+  const canCreate = user?.role === 'admin' || isFacultyEmail(user?.campus_email || user?.email);
   const [q, setQ] = useState('');
   const [tab, setTab] = useState('all');   // all | channels | dms
   const [people, setPeople] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [messageResults, setMessageResults] = useState([]);
   const searchSeq = useRef(0);
 
-  // Search the campus directory as well as open conversations, so anyone at the
-  // university can be found — not only people already messaged. Debounced, and
-  // stale responses are discarded so a slow reply cannot overwrite a newer one.
+  // Search the campus directory, plus message content, as well as open
+  // conversations, so anyone/anything at the university can be found — not
+  // only people/chats already open. Debounced, and stale responses are
+  // discarded so a slow reply cannot overwrite a newer one.
   useEffect(() => {
     const term = q.trim();
-    if (term.length < 2) { setPeople([]); setSearching(false); return; }
+    if (term.length < 2) { setPeople([]); setMessageResults([]); setSearching(false); return; }
 
     setSearching(true);
     const seq = ++searchSeq.current;
     const timer = setTimeout(() => {
-      searchDirectory(term)
-        .then((d) => {
-          if (seq !== searchSeq.current) return;
-          setPeople(d.results || []);
-        })
-        .catch(() => { if (seq === searchSeq.current) setPeople([]); })
-        .finally(() => { if (seq === searchSeq.current) setSearching(false); });
+      Promise.all([
+        searchDirectory(term).catch(() => ({ results: [] })),
+        searchMessages(term).catch(() => []),
+      ]).then(([dirResult, msgResults]) => {
+        if (seq !== searchSeq.current) return;
+        setPeople(dirResult.results || []);
+        setMessageResults(msgResults);
+      }).finally(() => { if (seq === searchSeq.current) setSearching(false); });
     }, 250);
 
     return () => clearTimeout(timer);
@@ -137,6 +140,36 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
                 {!p.in_orbit && <span className="shrink-0 text-[10px] text-slate-400">not on Orbit</span>}
               </button>
             ))}
+          </Section>
+        )}
+
+        {q.trim().length >= 2 && messageResults.length > 0 && (
+          <Section title="Messages">
+            {messageResults.map((r) => {
+              const isDm = r.container_id.includes('_');
+              // The search endpoint only returns who sent the matched
+              // message, not the container's own name — resolve the real
+              // channel/DM title from what's already loaded rather than
+              // showing the sender's name as if it were the chat's title.
+              const known = isDm
+                ? (chats.dms || []).find((d) => d.id === r.container_id)
+                : (chats.channels || []).find((c) => c.id === r.container_id);
+              const title = isDm
+                ? (known?.other_user_name || r.sender_name)
+                : `# ${known?.name || r.sender_name}`;
+              return (
+                <button
+                  key={r.id}
+                  onClick={() => onSelect({ id: r.container_id, kind: isDm ? 'dm' : 'channel', title })}
+                  className="flex w-full flex-col items-start gap-0.5 px-4 py-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                >
+                  <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">{title}</span>
+                  <span className="line-clamp-2 text-xs text-slate-500">
+                    <b>{r.sender_name}:</b> {r.text}
+                  </span>
+                </button>
+              );
+            })}
           </Section>
         )}
 

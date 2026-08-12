@@ -8,11 +8,23 @@ export const getHome = (workspaceId = 'default') =>
 export const getMessages = (containerId) =>
   api(`/api/messages/${encodeURIComponent(containerId)}`);
 
-export const sendMessage = ({ containerId, body, type = 'text', mediaUrl }) =>
+export const sendMessage = ({ containerId, body, type = 'text', mediaUrl, mediaName, mediaMimeType }) =>
   api('/api/messages', {
     method: 'POST',
-    body: JSON.stringify({ channelId: containerId, body, type, mediaUrl }),
+    body: JSON.stringify({ channelId: containerId, body, type, mediaUrl, mediaName, mediaMimeType }),
   });
+
+export const reactToMessage = (messageId, emoji) =>
+  api(`/api/messages/${messageId}/reactions`, { method: 'POST', body: JSON.stringify({ emoji }) });
+
+export const deleteMessage = (messageId) =>
+  api(`/api/messages/${messageId}`, { method: 'DELETE' });
+
+export const editMessage = (messageId, body) =>
+  api(`/api/messages/${messageId}`, { method: 'PUT', body: JSON.stringify({ body }) });
+
+export const setMessagePinned = (messageId, pinned) =>
+  api(`/api/messages/${messageId}`, { method: 'PUT', body: JSON.stringify({ pinned }) });
 
 export const setTyping = (channelId) =>
   api(`/api/channels/${encodeURIComponent(channelId)}/typing`, { method: 'POST', body: '{}' })
@@ -47,6 +59,11 @@ export const createGroup = ({ workspaceId, name, description, type, members }) =
 
 export const searchDirectory = (q) =>
   api(`/api/directory/search?q=${encodeURIComponent(q || '')}`);
+
+// --- Message-content search ---
+
+export const searchMessages = (q) =>
+  api(`/api/search?q=${encodeURIComponent(q || '')}`).then((d) => d.messages || []);
 
 export const getPerson = ({ id, email }) =>
   api(`/api/directory/person?${id ? `id=${encodeURIComponent(id)}` : `email=${encodeURIComponent(email)}`}`);

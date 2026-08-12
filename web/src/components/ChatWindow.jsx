@@ -11,7 +11,7 @@ import { join, leave, on, sendTyping } from '../api/socket';
 const POLL_MS = 20000;
 const TYPING_TTL_MS = 4000;
 
-export default function ChatWindow({ chat, user, onSent, onOpenContact }) {
+export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenChannelInfo }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [typing, setTyping] = useState([]);
@@ -50,7 +50,13 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact }) {
     return () => clearInterval(t);
   }, []);
 
-  // Fallback poll, in case the socket is down.
+  // Fallback poll, in case the socket is down. refreshMessages is also
+  // called directly after a reaction/pin/edit/delete, so those actions show
+  // up immediately rather than waiting for the next poll tick.
+  const refreshMessages = async () => {
+    try { setMessages(await getMessages(chat.id)); } catch { /* keep showing stale data */ }
+  };
+
   useEffect(() => {
     let alive = true;
     const load = async () => {
@@ -114,13 +120,15 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact }) {
     atBottom.current = true;
 
     try {
-      let mediaUrl, type = 'text';
+      let mediaUrl, mediaName, type = 'text';
+      const mediaMimeType = file?.type;
       if (file) {
         const up = await uploadFile(file);
         mediaUrl = up.url;
+        mediaName = up.name || file.name;
         type = file.type.startsWith('image/') ? 'image' : 'file';
       }
-      await sendMessage({ containerId: chat.id, body: text, type, mediaUrl });
+      await sendMessage({ containerId: chat.id, body: text, type, mediaUrl, mediaName, mediaMimeType });
       const fresh = await getMessages(chat.id);
       setMessages(fresh);
       onSent?.();
@@ -136,8 +144,11 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact }) {
     <section className="flex min-w-0 flex-1 flex-col bg-slate-50 dark:bg-slate-950">
       <header className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900">
         <button
-          onClick={() => chat.kind === 'dm' && chat.email && onOpenContact?.({ email: chat.email })}
-          disabled={chat.kind !== 'dm' || !chat.email}
+          onClick={() => {
+            if (chat.kind === 'dm' && chat.email) onOpenContact?.({ email: chat.email });
+            else if (chat.kind === 'channel') onOpenChannelInfo?.(chat.id);
+          }}
+          disabled={chat.kind === 'dm' && !chat.email}
           className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default"
         >
           <Avatar name={chat.title} kind={chat.kind === 'channel' ? 'channel' : undefined} presence={chat.presence} size={40} />
@@ -176,6 +187,7 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact }) {
                 own={m.sender_id === user?.id}
                 showSender={chat.kind === 'channel'}
                 isGroup={chat.kind === 'channel'}
+                onChanged={refreshMessages}
               />
             </React.Fragment>
           );

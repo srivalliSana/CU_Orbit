@@ -8,6 +8,7 @@ import ChatWindow from './components/ChatWindow';
 import EmptyState from './components/EmptyState';
 import NewGroupModal from './components/NewGroupModal';
 import ContactPanel from './components/ContactPanel';
+import ChannelInfoPanel from './components/ChannelInfoPanel';
 import { notifyMessage, permission, requestPermission, setBadge } from './lib/notify';
 import { connect, disconnect, on } from './api/socket';
 
@@ -22,6 +23,7 @@ export default function App() {
   const [newGroup, setNewGroup] = useState(false);
   const [askNotify, setAskNotify] = useState(false);
   const [contact, setContact] = useState(null);   // { id?, email } shown in the side panel
+  const [channelInfoId, setChannelInfoId] = useState(null);   // channel id shown in the side panel
   const seen = useRef(null);   // last-seen unread snapshot, for notifications
   const queryClient = useQueryClient();
 
@@ -158,10 +160,19 @@ export default function App() {
         activeId={active?.id}
         onSelect={setActive}
         onNewGroup={() => setNewGroup(true)}
-        onOpenContact={setContact}
+        onOpenContact={(c) => { setChannelInfoId(null); setContact(c); }}
       />
       {active
-        ? <ChatWindow key={active.id} chat={active} user={user} onSent={refreshChats} onOpenContact={setContact} />
+        ? (
+          <ChatWindow
+            key={active.id}
+            chat={active}
+            user={user}
+            onSent={refreshChats}
+            onOpenContact={(c) => { setChannelInfoId(null); setContact(c); }}
+            onOpenChannelInfo={(id) => { setContact(null); setChannelInfoId(id); }}
+          />
+        )
         : <EmptyState user={user} onNewGroup={() => setNewGroup(true)} />}
 
       {contact && (
@@ -169,6 +180,15 @@ export default function App() {
           target={contact}
           onClose={() => setContact(null)}
           onOpenChat={(chat) => { setContact(null); setActive(chat); refreshChats(); }}
+        />
+      )}
+
+      {channelInfoId && (
+        <ChannelInfoPanel
+          channelId={channelInfoId}
+          currentUser={user}
+          onClose={() => setChannelInfoId(null)}
+          onChanged={refreshChats}
         />
       )}
 
