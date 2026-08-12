@@ -1328,7 +1328,7 @@ app.get('/api/search', auth.requireAuth, async (req, res) => {
 
 app.post('/api/messages', auth.requireAuth, async (req, res) => {
     try {
-        const { body, channelId, type, mediaUrl, mentions, enrichedMentions } = req.body;
+        const { body, channelId, type, mediaUrl, mediaName, mentions, enrichedMentions } = req.body;
 
         // Sender identity comes from the session, never the request body — a
         // client-supplied senderId let anyone post as anyone. Display fields are
@@ -1363,7 +1363,7 @@ app.post('/api/messages', auth.requireAuth, async (req, res) => {
         const msg = await Message.create({
             senderId, senderName, body, channelId, type: type || 'text',
             senderAvatarUrl, dm_id: (channelId && channelId.includes('_')) ? channelId : null,
-            attachments: mediaUrl ? [{ type: type, url: mediaUrl }] : []
+            attachments: mediaUrl ? [{ type: type, url: mediaUrl, name: mediaName }] : []
         });
         // Mentions are keyed on User.id. This block previously ran entirely on
         // phone numbers — comparing normalized UUIDs, and looking up members by
@@ -1820,7 +1820,10 @@ app.get('/api/channels/:id/typing', auth.requireAuth, async (req, res) => {
 
 app.post('/api/upload', auth.requireAuth, upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).send('No file uploaded.');
-    res.json({ url: `/uploads/${req.file.filename}` });
+    // req.file.filename is the on-disk name (timestamp-prefixed to avoid
+    // collisions) — originalname is what the sender actually called it, and
+    // is what should be shown to and saved by the recipient.
+    res.json({ url: `/uploads/${req.file.filename}`, name: req.file.originalname });
 });
 
 // SPA FALLBACK — must stay last, after every route above, so it only catches

@@ -16,7 +16,7 @@ export interface PickedFile {
  * a known incompatibility, not something fixable on the FormData shape.
  * File.upload() streams the multipart body natively and sidesteps it.
  */
-export async function uploadFile(file: PickedFile): Promise<{ url: string }> {
+export async function uploadFile(file: PickedFile): Promise<{ url: string; name: string }> {
   const token = useAuthStore.getState().token;
 
   let result;

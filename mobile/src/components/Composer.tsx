@@ -10,6 +10,7 @@ export interface SendPayload {
   body: string;
   type?: string;
   mediaUrl?: string;
+  mediaName?: string;
 }
 
 export default function Composer({
@@ -51,8 +52,8 @@ export default function Composer({
     try {
       for (let i = 0; i < files.length; i++) {
         const { file, type } = files[i];
-        const { url } = await uploadFile(file);
-        onSend({ body: i === 0 ? caption : "", type, mediaUrl: url });
+        const { url, name } = await uploadFile(file);
+        onSend({ body: i === 0 ? caption : "", type, mediaUrl: url, mediaName: name || file.name });
       }
       setText("");
     } catch (e) {

@@ -11,6 +11,7 @@ export const sendMessage = (params: {
   body: string;
   type?: string;
   mediaUrl?: string;
+  mediaName?: string;
 }) =>
   client
     .post<Message>("/messages", {
@@ -18,6 +19,7 @@ export const sendMessage = (params: {
       body: params.body,
       type: params.type ?? "text",
       mediaUrl: params.mediaUrl,
+      mediaName: params.mediaName,
     })
     .then((res) => res.data);
 

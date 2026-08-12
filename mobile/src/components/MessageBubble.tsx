@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
-import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { File, Paths } from "expo-file-system";
+import * as Sharing from "expo-sharing";
 
 import ReactionPicker from "./ReactionPicker";
 import EditMessageModal from "./EditMessageModal";
@@ -41,7 +43,52 @@ export default function MessageBubble({
   }
 
   const attachmentUrl = resolveMediaUrl(message.attachments?.[0]?.url);
+  // The server stores files under a timestamp-prefixed name to avoid
+  // collisions on disk — attachments[0].name is the sender's original
+  // filename (added specifically so recipients see/save the real name
+  // instead of "1755-report.pdf"), falling back to the URL's last segment
+  // only for messages sent before that field existed.
+  const fileName = message.attachments?.[0]?.name || attachmentUrl?.split("/").pop() || "file";
   const canEdit = isOwn && message.type === "text";
+
+  // Downloads the attachment into cache under its real name, then hands it
+  // to the OS share sheet — which lets the user pick an app to open it in,
+  // or (on most Android share sheets) a "Save to device"/"Files" target.
+  // There's no dedicated save-to-storage API in this Expo SDK without a new
+  // native dependency, so "open" and "save" both funnel through this same
+  // native chooser; the two entry points below exist so a person doesn't
+  // have to guess that one gesture does both.
+  const downloadToCache = async () => {
+    if (!attachmentUrl) throw new Error("No attachment URL");
+    const destination = new File(Paths.cache, fileName);
+    return File.downloadFileAsync(attachmentUrl, destination, { idempotent: true });
+  };
+
+  const handleOpen = async () => {
+    try {
+      const file = await downloadToCache();
+      await Sharing.shareAsync(file.uri, { dialogTitle: `Open ${fileName}` });
+    } catch (e) {
+      Alert.alert("Couldn't open file", e instanceof Error ? e.message : "Please try again.");
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      const file = await downloadToCache();
+      await Sharing.shareAsync(file.uri, { dialogTitle: `Save ${fileName}` });
+    } catch (e) {
+      Alert.alert("Couldn't save file", e instanceof Error ? e.message : "Please try again.");
+    }
+  };
+
+  const onFileLongPress = () => {
+    Alert.alert(fileName, undefined, [
+      { text: "Open", onPress: handleOpen },
+      { text: "Save to device", onPress: handleSave },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
 
   return (
     <View style={[styles.row, isOwn ? styles.rowOwn : styles.rowOther]}>
@@ -55,10 +102,10 @@ export default function MessageBubble({
         {message.type === "image" && attachmentUrl ? (
           <Image source={{ uri: attachmentUrl }} style={styles.image} resizeMode="cover" />
         ) : message.type === "file" && attachmentUrl ? (
-          <Pressable onPress={() => Linking.openURL(attachmentUrl)} style={styles.fileRow}>
+          <Pressable onPress={handleOpen} onLongPress={onFileLongPress} style={styles.fileRow}>
             <Text style={styles.fileIcon}>📎</Text>
             <Text style={styles.fileText} numberOfLines={1}>
-              {message.attachments[0]?.url.split("/").pop() || "Attachment"}
+              {fileName}
             </Text>
           </Pressable>
         ) : null}
