@@ -12,7 +12,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter basename="/app">
+        {/* No basename: the site is actually served at /portal (server.js),
+            not /app — that path is only the Vite asset-URL prefix (see
+            vite.config.js's base: '/app/'), a different thing entirely. */}
+        <BrowserRouter>
           <App />
         </BrowserRouter>
       </QueryClientProvider>
