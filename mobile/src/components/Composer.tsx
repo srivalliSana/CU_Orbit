@@ -1,9 +1,10 @@
 import { useRef, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 
 import { uploadFile, type PickedFile } from "../api/upload";
+import AttachmentPreviewModal, { type PendingAttachment } from "./AttachmentPreviewModal";
 import { colors } from "../theme/colors";
 
 export interface SendPayload {
@@ -21,6 +22,8 @@ export default function Composer({
   onTyping?: () => void;
 }) {
   const [text, setText] = useState("");
+  const [pending, setPending] = useState<PendingAttachment[]>([]);
+  const [caption, setCaption] = useState("");
   const [uploading, setUploading] = useState(false);
   const lastTyped = useRef(0);
 
@@ -41,21 +44,34 @@ export default function Composer({
     }
   };
 
-  // Sends one or more picked files. Any text currently typed becomes the
-  // caption on the first attachment only — one message can carry one
-  // attachment (the schema's Message.attachments is populated as a single
-  // entry per row), so a caption on every file in a multi-select would read
-  // as the same caption repeated once per file, which is worse, not better.
-  const sendPicked = async (files: Array<{ file: PickedFile; type: string }>) => {
+  // Picking (camera or document) only stages files for review — nothing
+  // uploads until the preview sheet's Send is pressed. Any text already
+  // typed in the composer seeds the caption so it isn't lost.
+  const stageFiles = (files: PendingAttachment[]) => {
+    setPending(files);
+    setCaption(text.trim());
+  };
+
+  const cancelPending = () => {
+    setPending([]);
+    setCaption("");
+  };
+
+  // Any caption applies to the first attachment only — one message carries
+  // one attachment (Message.attachments is a single entry per row), so
+  // repeating the same caption on every file in a multi-select would read
+  // worse than putting it once, on the first.
+  const confirmPending = async () => {
     setUploading(true);
-    const caption = text.trim();
     try {
-      for (let i = 0; i < files.length; i++) {
-        const { file, type } = files[i];
+      for (let i = 0; i < pending.length; i++) {
+        const { file, type } = pending[i];
         const { url, name } = await uploadFile(file);
         onSend({ body: i === 0 ? caption : "", type, mediaUrl: url, mediaName: name || file.name });
       }
       setText("");
+      setPending([]);
+      setCaption("");
     } catch (e) {
       Alert.alert(
         "Upload failed",
@@ -73,7 +89,7 @@ export default function Composer({
       multiple: true,
     });
     if (result.canceled || !result.assets?.length) return;
-    await sendPicked(
+    stageFiles(
       result.assets.map((asset) => {
         const isImage = (asset.mimeType || "").startsWith("image/");
         return {
@@ -98,14 +114,21 @@ export default function Composer({
       Alert.alert("Camera access needed", "Enable camera access in settings to capture photos or video.");
       return;
     }
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes, quality: 0.8 });
+    const isVideo = mediaTypes === "videos";
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes,
+      quality: 0.8,
+      // Native crop/rotate for photos only — Expo's picker has no video
+      // trim capability on either platform, so editing is skipped for video
+      // rather than showing a crop UI that does nothing useful for it.
+      allowsEditing: !isVideo,
+    });
     if (result.canceled || !result.assets?.[0]) return;
     const asset = result.assets[0];
     // The server's message.type enum has no 'video' value yet — video
     // capture sends as a generic 'file' attachment (a link, not inline
     // playback) until that's worth a schema change.
-    const isVideo = mediaTypes === "videos";
-    await sendPicked([
+    stageFiles([
       {
         file: {
           uri: asset.uri,
@@ -119,10 +142,10 @@ export default function Composer({
 
   return (
     <View style={styles.container}>
-      <Pressable onPress={pickDocument} disabled={uploading} style={styles.iconButton}>
+      <Pressable onPress={pickDocument} style={styles.iconButton}>
         <Text style={styles.icon}>📎</Text>
       </Pressable>
-      <Pressable onPress={openCamera} disabled={uploading} style={styles.iconButton}>
+      <Pressable onPress={openCamera} style={styles.iconButton}>
         <Text style={styles.icon}>📷</Text>
       </Pressable>
 
@@ -134,17 +157,23 @@ export default function Composer({
         multiline
       />
 
-      {uploading ? (
-        <ActivityIndicator style={styles.sendButton} color={colors.primary} />
-      ) : (
-        <Pressable
-          onPress={submitText}
-          disabled={!text.trim()}
-          style={[styles.sendButton, !text.trim() && styles.sendButtonDisabled]}
-        >
-          <Text style={styles.sendText}>Send</Text>
-        </Pressable>
-      )}
+      <Pressable
+        onPress={submitText}
+        disabled={!text.trim()}
+        style={[styles.sendButton, !text.trim() && styles.sendButtonDisabled]}
+      >
+        <Text style={styles.sendText}>Send</Text>
+      </Pressable>
+
+      <AttachmentPreviewModal
+        visible={pending.length > 0}
+        attachments={pending}
+        caption={caption}
+        onChangeCaption={setCaption}
+        uploading={uploading}
+        onCancel={cancelPending}
+        onConfirm={confirmPending}
+      />
     </View>
   );
 }
