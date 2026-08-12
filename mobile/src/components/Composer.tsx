@@ -40,11 +40,21 @@ export default function Composer({
     }
   };
 
-  const sendPicked = async (file: PickedFile, type: string) => {
+  // Sends one or more picked files. Any text currently typed becomes the
+  // caption on the first attachment only — one message can carry one
+  // attachment (the schema's Message.attachments is populated as a single
+  // entry per row), so a caption on every file in a multi-select would read
+  // as the same caption repeated once per file, which is worse, not better.
+  const sendPicked = async (files: Array<{ file: PickedFile; type: string }>) => {
     setUploading(true);
+    const caption = text.trim();
     try {
-      const { url } = await uploadFile(file);
-      onSend({ body: "", type, mediaUrl: url });
+      for (let i = 0; i < files.length; i++) {
+        const { file, type } = files[i];
+        const { url } = await uploadFile(file);
+        onSend({ body: i === 0 ? caption : "", type, mediaUrl: url });
+      }
+      setText("");
     } catch (e) {
       Alert.alert(
         "Upload failed",
@@ -56,13 +66,20 @@ export default function Composer({
   };
 
   const pickDocument = async () => {
-    const result = await DocumentPicker.getDocumentAsync({ type: "*/*", copyToCacheDirectory: true });
-    if (result.canceled || !result.assets?.[0]) return;
-    const asset = result.assets[0];
-    const isImage = (asset.mimeType || "").startsWith("image/");
+    const result = await DocumentPicker.getDocumentAsync({
+      type: "*/*",
+      copyToCacheDirectory: true,
+      multiple: true,
+    });
+    if (result.canceled || !result.assets?.length) return;
     await sendPicked(
-      { uri: asset.uri, name: asset.name, mimeType: asset.mimeType || "application/octet-stream" },
-      isImage ? "image" : "file"
+      result.assets.map((asset) => {
+        const isImage = (asset.mimeType || "").startsWith("image/");
+        return {
+          file: { uri: asset.uri, name: asset.name, mimeType: asset.mimeType || "application/octet-stream" },
+          type: isImage ? "image" : "file",
+        };
+      })
     );
   };
 
@@ -87,14 +104,16 @@ export default function Composer({
     // capture sends as a generic 'file' attachment (a link, not inline
     // playback) until that's worth a schema change.
     const isVideo = mediaTypes === "videos";
-    await sendPicked(
+    await sendPicked([
       {
-        uri: asset.uri,
-        name: asset.fileName || (isVideo ? "video.mp4" : "photo.jpg"),
-        mimeType: asset.mimeType || (isVideo ? "video/mp4" : "image/jpeg"),
+        file: {
+          uri: asset.uri,
+          name: asset.fileName || (isVideo ? "video.mp4" : "photo.jpg"),
+          mimeType: asset.mimeType || (isVideo ? "video/mp4" : "image/jpeg"),
+        },
+        type: isVideo ? "file" : "image",
       },
-      isVideo ? "file" : "image"
-    );
+    ]);
   };
 
   return (
