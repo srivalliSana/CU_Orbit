@@ -75,7 +75,7 @@ export interface Message {
   text: string;
   sent_at: number;
   type: string;
-  attachments: Array<{ type: string; url: string; name?: string }>;
+  attachments: Array<{ type: string; url: string; name?: string; mimeType?: string }>;
   reactions: Reaction[];
   status: string;
   is_pinned?: boolean;

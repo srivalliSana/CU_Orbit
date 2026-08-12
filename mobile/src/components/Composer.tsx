@@ -12,6 +12,7 @@ export interface SendPayload {
   type?: string;
   mediaUrl?: string;
   mediaName?: string;
+  mediaMimeType?: string;
 }
 
 export default function Composer({
@@ -67,7 +68,13 @@ export default function Composer({
       for (let i = 0; i < pending.length; i++) {
         const { file, type } = pending[i];
         const { url, name } = await uploadFile(file);
-        onSend({ body: i === 0 ? caption : "", type, mediaUrl: url, mediaName: name || file.name });
+        onSend({
+          body: i === 0 ? caption : "",
+          type,
+          mediaUrl: url,
+          mediaName: name || file.name,
+          mediaMimeType: file.mimeType,
+        });
       }
       setText("");
       setPending([]);
@@ -100,31 +107,27 @@ export default function Composer({
     );
   };
 
-  const openCamera = () => {
-    Alert.alert("Camera", "What would you like to capture?", [
-      { text: "Photo", onPress: () => captureFromCamera("images") },
-      { text: "Video", onPress: () => captureFromCamera("videos") },
-      { text: "Cancel", style: "cancel" },
-    ]);
-  };
+  // One camera call, both capture modes allowed — the device's own camera
+  // app supplies its native photo/video toggle (every stock Android camera
+  // has one), so there's no need for an app-level "which one?" prompt in
+  // front of it. allowsEditing is left off here specifically because it's
+  // undefined behavior when a video is captured through a dual-mode
+  // request — see captureFromCamera.
+  const openCamera = () => captureFromCamera();
 
-  const captureFromCamera = async (mediaTypes: "images" | "videos") => {
+  const captureFromCamera = async () => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
       Alert.alert("Camera access needed", "Enable camera access in settings to capture photos or video.");
       return;
     }
-    const isVideo = mediaTypes === "videos";
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes,
+      mediaTypes: ["images", "videos"],
       quality: 0.8,
-      // Native crop/rotate for photos only — Expo's picker has no video
-      // trim capability on either platform, so editing is skipped for video
-      // rather than showing a crop UI that does nothing useful for it.
-      allowsEditing: !isVideo,
     });
     if (result.canceled || !result.assets?.[0]) return;
     const asset = result.assets[0];
+    const isVideo = asset.type === "video";
     // The server's message.type enum has no 'video' value yet — video
     // capture sends as a generic 'file' attachment (a link, not inline
     // playback) until that's worth a schema change.

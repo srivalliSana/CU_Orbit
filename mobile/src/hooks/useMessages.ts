@@ -25,8 +25,13 @@ export function useMessages(containerId: string) {
 
   const queryClient = useQueryClient();
   const send = useMutation({
-    mutationFn: (params: { body: string; type?: string; mediaUrl?: string; mediaName?: string }) =>
-      sendMessage({ containerId, ...params }),
+    mutationFn: (params: {
+      body: string;
+      type?: string;
+      mediaUrl?: string;
+      mediaName?: string;
+      mediaMimeType?: string;
+    }) => sendMessage({ containerId, ...params }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["messages", containerId] });
       queryClient.invalidateQueries({ queryKey: ["home"] });

@@ -1328,7 +1328,7 @@ app.get('/api/search', auth.requireAuth, async (req, res) => {
 
 app.post('/api/messages', auth.requireAuth, async (req, res) => {
     try {
-        const { body, channelId, type, mediaUrl, mediaName, mentions, enrichedMentions } = req.body;
+        const { body, channelId, type, mediaUrl, mediaName, mediaMimeType, mentions, enrichedMentions } = req.body;
 
         // Sender identity comes from the session, never the request body — a
         // client-supplied senderId let anyone post as anyone. Display fields are
@@ -1363,7 +1363,7 @@ app.post('/api/messages', auth.requireAuth, async (req, res) => {
         const msg = await Message.create({
             senderId, senderName, body, channelId, type: type || 'text',
             senderAvatarUrl, dm_id: (channelId && channelId.includes('_')) ? channelId : null,
-            attachments: mediaUrl ? [{ type: type, url: mediaUrl, name: mediaName }] : []
+            attachments: mediaUrl ? [{ type: type, url: mediaUrl, name: mediaName, mimeType: mediaMimeType }] : []
         });
         // Mentions are keyed on User.id. This block previously ran entirely on
         // phone numbers — comparing normalized UUIDs, and looking up members by

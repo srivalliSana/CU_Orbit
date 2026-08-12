@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
-import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { File, Paths } from "expo-file-system";
+import * as FileSystemLegacy from "expo-file-system/legacy";
+import * as IntentLauncher from "expo-intent-launcher";
 import * as Sharing from "expo-sharing";
 
 import ReactionPicker from "./ReactionPicker";
@@ -9,6 +11,8 @@ import { resolveMediaUrl } from "../constants/config";
 import { clockLabel } from "../lib/format";
 import { colors } from "../theme/colors";
 import type { Message } from "../types/api";
+
+const FLAG_GRANT_READ_URI_PERMISSION = 1;
 
 export default function MessageBubble({
   message,
@@ -27,6 +31,7 @@ export default function MessageBubble({
 }) {
   const [pickerVisible, setPickerVisible] = useState(false);
   const [editVisible, setEditVisible] = useState(false);
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
 
   const reactionCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -45,34 +50,52 @@ export default function MessageBubble({
   const attachmentUrl = resolveMediaUrl(message.attachments?.[0]?.url);
   // The server stores files under a timestamp-prefixed name to avoid
   // collisions on disk — attachments[0].name is the sender's original
-  // filename (added specifically so recipients see/save the real name
-  // instead of "1755-report.pdf"), falling back to the URL's last segment
-  // only for messages sent before that field existed.
+  // filename, shown/saved instead of "1755000000000-report.pdf".
   const fileName = message.attachments?.[0]?.name || attachmentUrl?.split("/").pop() || "file";
+  const mimeType = message.attachments?.[0]?.mimeType;
   const canEdit = isOwn && message.type === "text";
 
-  // Downloads the attachment into cache under its real name, then hands it
-  // to the OS share sheet — which lets the user pick an app to open it in,
-  // or (on most Android share sheets) a "Save to device"/"Files" target.
-  // There's no dedicated save-to-storage API in this Expo SDK without a new
-  // native dependency, so "open" and "save" both funnel through this same
-  // native chooser; the two entry points below exist so a person doesn't
-  // have to guess that one gesture does both.
   const downloadToCache = async () => {
     if (!attachmentUrl) throw new Error("No attachment URL");
     const destination = new File(Paths.cache, fileName);
     return File.downloadFileAsync(attachmentUrl, destination, { idempotent: true });
   };
 
+  // Real "open with the app registered for this file type, or ask which
+  // app" behaviour (ACTION_VIEW) — not the share sheet, which is a
+  // different Android intent (ACTION_SEND, for sending content to another
+  // app) that was being used here before and confused the two.
+  // getContentUriAsync wraps the download in the FileProvider content:// URI
+  // ACTION_VIEW requires; Expo's build already registers that provider, no
+  // manual native config needed.
   const handleOpen = async () => {
+    if (Platform.OS !== "android") {
+      // iOS has no equivalent chooser API in Expo; fall back to sharing.
+      try {
+        const file = await downloadToCache();
+        await Sharing.shareAsync(file.uri, { dialogTitle: `Open ${fileName}` });
+      } catch (e) {
+        Alert.alert("Couldn't open file", e instanceof Error ? e.message : "Please try again.");
+      }
+      return;
+    }
     try {
       const file = await downloadToCache();
-      await Sharing.shareAsync(file.uri, { dialogTitle: `Open ${fileName}` });
+      const contentUri = await FileSystemLegacy.getContentUriAsync(file.uri);
+      await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
+        data: contentUri,
+        type: mimeType,
+        flags: FLAG_GRANT_READ_URI_PERMISSION,
+      });
     } catch (e) {
       Alert.alert("Couldn't open file", e instanceof Error ? e.message : "Please try again.");
     }
   };
 
+  // Saving to a user-chosen location has no dedicated API in this Expo SDK
+  // without a new native dependency — the share sheet is the practical
+  // stand-in; most Android share sheets include a "Save to device"/Files
+  // target among the apps offered.
   const handleSave = async () => {
     try {
       const file = await downloadToCache();
@@ -100,7 +123,9 @@ export default function MessageBubble({
         {!isOwn ? <Text style={styles.senderName}>{message.sender_name}</Text> : null}
 
         {message.type === "image" && attachmentUrl ? (
-          <Image source={{ uri: attachmentUrl }} style={styles.image} resizeMode="cover" />
+          <Pressable onPress={() => setImageViewerVisible(true)}>
+            <Image source={{ uri: attachmentUrl }} style={styles.image} resizeMode="cover" />
+          </Pressable>
         ) : message.type === "file" && attachmentUrl ? (
           <Pressable onPress={handleOpen} onLongPress={onFileLongPress} style={styles.fileRow}>
             <Text style={styles.fileIcon}>📎</Text>
@@ -147,6 +172,19 @@ export default function MessageBubble({
         onSave={onEdit}
         onClose={() => setEditVisible(false)}
       />
+
+      {message.type === "image" && attachmentUrl ? (
+        <Modal
+          visible={imageViewerVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setImageViewerVisible(false)}
+        >
+          <Pressable style={styles.viewerBackdrop} onPress={() => setImageViewerVisible(false)}>
+            <Image source={{ uri: attachmentUrl }} style={styles.viewerImage} resizeMode="contain" />
+          </Pressable>
+        </Modal>
+      ) : null}
     </View>
   );
 }
@@ -255,5 +293,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 10,
+  },
+  viewerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.92)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  viewerImage: {
+    width: "100%",
+    height: "100%",
   },
 });
