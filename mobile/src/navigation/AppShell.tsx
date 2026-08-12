@@ -10,6 +10,7 @@ import ChatScreen from "../screens/chat/ChatScreen";
 import ThreadsScreen from "../screens/activity/ThreadsScreen";
 import MentionsScreen from "../screens/activity/MentionsScreen";
 import CreateChannelScreen from "../screens/channels/CreateChannelScreen";
+import ChannelInfoScreen from "../screens/channels/ChannelInfoScreen";
 import NewDirectMessageScreen from "../screens/dms/NewDirectMessageScreen";
 import ProfileScreen from "../screens/profile/ProfileScreen";
 import { useAuthSession } from "../hooks/useAuthSession";
@@ -33,6 +34,11 @@ function HomeStackNavigator() {
         name="NewDirectMessage"
         component={NewDirectMessageScreen}
         options={{ title: "New message" }}
+      />
+      <HomeStack.Screen
+        name="ChannelInfo"
+        component={ChannelInfoScreen}
+        options={{ title: "Channel info" }}
       />
     </HomeStack.Navigator>
   );

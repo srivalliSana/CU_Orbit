@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { ActivityIndicator, Button, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Button, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { useMessages } from "../../hooks/useMessages";
@@ -16,7 +17,7 @@ import type { HomeStackParamList } from "../../navigation/types";
 type Props = NativeStackScreenProps<HomeStackParamList, "Chat">;
 
 export default function ChatScreen({ route, navigation }: Props) {
-  const { containerId, title } = route.params;
+  const { containerId, title, kind } = route.params;
   const { data: messages, isLoading, error, refetch, send, react, remove, edit, pin } = useMessages(containerId);
   const { typingName, notifyTyping } = useTyping(containerId);
   const selfId = useAuthStore((s) => s.user?.id);
@@ -24,8 +25,21 @@ export default function ChatScreen({ route, navigation }: Props) {
   useChannelSocket(containerId);
 
   useEffect(() => {
-    navigation.setOptions({ title });
-  }, [navigation, title]);
+    navigation.setOptions({
+      title,
+      headerRight:
+        kind === "channel"
+          ? () => (
+              <Pressable
+                onPress={() => navigation.navigate("ChannelInfo", { channelId: containerId })}
+                hitSlop={8}
+              >
+                <Ionicons name="information-circle-outline" size={24} color={colors.primary} />
+              </Pressable>
+            )
+          : undefined,
+    });
+  }, [navigation, title, kind, containerId]);
 
   useEffect(() => {
     markConversationRead(containerId);

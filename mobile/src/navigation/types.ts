@@ -7,6 +7,7 @@ export type HomeStackParamList = {
   Mentions: undefined;
   CreateChannel: undefined;
   NewDirectMessage: undefined;
+  ChannelInfo: { channelId: string };
 };
 
 export type ActivityStackParamList = {

@@ -17,3 +17,36 @@ export const createChannel = (params: {
       members: params.members ?? [],
     })
     .then((res) => res.data);
+
+export interface ChannelDetail {
+  id: string;
+  name: string;
+  topic: string;
+  member_count: number;
+  created_by: string | null;
+  restricted_messaging: boolean;
+  info_edit_restricted: boolean;
+  approval_required: boolean;
+}
+
+export interface ChannelMemberRow {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  role: "admin" | "member";
+}
+
+export const getChannel = (id: string) =>
+  client.get<ChannelDetail>(`/channels/${id}`).then((res) => res.data);
+
+export const getChannelMembers = (id: string) =>
+  client.get<ChannelMemberRow[]>(`/channels/${id}/members`).then((res) => res.data);
+
+export const addChannelMember = (id: string, userId: string, role?: "admin" | "member") =>
+  client.post(`/channels/${id}/members`, { userId, role });
+
+export const removeChannelMember = (id: string, userId: string) =>
+  client.delete(`/channels/${id}/members/${userId}`);
+
+export const updateChannel = (id: string, patch: Partial<ChannelDetail>) =>
+  client.put<ChannelDetail>(`/channels/${id}`, patch).then((res) => res.data);
