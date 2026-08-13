@@ -3,9 +3,13 @@ export interface User {
   name: string;
   email?: string;
   campusEmail?: string;
+  campus_email?: string;
   role: string;
   avatarUrl?: string | null;
   handle?: string;
+  bio?: string;
+  status_emoji?: string;
+  status_text?: string;
 }
 
 export interface SsoExchangeResponse {

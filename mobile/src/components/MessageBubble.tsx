@@ -7,9 +7,10 @@ import * as Sharing from "expo-sharing";
 
 import ReactionPicker from "./ReactionPicker";
 import EditMessageModal from "./EditMessageModal";
+import { linkify } from "../lib/linkify";
 import { resolveMediaUrl } from "../constants/config";
 import { clockLabel } from "../lib/format";
-import { colors } from "../theme/colors";
+import { useThemeColors } from "../state/themeStore";
 import type { Message } from "../types/api";
 
 const FLAG_GRANT_READ_URI_PERMISSION = 1;
@@ -29,6 +30,8 @@ export default function MessageBubble({
   onEdit: (text: string) => void;
   onPin: (pinned: boolean) => void;
 }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [editVisible, setEditVisible] = useState(false);
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
@@ -135,7 +138,9 @@ export default function MessageBubble({
           </Pressable>
         ) : null}
 
-        {message.text ? <Text style={styles.text}>{message.text}</Text> : null}
+        {message.text ? (
+          <Text style={styles.text}>{linkify(message.text, styles.link)}</Text>
+        ) : null}
         <View style={styles.metaRow}>
           {message.edited_at ? <Text style={styles.edited}>edited</Text> : null}
           <Text style={styles.time}>{clockLabel(message.sent_at)}</Text>
@@ -189,7 +194,7 @@ export default function MessageBubble({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   row: {
     marginVertical: 4,
     paddingHorizontal: 12,
@@ -227,6 +232,10 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 15,
     color: colors.text,
+  },
+  link: {
+    color: colors.primary,
+    textDecorationLine: "underline",
   },
   image: {
     width: 220,

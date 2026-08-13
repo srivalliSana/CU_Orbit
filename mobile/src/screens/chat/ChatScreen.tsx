@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { ActivityIndicator, Button, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -11,12 +11,14 @@ import { apiErrorMessage } from "../../api/client";
 import { useAuthStore } from "../../state/authStore";
 import MessageBubble from "../../components/MessageBubble";
 import Composer from "../../components/Composer";
-import { colors } from "../../theme/colors";
+import { useThemeColors } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "Chat">;
 
 export default function ChatScreen({ route, navigation }: Props) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { containerId, title, kind } = route.params;
   const { data: messages, isLoading, error, refetch, send, react, remove, edit, pin } = useMessages(containerId);
   const { typingName, notifyTyping } = useTyping(containerId);
@@ -24,22 +26,39 @@ export default function ChatScreen({ route, navigation }: Props) {
 
   useChannelSocket(containerId);
 
+  // DM containers are addressed as "<idA>_<idB>" sorted — the other
+  // participant is whichever half of that isn't the signed-in user, so no
+  // extra lookup is needed to know who this chat is with.
+  const otherUserId = kind === "dm" ? containerId.split("_").find((id) => id !== selfId) : undefined;
+
   useEffect(() => {
     navigation.setOptions({
       title,
-      headerRight:
-        kind === "channel"
-          ? () => (
-              <Pressable
-                onPress={() => navigation.navigate("ChannelInfo", { channelId: containerId })}
-                hitSlop={8}
-              >
-                <Ionicons name="information-circle-outline" size={24} color={colors.primary} />
-              </Pressable>
-            )
-          : undefined,
+      headerRight: () => {
+        if (kind === "channel") {
+          return (
+            <Pressable
+              onPress={() => navigation.navigate("ChannelInfo", { channelId: containerId })}
+              hitSlop={8}
+            >
+              <Ionicons name="information-circle-outline" size={24} color={colors.primary} />
+            </Pressable>
+          );
+        }
+        if (kind === "dm" && otherUserId) {
+          return (
+            <Pressable
+              onPress={() => navigation.navigate("ContactInfo", { userId: otherUserId, name: title, containerId })}
+              hitSlop={8}
+            >
+              <Ionicons name="information-circle-outline" size={24} color={colors.primary} />
+            </Pressable>
+          );
+        }
+        return undefined;
+      },
     });
-  }, [navigation, title, kind, containerId]);
+  }, [navigation, title, kind, containerId, otherUserId]);
 
   useEffect(() => {
     markConversationRead(containerId);
@@ -93,7 +112,7 @@ export default function ChatScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   flex: {
     flex: 1,
     backgroundColor: colors.background,

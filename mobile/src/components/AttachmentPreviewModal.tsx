@@ -1,6 +1,7 @@
+import { useMemo } from "react";
 import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
-import { colors } from "../theme/colors";
+import { useThemeColors } from "../state/themeStore";
 import type { PickedFile } from "../api/upload";
 
 export interface PendingAttachment {
@@ -25,6 +26,8 @@ export default function AttachmentPreviewModal({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   if (!attachments.length) return null;
   const first = attachments[0];
 
@@ -76,7 +79,7 @@ export default function AttachmentPreviewModal({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",

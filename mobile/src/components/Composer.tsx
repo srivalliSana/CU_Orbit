@@ -1,11 +1,11 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 
 import { uploadFile, type PickedFile } from "../api/upload";
 import AttachmentPreviewModal, { type PendingAttachment } from "./AttachmentPreviewModal";
-import { colors } from "../theme/colors";
+import { useThemeColors } from "../state/themeStore";
 
 export interface SendPayload {
   body: string;
@@ -22,6 +22,8 @@ export default function Composer({
   onSend: (payload: SendPayload) => void;
   onTyping?: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [text, setText] = useState("");
   const [pending, setPending] = useState<PendingAttachment[]>([]);
   const [caption, setCaption] = useState("");
@@ -181,7 +183,7 @@ export default function Composer({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "flex-end",

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Avatar from './Avatar';
-import { getPerson, startDm } from '../api/chat';
+import { getMessages, getPerson, startDm } from '../api/chat';
 import { lastSeenLabel } from '../lib/format';
 
 /**
@@ -8,11 +8,16 @@ import { lastSeenLabel } from '../lib/format';
  *
  * Identity fields come from CampusOne, which is authoritative; presence and
  * last seen come from CU Orbit and only exist once someone has used the app.
+ *
+ * target.containerId is only present when opened from an existing DM's
+ * header — that's what backs the shared-media grid, and also means "Send
+ * message" is redundant (you're already looking at that conversation).
  */
 export default function ContactPanel({ target, onClose, onOpenChat }) {
   const [person, setPerson] = useState(null);
   const [error, setError] = useState(null);
   const [opening, setOpening] = useState(false);
+  const [media, setMedia] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -23,6 +28,20 @@ export default function ContactPanel({ target, onClose, onOpenChat }) {
       .catch((e) => { if (!cancelled) setError(e.message || 'Could not load this contact.'); });
     return () => { cancelled = true; };
   }, [target?.id, target?.email]);
+
+  useEffect(() => {
+    setMedia([]);
+    if (!target?.containerId) return;
+    let cancelled = false;
+    getMessages(target.containerId)
+      .then((messages) => {
+        if (cancelled) return;
+        const images = messages.filter((m) => m.type === 'image' && m.attachments?.[0]?.url);
+        setMedia(images.reverse());
+      })
+      .catch(() => { if (!cancelled) setMedia([]); });
+    return () => { cancelled = true; };
+  }, [target?.containerId]);
 
   const openChat = async () => {
     if (!person?.email || opening) return;
@@ -74,13 +93,40 @@ export default function ContactPanel({ target, onClose, onOpenChat }) {
               <Field label="About" value={person.bio} />
             </dl>
 
-            <button
-              onClick={openChat}
-              disabled={opening}
-              className="mt-6 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {opening ? 'Opening…' : 'Send message'}
-            </button>
+            {target?.containerId && (
+              <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Shared media {media.length > 0 ? `(${media.length})` : ''}
+                </h4>
+                {media.length === 0 ? (
+                  <p className="mt-2 text-xs text-slate-400">No photos shared yet.</p>
+                ) : (
+                  <div className="mt-2 grid grid-cols-3 gap-1.5">
+                    {media.map((m) => (
+                      <a
+                        key={m.id}
+                        href={m.attachments[0].url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="aspect-square overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800"
+                      >
+                        <img src={m.attachments[0].url} alt="" className="h-full w-full object-cover" loading="lazy" />
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!target?.containerId && (
+              <button
+                onClick={openChat}
+                disabled={opening}
+                className="mt-6 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {opening ? 'Opening…' : 'Send message'}
+              </button>
+            )}
           </>
         )}
       </div>

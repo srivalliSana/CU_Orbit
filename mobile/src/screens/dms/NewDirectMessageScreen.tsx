@@ -6,12 +6,14 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { listUsers } from "../../api/users";
 import { useAuthStore } from "../../state/authStore";
 import Avatar from "../../components/Avatar";
-import { colors } from "../../theme/colors";
+import { useThemeColors } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "NewDirectMessage">;
 
 export default function NewDirectMessageScreen({ navigation }: Props) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [q, setQ] = useState("");
   const selfId = useAuthStore((s) => s.user?.id);
   const { data, isLoading } = useQuery({ queryKey: ["users"], queryFn: listUsers });
@@ -65,7 +67,7 @@ export default function NewDirectMessageScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

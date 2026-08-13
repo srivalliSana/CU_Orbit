@@ -1,13 +1,13 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
+  Share,
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -19,13 +19,12 @@ import {
   getChannelMembers,
   removeChannelMember,
   updateChannel,
-  type ChannelMemberRow,
 } from "../../api/channels";
 import { listUsers } from "../../api/users";
 import { apiErrorMessage } from "../../api/client";
 import { useAuthStore } from "../../state/authStore";
 import Avatar from "../../components/Avatar";
-import { colors } from "../../theme/colors";
+import { useThemeColors } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "ChannelInfo">;
@@ -37,6 +36,8 @@ type Props = NativeStackScreenProps<HomeStackParamList, "ChannelInfo">;
  * actually allow, surfacing its rejection reason rather than guessing.
  */
 export default function ChannelInfoScreen({ route }: Props) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { channelId } = route.params;
   const selfId = useAuthStore((s) => s.user?.id);
   const queryClient = useQueryClient();
@@ -132,6 +133,16 @@ export default function ChannelInfoScreen({ route }: Props) {
     );
   }
 
+  if (channelQuery.error) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>
+          {apiErrorMessage(channelQuery.error, "Couldn't load this channel.")}
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <FlatList
       style={styles.container}
@@ -147,6 +158,25 @@ export default function ChannelInfoScreen({ route }: Props) {
               {channel?.member_count} member{channel?.member_count === 1 ? "" : "s"}
             </Text>
           </View>
+
+          {channel ? (
+            <View style={styles.inviteBlock}>
+              <Text style={styles.sectionLabel}>INVITE LINK</Text>
+              <Text style={styles.inviteHint}>
+                Anyone with a cutm.ac.in or cutmap.ac.in account can join with this link, shared anywhere.
+              </Text>
+              <Pressable
+                style={styles.shareButton}
+                onPress={() =>
+                  Share.share({
+                    message: `Join #${channel.name} on CU Orbit: https://cuorbit.app/join/${channel.invite_code}`,
+                  })
+                }
+              >
+                <Text style={styles.shareButtonText}>Share invite link</Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -239,6 +269,8 @@ function ToggleRow({
   value: boolean;
   onChange: (v: boolean) => void;
 }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.toggleRow}>
       <Text style={styles.toggleLabel}>{label}</Text>
@@ -247,7 +279,7 @@ function ToggleRow({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -284,6 +316,35 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 12,
     paddingHorizontal: 16,
+  },
+  errorText: {
+    color: colors.danger,
+    fontSize: 14,
+    textAlign: "center",
+  },
+  inviteBlock: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    gap: 8,
+  },
+  inviteHint: {
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+  shareButton: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginTop: 2,
+  },
+  shareButtonText: {
+    color: colors.primaryText,
+    fontWeight: "600",
+    fontSize: 13,
   },
   settingsBlock: {
     borderTopWidth: StyleSheet.hairlineWidth,

@@ -558,6 +558,15 @@ app.get('/portal', (req, res) => {
     res.sendFile(fs.existsSync(APP_INDEX) ? APP_INDEX : LEGACY_INDEX);
 });
 
+// Channel invite links (also the target of the mobile app's cuorbit.app/join/*
+// deep link / app link). A plain browser click lands here and gets bounced
+// into the portal with the code preserved as a query param — the web app
+// picks it up from there and calls POST /api/channels/join-by-link itself,
+// since joining requires an authenticated session this route doesn't have.
+app.get('/join/:code', (req, res) => {
+    res.redirect(`/portal?join=${encodeURIComponent(req.params.code)}`);
+});
+
 // --- ROUTES ---
 
 // AUTH
@@ -965,6 +974,22 @@ function isFacultyEmail(email) {
     if (!local || !domain) return false;
     if (!FACULTY_EMAIL_DOMAINS.includes(domain)) return false;
     return /^[a-z]/.test(local);
+}
+
+/** Anyone on either campus domain, student or faculty — the bar for joining
+ * a channel via invite link, as opposed to isFacultyEmail's bar for
+ * creating/managing one. */
+function isCampusEmail(email) {
+    if (!email) return false;
+    const domain = String(email).toLowerCase().split('@')[1];
+    return FACULTY_EMAIL_DOMAINS.includes(domain);
+}
+
+/** A channel is visible to its members, or to a global CampusOne admin
+ * overseeing the workspace — no one else, even with the exact id. */
+async function canViewChannel(userId, channelId, user) {
+    if (isGroupAdmin(user)) return true;
+    return !!(await ChannelMember.findOne({ where: { channelId, userId } }));
 }
 
 /**
@@ -1720,11 +1745,21 @@ app.post('/api/workspaces/:workspaceId/channels', auth.requireAuth, async (req, 
 
 // CHANNELS
 app.get('/api/channels/:id', auth.requireAuth, async (req, res) => {
-    try { const ch = await Channel.findByPk(req.params.id); res.json(ch); } catch (e) { res.status(500).json(e); }
+    try {
+        if (!(await canViewChannel(req.user.id, req.params.id, req.user))) {
+            return res.status(403).json({ error: 'forbidden', message: 'Not a member of this channel' });
+        }
+        const ch = await Channel.findByPk(req.params.id);
+        res.json(ch);
+    } catch (e) { res.status(500).json(e); }
 });
 
 app.put('/api/channels/:id', auth.requireAuth, async (req, res) => {
     try {
+        const me = await ChannelMember.findOne({ where: { channelId: req.params.id, userId: req.user.id } });
+        if ((!me || me.role !== 'admin') && !isGroupAdmin(req.user)) {
+            return res.status(403).json({ error: 'forbidden', message: 'Only channel admins can edit channel info' });
+        }
         const { restricted_messaging, info_edit_restricted, approval_required, topic, name } = req.body;
         const channel = await Channel.findByPk(req.params.id);
         if (channel) {
@@ -1741,6 +1776,9 @@ app.put('/api/channels/:id', auth.requireAuth, async (req, res) => {
 
 app.get('/api/channels/:id/members', auth.requireAuth, async (req, res) => {
     try {
+        if (!(await canViewChannel(req.user.id, req.params.id, req.user))) {
+            return res.json([]);
+        }
         const members = await ChannelMember.findAll({ where: { channelId: req.params.id } });
         const memberIds = members.map(m => m.userId);
         const users = memberIds.length ? await User.findAll({ where: { id: { [Op.in]: memberIds } } }) : [];
@@ -1825,14 +1863,22 @@ app.delete('/api/channels/:id/members/:userId', auth.requireAuth, async (req, re
 
 app.post('/api/channels/join-by-link', auth.requireAuth, async (req, res) => {
     try {
-        const { inviteCode, userId } = req.body;
+        // Who's joining comes from the session, not the body — the previous
+        // body-supplied userId meant anyone could add anyone to any channel
+        // just by knowing their id.
+        const userId = req.user.id;
+        if (!isCampusEmail(req.user.email)) {
+            return res.status(403).json({ error: 'forbidden', message: 'Only cutm.ac.in / cutmap.ac.in accounts can join channels' });
+        }
+        const { inviteCode } = req.body;
         const channel = await Channel.findOne({ where: { invite_code: inviteCode } });
-        if (!channel) return res.status(404).json({ error: 'Invalid link' });
-        if (channel.approval_required) { return res.json({ success: true, pendingApproval: true }); }
+        if (!channel) return res.status(404).json({ error: 'not_found', message: 'Invalid or expired invite link' });
+        if (channel.approval_required) { return res.json({ success: true, pendingApproval: true, channel }); }
         const [member, created] = await ChannelMember.findOrCreate({ where: { channelId: channel.id, userId: userId }, defaults: { channelId: channel.id, userId: userId, role: 'member' } });
         if (created) {
             await channel.increment('member_count');
-            await Message.create({ channelId: channel.id, senderId: userId, senderName: 'System', body: `JOIN_LINK:${userId}`, type: 'system', timestamp: Date.now() });
+            const user = await User.findByPk(userId);
+            await Message.create({ channelId: channel.id, senderId: userId, senderName: user?.name || 'Someone', body: `JOIN_LINK:${userId}`, type: 'system', timestamp: Date.now() });
         }
         res.json({ success: true, channel });
     } catch (e) { res.status(500).json(e); }

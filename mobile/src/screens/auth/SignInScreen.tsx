@@ -1,9 +1,12 @@
+import { useMemo } from "react";
 import { ActivityIndicator, Button, StyleSheet, Text, View } from "react-native";
 
 import { useAuthSession } from "../../hooks/useAuthSession";
-import { colors } from "../../theme/colors";
+import { useThemeColors } from "../../state/themeStore";
 
 export default function SignInScreen() {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { signingIn, error, signIn } = useAuthSession();
 
   return (
@@ -22,7 +25,7 @@ export default function SignInScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: "center",

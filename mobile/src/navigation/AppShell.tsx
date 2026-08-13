@@ -11,11 +11,14 @@ import ThreadsScreen from "../screens/activity/ThreadsScreen";
 import MentionsScreen from "../screens/activity/MentionsScreen";
 import CreateChannelScreen from "../screens/channels/CreateChannelScreen";
 import ChannelInfoScreen from "../screens/channels/ChannelInfoScreen";
+import JoinChannelScreen from "../screens/channels/JoinChannelScreen";
+import ContactInfoScreen from "../screens/dms/ContactInfoScreen";
 import NewDirectMessageScreen from "../screens/dms/NewDirectMessageScreen";
 import ProfileScreen from "../screens/profile/ProfileScreen";
+import SettingsScreen from "../screens/profile/SettingsScreen";
 import { useAuthSession } from "../hooks/useAuthSession";
-import { colors } from "../theme/colors";
-import type { ActivityStackParamList, DrawerParamList, HomeStackParamList, TabParamList } from "./types";
+import { useThemeColors } from "../state/themeStore";
+import type { ActivityStackParamList, DrawerParamList, HomeStackParamList, ProfileStackParamList, TabParamList } from "./types";
 
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
 function HomeStackNavigator() {
@@ -40,6 +43,16 @@ function HomeStackNavigator() {
         component={ChannelInfoScreen}
         options={{ title: "Channel info" }}
       />
+      <HomeStack.Screen
+        name="JoinChannel"
+        component={JoinChannelScreen}
+        options={{ title: "Join channel" }}
+      />
+      <HomeStack.Screen
+        name="ContactInfo"
+        component={ContactInfoScreen}
+        options={{ title: "Contact info" }}
+      />
     </HomeStack.Navigator>
   );
 }
@@ -57,6 +70,16 @@ function ActivityStackNavigator() {
   );
 }
 
+const ProfileStack = createNativeStackNavigator<ProfileStackParamList>();
+function ProfileStackNavigator() {
+  return (
+    <ProfileStack.Navigator>
+      <ProfileStack.Screen name="Profile" component={ProfileScreen} options={{ title: "You" }} />
+      <ProfileStack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
+    </ProfileStack.Navigator>
+  );
+}
+
 const TAB_ICONS: Record<keyof TabParamList, keyof typeof Ionicons.glyphMap> = {
   HomeTab: "home",
   ActivityTab: "notifications",
@@ -65,12 +88,14 @@ const TAB_ICONS: Record<keyof TabParamList, keyof typeof Ionicons.glyphMap> = {
 
 const Tab = createBottomTabNavigator<TabParamList>();
 function Tabs() {
+  const colors = useThemeColors();
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
+        tabBarStyle: { backgroundColor: colors.background, borderTopColor: colors.border },
         tabBarIcon: ({ color, size, focused }) => (
           <Ionicons
             name={focused ? TAB_ICONS[route.name] : (`${TAB_ICONS[route.name]}-outline` as keyof typeof Ionicons.glyphMap)}
@@ -82,7 +107,7 @@ function Tabs() {
     >
       <Tab.Screen name="HomeTab" component={HomeStackNavigator} options={{ title: "Home" }} />
       <Tab.Screen name="ActivityTab" component={ActivityStackNavigator} options={{ title: "Activity" }} />
-      <Tab.Screen name="ProfileTab" component={ProfileScreen} options={{ title: "You" }} />
+      <Tab.Screen name="ProfileTab" component={ProfileStackNavigator} options={{ title: "You" }} />
     </Tab.Navigator>
   );
 }
@@ -92,6 +117,7 @@ function Tabs() {
 // it's the sign-out affordance the plan calls for as an app-shell element.
 function DrawerContent({ navigation }: DrawerContentComponentProps) {
   const { user, signOut } = useAuthSession();
+  const colors = useThemeColors();
   return (
     <View style={{ flex: 1, padding: 24, paddingTop: 56, backgroundColor: colors.background }}>
       <View style={{ marginBottom: 24 }}>

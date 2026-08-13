@@ -145,7 +145,7 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
       <header className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900">
         <button
           onClick={() => {
-            if (chat.kind === 'dm' && chat.email) onOpenContact?.({ email: chat.email });
+            if (chat.kind === 'dm' && chat.email) onOpenContact?.({ email: chat.email, containerId: chat.id });
             else if (chat.kind === 'channel') onOpenChannelInfo?.(chat.id);
           }}
           disabled={chat.kind === 'dm' && !chat.email}

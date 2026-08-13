@@ -18,3 +18,9 @@ export const updateChannel = (id, patch) =>
     method: 'PUT',
     body: JSON.stringify(patch),
   });
+
+export const joinChannelByLink = (inviteCode) =>
+  api('/api/channels/join-by-link', {
+    method: 'POST',
+    body: JSON.stringify({ inviteCode }),
+  });

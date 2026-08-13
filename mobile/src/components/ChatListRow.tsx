@@ -1,8 +1,9 @@
+import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import Avatar from "./Avatar";
 import { timeLabel } from "../lib/format";
-import { colors } from "../theme/colors";
+import { useThemeColors } from "../state/themeStore";
 
 export interface ChatRowItem {
   id: string;
@@ -27,6 +28,8 @@ export default function ChatListRow({
   onPress: () => void;
   onLongPress?: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Pressable style={styles.row} onPress={onPress} onLongPress={onLongPress}>
       <Avatar name={item.title} url={item.avatarUrl} presence={item.presence} />
@@ -54,7 +57,7 @@ export default function ChatListRow({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",

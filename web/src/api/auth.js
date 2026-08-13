@@ -18,6 +18,9 @@ const setToken = (t) => {
   try { t ? localStorage.setItem(KEY, t) : localStorage.removeItem(KEY); } catch { /* private mode */ }
 };
 
+/** Clears the local session; the app should redirect to sign-in afterward. */
+export const signOut = () => setToken(null);
+
 export const inIframe = () => {
   try { return window.self !== window.top; } catch { return true; }
 };

@@ -1,21 +1,27 @@
 import { Component, type ReactNode } from "react";
 import { Button, StyleSheet, Text, View } from "react-native";
 
-import { colors } from "../theme/colors";
+import { useThemeColors } from "../state/themeStore";
+import type { ThemeColors } from "../theme/colors";
 
 // Mirrors web/src/components/ErrorBoundary.jsx — nothing caught a render
 // error before this, so a bug anywhere in the tree looked identical to
 // the screen just "not opening": blank, no feedback, no way to recover
 // short of force-closing the app.
+//
+// Class components can't call hooks, so useThemeColors() can't be read
+// directly inside ErrorBoundaryImpl. Instead a thin function component
+// wrapper resolves the live palette and passes it down as a prop.
 interface Props {
   children: ReactNode;
+  colors: ThemeColors;
 }
 
 interface State {
   error: Error | null;
 }
 
-export default class ErrorBoundary extends Component<Props, State> {
+class ErrorBoundaryImpl extends Component<Props, State> {
   state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
@@ -27,7 +33,9 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   render() {
+    const { colors } = this.props;
     if (this.state.error) {
+      const styles = makeStyles(colors);
       return (
         <View style={styles.container}>
           <Text style={styles.title}>Something went wrong</Text>
@@ -40,7 +48,12 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-const styles = StyleSheet.create({
+export default function ErrorBoundary({ children }: { children: ReactNode }) {
+  const colors = useThemeColors();
+  return <ErrorBoundaryImpl colors={colors}>{children}</ErrorBoundaryImpl>;
+}
+
+const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: "center",

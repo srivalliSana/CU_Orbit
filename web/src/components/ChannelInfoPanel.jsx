@@ -25,6 +25,7 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
   const [adding, setAdding] = useState(false);
   const [candidates, setCandidates] = useState([]);
   const [busyUserId, setBusyUserId] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   const load = () => {
     setError(null);
@@ -124,6 +125,31 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
               <h3 className="mt-3 text-lg font-semibold text-slate-800 dark:text-slate-100"># {channel.name}</h3>
               {channel.topic && <p className="mt-1 text-sm text-slate-500">{channel.topic}</p>}
               <p className="mt-1 text-xs text-slate-400">{channel.member_count} member{channel.member_count === 1 ? '' : 's'}</p>
+            </div>
+
+            <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Invite link</h4>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Anyone with a cutm.ac.in or cutmap.ac.in account can join with this link, shared anywhere.
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  readOnly
+                  value={`${window.location.origin}/join/${channel.invite_code}`}
+                  onFocus={(e) => e.target.select()}
+                  className="min-w-0 flex-1 truncate rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard?.writeText(`${window.location.origin}/join/${channel.invite_code}`);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1500);
+                  }}
+                  className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                >
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+              </div>
             </div>
 
             {isChannelAdmin && (

@@ -1,8 +1,9 @@
 import { useNavigation } from "@react-navigation/native";
+import { useMemo } from "react";
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useMentions } from "../../hooks/useMentions";
-import { colors } from "../../theme/colors";
+import { useThemeColors } from "../../state/themeStore";
 import { timeLabel } from "../../lib/format";
 
 // Reused from both the Home stack's "Mentions" shortcut row and the bottom
@@ -17,6 +18,8 @@ interface MentionsNavigation {
 
 export default function MentionsScreen() {
   const navigation = useNavigation<MentionsNavigation & ReturnType<typeof useNavigation>>();
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { data, isLoading, markRead } = useMentions();
 
   if (isLoading) {
@@ -60,7 +63,7 @@ export default function MentionsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   center: {
     flex: 1,
     justifyContent: "center",

@@ -20,7 +20,7 @@ import { searchMessages, type SearchResult } from "../../api/search";
 import ChatListRow, { type ChatRowItem } from "../../components/ChatListRow";
 import { channelToRow, dmToRow } from "../../lib/chatRows";
 import { timeLabel } from "../../lib/format";
-import { colors } from "../../theme/colors";
+import { useThemeColors } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "List">;
@@ -42,6 +42,8 @@ function useDebounced<T>(value: T, delayMs: number): T {
 }
 
 export default function HomeScreen({ navigation }: Props) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { data, isLoading, isRefetching, refetch, error } = useHome();
   const { data: mentions } = useMentions();
   const { onLongPress } = useChatActions();
@@ -231,7 +233,7 @@ export default function HomeScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { signIn } from './api/auth';
+import { signIn, signOut } from './api/auth';
 import { getHome } from './api/chat';
 import { getWorkspaces } from './api/workspaces';
 import ChatList from './components/ChatList';
@@ -9,6 +9,10 @@ import EmptyState from './components/EmptyState';
 import NewGroupModal from './components/NewGroupModal';
 import ContactPanel from './components/ContactPanel';
 import ChannelInfoPanel from './components/ChannelInfoPanel';
+import MentionsPanel from './components/MentionsPanel';
+import ProfilePanel from './components/ProfilePanel';
+import SettingsPanel from './components/SettingsPanel';
+import { joinChannelByLink } from './api/channels';
 import { notifyMessage, permission, requestPermission, setBadge } from './lib/notify';
 import { connect, disconnect, on } from './api/socket';
 
@@ -24,6 +28,10 @@ export default function App() {
   const [askNotify, setAskNotify] = useState(false);
   const [contact, setContact] = useState(null);   // { id?, email } shown in the side panel
   const [channelInfoId, setChannelInfoId] = useState(null);   // channel id shown in the side panel
+  const [mentionsOpen, setMentionsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [joinBanner, setJoinBanner] = useState(null);   // result of an invite-link join attempt
   const seen = useRef(null);   // last-seen unread snapshot, for notifications
   const queryClient = useQueryClient();
 
@@ -64,6 +72,28 @@ export default function App() {
   const refreshChats = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['home'] });
   }, [queryClient]);
+
+  // A channel invite link (server.js's GET /join/:code) redirects here with
+  // ?join=<code> — join once signed in, then strip the param so a refresh
+  // doesn't attempt it again.
+  useEffect(() => {
+    if (status !== 'ready') return;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('join');
+    if (!code) return;
+    window.history.replaceState({}, '', window.location.pathname);
+    joinChannelByLink(code)
+      .then((d) => {
+        refreshChats();
+        if (d.pendingApproval) {
+          setJoinBanner({ type: 'info', text: `Your request to join #${d.channel?.name || 'the channel'} needs admin approval.` });
+        } else {
+          setJoinBanner({ type: 'success', text: `Joined #${d.channel?.name || 'the channel'}.` });
+          if (d.channel) setActive({ id: d.channel.id, kind: 'channel', title: `# ${d.channel.name}`, topic: d.channel.topic });
+        }
+      })
+      .catch((e) => setJoinBanner({ type: 'error', text: e.message || 'Could not join that channel.' }));
+  }, [status, refreshChats]);
 
   useEffect(() => {
     if (status !== 'ready' || !chats) return;
@@ -161,6 +191,8 @@ export default function App() {
         onSelect={setActive}
         onNewGroup={() => setNewGroup(true)}
         onOpenContact={(c) => { setChannelInfoId(null); setContact(c); }}
+        onOpenMentions={() => setMentionsOpen(true)}
+        onOpenProfile={() => setProfileOpen(true)}
       />
       {active
         ? (
@@ -190,6 +222,42 @@ export default function App() {
           onClose={() => setChannelInfoId(null)}
           onChanged={refreshChats}
         />
+      )}
+
+      {mentionsOpen && (
+        <MentionsPanel
+          onClose={() => setMentionsOpen(false)}
+          onOpenChat={(chat) => setActive(chat)}
+        />
+      )}
+
+      {profileOpen && (
+        <ProfilePanel
+          user={user}
+          onClose={() => setProfileOpen(false)}
+          onUpdated={(u) => setUser(u)}
+          onOpenSettings={() => { setProfileOpen(false); setSettingsOpen(true); }}
+        />
+      )}
+
+      {settingsOpen && (
+        <SettingsPanel
+          onClose={() => setSettingsOpen(false)}
+          onSignOut={() => { signOut(); location.reload(); }}
+        />
+      )}
+
+      {joinBanner && (
+        <div
+          className={`absolute right-4 top-4 z-40 max-w-sm rounded-xl px-4 py-3 text-sm shadow-lg ring-1 ${
+            joinBanner.type === 'error'
+              ? 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950 dark:text-red-300 dark:ring-red-900'
+              : 'bg-white text-slate-700 ring-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700'
+          }`}
+        >
+          {joinBanner.text}
+          <button onClick={() => setJoinBanner(null)} className="ml-3 text-xs opacity-60 hover:opacity-100">Dismiss</button>
+        </div>
       )}
 
       {askNotify && (

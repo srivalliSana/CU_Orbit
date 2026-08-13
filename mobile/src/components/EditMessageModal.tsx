@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
-import { colors } from "../theme/colors";
+import { useThemeColors } from "../state/themeStore";
 
 export default function EditMessageModal({
   visible,
@@ -14,6 +14,8 @@ export default function EditMessageModal({
   onSave: (text: string) => void;
   onClose: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [text, setText] = useState(initialText);
 
   useEffect(() => {
@@ -53,7 +55,7 @@ export default function EditMessageModal({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.3)",

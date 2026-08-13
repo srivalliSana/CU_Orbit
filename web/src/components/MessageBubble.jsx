@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { clockLabel } from '../lib/format';
+import { linkify } from '../lib/linkify';
 import { deleteMessage, editMessage, getReads, reactToMessage, setMessagePinned } from '../api/chat';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -199,7 +200,11 @@ export default function MessageBubble({ message, own, showSender, isGroup, onCha
               </div>
             </div>
           ) : (
-            m.text ? <p className="whitespace-pre-wrap break-words text-sm">{m.text}</p> : null
+            m.text ? (
+              <p className="whitespace-pre-wrap break-words text-sm">
+                {linkify(m.text, own ? 'underline underline-offset-2 text-blue-100' : 'underline underline-offset-2 text-blue-600 dark:text-blue-400')}
+              </p>
+            ) : null
           )}
 
           <div className={`mt-0.5 flex items-center justify-end gap-1 text-[10px] ${own ? 'text-blue-100' : 'text-slate-400'}`}>

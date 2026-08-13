@@ -24,6 +24,7 @@ export interface ChannelDetail {
   topic: string;
   member_count: number;
   created_by: string | null;
+  invite_code: string;
   restricted_messaging: boolean;
   info_edit_restricted: boolean;
   approval_required: boolean;
@@ -50,3 +51,12 @@ export const removeChannelMember = (id: string, userId: string) =>
 
 export const updateChannel = (id: string, patch: Partial<ChannelDetail>) =>
   client.put<ChannelDetail>(`/channels/${id}`, patch).then((res) => res.data);
+
+export interface JoinByLinkResult {
+  success: boolean;
+  pendingApproval?: boolean;
+  channel?: { id: string; name: string; topic: string };
+}
+
+export const joinChannelByLink = (inviteCode: string) =>
+  client.post<JoinByLinkResult>("/channels/join-by-link", { inviteCode }).then((res) => res.data);

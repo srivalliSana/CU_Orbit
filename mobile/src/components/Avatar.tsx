@@ -1,7 +1,8 @@
+import { useMemo } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 
 import { colorFor, initials } from "../lib/format";
-import { colors } from "../theme/colors";
+import { useThemeColors } from "../state/themeStore";
 
 interface AvatarProps {
   name: string;
@@ -11,6 +12,8 @@ interface AvatarProps {
 }
 
 export default function Avatar({ name, url, size = 44, presence }: AvatarProps) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const dimensionStyle = { width: size, height: size, borderRadius: size / 2 };
   const dotSize = Math.max(10, size * 0.28);
 
@@ -41,7 +44,7 @@ export default function Avatar({ name, url, size = 44, presence }: AvatarProps) 
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   image: {
     backgroundColor: "#e2e4e8",
   },

@@ -6,7 +6,7 @@ import { isFacultyEmail } from '../lib/permissions';
 
 /** Left pane: search, then channels and direct messages. */
 
-export default function ChatList({ user, chats, workspaces, workspaceId, onSwitchWorkspace, activeId, onSelect, onNewGroup, onOpenContact }) {
+export default function ChatList({ user, chats, workspaces, workspaceId, onSwitchWorkspace, activeId, onSelect, onNewGroup, onOpenContact, onOpenMentions, onOpenProfile }) {
   // Mirrors isFacultyEmail() on the server. The server is the authority for
   // channel creation; this only avoids showing an action that would 403.
   const canCreate = user?.role === 'admin' || isFacultyEmail(user?.campus_email || user?.email);
@@ -57,7 +57,9 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
   return (
     <aside className="flex w-full max-w-sm shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-        <Avatar name={user?.name} url={user?.avatarUrl} size={40} />
+        <button onClick={onOpenProfile} aria-label="Your profile" className="shrink-0 rounded-full">
+          <Avatar name={user?.name} url={user?.avatarUrl} size={40} />
+        </button>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{user?.name || 'You'}</p>
           {workspaces?.length > 1 ? (
@@ -75,6 +77,17 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
             <p className="truncate text-xs text-slate-500">{user?.campus_email || user?.email}</p>
           )}
         </div>
+        <button
+          onClick={onOpenMentions}
+          title="Mentions"
+          aria-label="Mentions"
+          className="shrink-0 rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          </svg>
+        </button>
         {canCreate && <button
           onClick={onNewGroup}
           title="New group"
