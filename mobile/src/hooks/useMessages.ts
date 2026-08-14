@@ -31,6 +31,7 @@ export function useMessages(containerId: string) {
       mediaUrl?: string;
       mediaName?: string;
       mediaMimeType?: string;
+      enrichedMentions?: { user_id: string; display_name: string }[];
     }) => sendMessage({ containerId, ...params }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["messages", containerId] });

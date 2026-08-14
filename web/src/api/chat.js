@@ -8,10 +8,10 @@ export const getHome = (workspaceId = 'default') =>
 export const getMessages = (containerId) =>
   api(`/api/messages/${encodeURIComponent(containerId)}`);
 
-export const sendMessage = ({ containerId, body, type = 'text', mediaUrl, mediaName, mediaMimeType }) =>
+export const sendMessage = ({ containerId, body, type = 'text', mediaUrl, mediaName, mediaMimeType, enrichedMentions }) =>
   api('/api/messages', {
     method: 'POST',
-    body: JSON.stringify({ channelId: containerId, body, type, mediaUrl, mediaName, mediaMimeType }),
+    body: JSON.stringify({ channelId: containerId, body, type, mediaUrl, mediaName, mediaMimeType, enrichedMentions }),
   });
 
 export const reactToMessage = (messageId, emoji) =>

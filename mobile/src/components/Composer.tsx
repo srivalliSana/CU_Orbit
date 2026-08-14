@@ -1,10 +1,12 @@
-import { useMemo, useRef, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 
 import { uploadFile, type PickedFile } from "../api/upload";
+import { getChannelMembers, type ChannelMemberRow } from "../api/channels";
 import AttachmentPreviewModal, { type PendingAttachment } from "./AttachmentPreviewModal";
+import Avatar from "./Avatar";
 import { useThemeColors } from "../state/themeStore";
 
 export interface SendPayload {
@@ -13,14 +15,25 @@ export interface SendPayload {
   mediaUrl?: string;
   mediaName?: string;
   mediaMimeType?: string;
+  enrichedMentions?: { user_id: string; display_name: string }[];
 }
+
+// Matches an in-progress "@word" run at the end of the typed text — the
+// simplification (end-of-string rather than cursor position) holds because
+// RN's TextInput doesn't expose live cursor coordinates without extra
+// plumbing, and composing a mention mid-message is a rare edit pattern.
+const MENTION_TRIGGER = /(?:^|\s)@(\w*)$/;
 
 export default function Composer({
   onSend,
   onTyping,
+  channelId,
+  kind,
 }: {
   onSend: (payload: SendPayload) => void;
   onTyping?: () => void;
+  channelId?: string;
+  kind?: "channel" | "dm";
 }) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -28,23 +41,57 @@ export default function Composer({
   const [pending, setPending] = useState<PendingAttachment[]>([]);
   const [caption, setCaption] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [members, setMembers] = useState<ChannelMemberRow[]>([]);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [taggedUsers, setTaggedUsers] = useState<{ user_id: string; display_name: string }[]>([]);
   const lastTyped = useRef(0);
+
+  // Only channels have a fixed member list worth tagging from — a DM is
+  // already a conversation with exactly one other person.
+  useEffect(() => {
+    if (kind !== "channel" || !channelId) {
+      setMembers([]);
+      return;
+    }
+    getChannelMembers(channelId).then(setMembers).catch(() => setMembers([]));
+  }, [channelId, kind]);
+
+  const suggestions = useMemo(() => {
+    if (mentionQuery === null) return [];
+    const q = mentionQuery.toLowerCase();
+    return members.filter((m) => m.name.toLowerCase().includes(q)).slice(0, 6);
+  }, [members, mentionQuery]);
 
   const submitText = () => {
     const body = text.trim();
     if (!body) return;
-    onSend({ body });
+    // Only keep tags whose "@Name" text is still actually present — guards
+    // against a mention surviving in state after the user deleted it from
+    // the message.
+    const enrichedMentions = taggedUsers.filter((t) => body.includes(`@${t.display_name}`));
+    onSend({ body, enrichedMentions: enrichedMentions.length ? enrichedMentions : undefined });
     setText("");
+    setTaggedUsers([]);
+    setMentionQuery(null);
   };
 
   const onChangeText = (value: string) => {
     setText(value);
+    const match = value.match(MENTION_TRIGGER);
+    setMentionQuery(match ? match[1] : null);
     // Throttle to one ping every 2s rather than one per keystroke — mirrors
     // web/src/components/Composer.jsx.
     if (Date.now() - lastTyped.current > 2000) {
       lastTyped.current = Date.now();
       onTyping?.();
     }
+  };
+
+  const pickMention = (member: ChannelMemberRow) => {
+    const replaced = text.replace(MENTION_TRIGGER, (m) => `${m.startsWith(" ") ? " " : ""}@${member.name} `);
+    setText(replaced);
+    setTaggedUsers((prev) => [...prev, { user_id: member.id, display_name: member.name }]);
+    setMentionQuery(null);
   };
 
   // Picking (camera or document) only stages files for review — nothing
@@ -146,44 +193,78 @@ export default function Composer({
   };
 
   return (
-    <View style={styles.container}>
-      <Pressable onPress={pickDocument} style={styles.iconButton}>
-        <Text style={styles.icon}>📎</Text>
-      </Pressable>
-      <Pressable onPress={openCamera} style={styles.iconButton}>
-        <Text style={styles.icon}>📷</Text>
-      </Pressable>
+    <View>
+      {suggestions.length > 0 && (
+        <View style={styles.suggestions}>
+          <FlatList
+            data={suggestions}
+            keyExtractor={(m) => m.id}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => (
+              <Pressable onPress={() => pickMention(item)} style={styles.suggestionRow}>
+                <Avatar name={item.name} url={item.avatarUrl} size={28} />
+                <Text style={styles.suggestionText}>{item.name}</Text>
+              </Pressable>
+            )}
+          />
+        </View>
+      )}
+      <View style={styles.container}>
+        <Pressable onPress={pickDocument} style={styles.iconButton}>
+          <Text style={styles.icon}>📎</Text>
+        </Pressable>
+        <Pressable onPress={openCamera} style={styles.iconButton}>
+          <Text style={styles.icon}>📷</Text>
+        </Pressable>
 
-      <TextInput
-        value={text}
-        onChangeText={onChangeText}
-        placeholder="Type a message"
-        style={styles.input}
-        multiline
-      />
+        <TextInput
+          value={text}
+          onChangeText={onChangeText}
+          placeholder="Type a message"
+          style={styles.input}
+          multiline
+        />
 
-      <Pressable
-        onPress={submitText}
-        disabled={!text.trim()}
-        style={[styles.sendButton, !text.trim() && styles.sendButtonDisabled]}
-      >
-        <Text style={styles.sendText}>Send</Text>
-      </Pressable>
+        <Pressable
+          onPress={submitText}
+          disabled={!text.trim()}
+          style={[styles.sendButton, !text.trim() && styles.sendButtonDisabled]}
+        >
+          <Text style={styles.sendText}>Send</Text>
+        </Pressable>
 
-      <AttachmentPreviewModal
-        visible={pending.length > 0}
-        attachments={pending}
-        caption={caption}
-        onChangeCaption={setCaption}
-        uploading={uploading}
-        onCancel={cancelPending}
-        onConfirm={confirmPending}
-      />
+        <AttachmentPreviewModal
+          visible={pending.length > 0}
+          attachments={pending}
+          caption={caption}
+          onChangeCaption={setCaption}
+          uploading={uploading}
+          onCancel={cancelPending}
+          onConfirm={confirmPending}
+        />
+      </View>
     </View>
   );
 }
 
 const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
+  suggestions: {
+    maxHeight: 200,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  suggestionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  suggestionText: {
+    fontSize: 14,
+    color: colors.text,
+  },
   container: {
     flexDirection: "row",
     alignItems: "flex-end",

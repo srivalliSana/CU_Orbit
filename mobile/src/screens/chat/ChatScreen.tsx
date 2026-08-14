@@ -107,7 +107,12 @@ export default function ChatScreen({ route, navigation }: Props) {
       {typingName ? (
         <Text style={styles.typing}>{typingName} is typing…</Text>
       ) : null}
-      <Composer onSend={(payload) => send.mutate(payload)} onTyping={notifyTyping} />
+      <Composer
+        onSend={(payload) => send.mutate(payload)}
+        onTyping={notifyTyping}
+        channelId={containerId}
+        kind={kind}
+      />
     </KeyboardAvoidingView>
   );
 }

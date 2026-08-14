@@ -104,7 +104,7 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
     atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
 
-  const handleSend = async ({ text, file }) => {
+  const handleSend = async ({ text, file, enrichedMentions }) => {
     setSendError(null);
     // Optimistic bubble so the UI feels immediate; reconciled by the next poll.
     const temp = {
@@ -128,7 +128,7 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
         mediaName = up.name || file.name;
         type = file.type.startsWith('image/') ? 'image' : 'file';
       }
-      await sendMessage({ containerId: chat.id, body: text, type, mediaUrl, mediaName, mediaMimeType });
+      await sendMessage({ containerId: chat.id, body: text, type, mediaUrl, mediaName, mediaMimeType, enrichedMentions });
       const fresh = await getMessages(chat.id);
       setMessages(fresh);
       onSent?.();

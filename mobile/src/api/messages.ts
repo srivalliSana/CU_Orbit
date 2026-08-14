@@ -13,6 +13,7 @@ export const sendMessage = (params: {
   mediaUrl?: string;
   mediaName?: string;
   mediaMimeType?: string;
+  enrichedMentions?: { user_id: string; display_name: string }[];
 }) =>
   client
     .post<Message>("/messages", {
@@ -22,6 +23,7 @@ export const sendMessage = (params: {
       mediaUrl: params.mediaUrl,
       mediaName: params.mediaName,
       mediaMimeType: params.mediaMimeType,
+      enrichedMentions: params.enrichedMentions,
     })
     .then((res) => res.data);
 
