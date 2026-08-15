@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -17,6 +18,7 @@ import {
   addChannelMember,
   getChannel,
   getChannelMembers,
+  inviteByEmail,
   removeChannelMember,
   updateChannel,
 } from "../../api/channels";
@@ -44,6 +46,8 @@ export default function ChannelInfoScreen({ route }: Props) {
   const [adding, setAdding] = useState(false);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [invitingByEmail, setInvitingByEmail] = useState(false);
 
   const channelQuery = useQuery({ queryKey: ["channel", channelId], queryFn: () => getChannel(channelId) });
   const membersQuery = useQuery({
@@ -113,6 +117,20 @@ export default function ChannelInfoScreen({ route }: Props) {
     }
   };
 
+  const sendInvite = async () => {
+    setInvitingByEmail(true);
+    setError(null);
+    try {
+      await inviteByEmail(channelId, inviteEmail.trim().toLowerCase());
+      setInviteEmail("");
+      Alert.alert("Invite sent", "They'll get an email with the join link.");
+    } catch (e) {
+      setError(apiErrorMessage(e, "Could not send that invite."));
+    } finally {
+      setInvitingByEmail(false);
+    }
+  };
+
   const toggle = async (field: keyof NonNullable<typeof channel>, value: boolean) => {
     setError(null);
     try {
@@ -175,6 +193,31 @@ export default function ChannelInfoScreen({ route }: Props) {
               >
                 <Text style={styles.shareButtonText}>Share invite link</Text>
               </Pressable>
+            </View>
+          ) : null}
+
+          {isChannelAdmin && channel ? (
+            <View style={styles.inviteBlock}>
+              <Text style={styles.sectionLabel}>INVITE BY EMAIL</Text>
+              <Text style={styles.inviteHint}>Sends the join link to their campus email.</Text>
+              <View style={styles.inviteEmailRow}>
+                <TextInput
+                  value={inviteEmail}
+                  onChangeText={setInviteEmail}
+                  placeholder="name@cutm.ac.in"
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  style={styles.inviteEmailInput}
+                />
+                <Pressable
+                  style={styles.shareButton}
+                  onPress={sendInvite}
+                  disabled={invitingByEmail || !inviteEmail.trim()}
+                >
+                  <Text style={styles.shareButtonText}>{invitingByEmail ? "Sending…" : "Send"}</Text>
+                </Pressable>
+              </View>
             </View>
           ) : null}
 
@@ -345,6 +388,20 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     color: colors.primaryText,
     fontWeight: "600",
     fontSize: 13,
+  },
+  inviteEmailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  inviteEmailInput: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: colors.text,
   },
   settingsBlock: {
     borderTopWidth: StyleSheet.hairlineWidth,

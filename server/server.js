@@ -2191,6 +2191,50 @@ app.delete('/api/channels/:id/members/:userId', auth.requireAuth, async (req, re
     } catch (e) { res.status(500).json(e); }
 });
 
+/**
+ * "Add members through email, not just invite link" — sends the same
+ * /join/:code link the share button produces, just via email instead of a
+ * copy-paste. Clicking it lands on the join screen; if they aren't signed
+ * in yet, both clients hold onto the code through sign-in and complete the
+ * join right after (see App.jsx's ?join= effect / mobile's pendingJoinCode).
+ */
+app.post('/api/channels/:id/invite-email', auth.requireAuth, async (req, res) => {
+    try {
+        const email = String(req.body.email || '').toLowerCase().trim();
+        if (!email) return res.status(400).json({ error: 'bad_request', message: 'email required' });
+        if (!isCampusEmail(email)) {
+            return res.status(403).json({ error: 'forbidden', message: 'Only cutm.ac.in / cutmap.ac.in addresses can be invited' });
+        }
+        if (!mailer) {
+            console.error('[invite-email] SMTP is not configured — cannot send invites');
+            return res.status(503).json({ error: 'not_configured' });
+        }
+
+        const channel = await Channel.findByPk(req.params.id);
+        if (!channel) return res.status(404).json({ error: 'not_found' });
+
+        const me = await ChannelMember.findOne({ where: { channelId: req.params.id, userId: req.user.id } });
+        if ((!me || me.role !== 'admin') && !isGroupAdmin(req.user) && !isFacultyEmail(req.user.email)) {
+            return res.status(403).json({ error: 'forbidden', message: 'Only channel admins or faculty can invite people' });
+        }
+
+        const joinUrl = `${process.env.APP_URL || 'https://cumess.cutm.ac.in'}/join/${channel.invite_code}`;
+        const inviter = await User.findByPk(req.user.id);
+        await mailer.sendMail({
+            from: process.env.SMTP_FROM || process.env.SMTP_USER,
+            to: email,
+            subject: `${inviter?.name || 'Someone'} invited you to #${channel.name} on CU Orbit`,
+            text: `${inviter?.name || 'Someone'} invited you to join #${channel.name} on CU Orbit.\n\nJoin here: ${joinUrl}\n\nIf you don't have a CU Orbit account yet, signing in with your campus Google account or email creates one automatically.`,
+        });
+
+        await logAudit(req.user, 'channel.invited_by_email', 'channel', channel.id, email);
+        res.json({ success: true });
+    } catch (e) {
+        console.error('[invite-email] failed:', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
 app.post('/api/channels/join-by-link', auth.requireAuth, async (req, res) => {
     try {
         // Who's joining comes from the session, not the body — the previous

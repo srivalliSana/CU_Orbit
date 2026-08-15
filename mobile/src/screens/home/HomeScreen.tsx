@@ -20,6 +20,7 @@ import { searchMessages, type SearchResult } from "../../api/search";
 import ChatListRow, { type ChatRowItem } from "../../components/ChatListRow";
 import { channelToRow, dmToRow } from "../../lib/chatRows";
 import { timeLabel } from "../../lib/format";
+import { useAuthStore } from "../../state/authStore";
 import { useThemeColors } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
 
@@ -49,6 +50,18 @@ export default function HomeScreen({ navigation }: Props) {
   const { onLongPress } = useChatActions();
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebounced(query.trim(), 300);
+  const pendingJoinCode = useAuthStore((s) => s.pendingJoinCode);
+  const setPendingJoinCode = useAuthStore((s) => s.setPendingJoinCode);
+
+  // A join link opened before signing in is held in authStore (see
+  // RootNavigator) since AuthStack has no route for it — resume it here,
+  // the first screen mounted once signed in.
+  useEffect(() => {
+    if (!pendingJoinCode) return;
+    const code = pendingJoinCode;
+    setPendingJoinCode(null);
+    navigation.navigate("JoinChannel", { code });
+  }, [pendingJoinCode, setPendingJoinCode, navigation]);
 
   const { data: messageResults } = useQuery({
     queryKey: ["search", debouncedQuery],

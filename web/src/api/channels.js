@@ -24,3 +24,9 @@ export const joinChannelByLink = (inviteCode) =>
     method: 'POST',
     body: JSON.stringify({ inviteCode }),
   });
+
+export const inviteByEmail = (id, email) =>
+  api(`/api/channels/${id}/invite-email`, {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });

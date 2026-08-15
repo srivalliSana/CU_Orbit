@@ -60,3 +60,6 @@ export interface JoinByLinkResult {
 
 export const joinChannelByLink = (inviteCode: string) =>
   client.post<JoinByLinkResult>("/channels/join-by-link", { inviteCode }).then((res) => res.data);
+
+export const inviteByEmail = (id: string, email: string) =>
+  client.post<{ success: boolean }>(`/channels/${id}/invite-email`, { email }).then((res) => res.data);

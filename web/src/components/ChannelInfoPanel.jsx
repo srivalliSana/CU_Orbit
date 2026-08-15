@@ -4,6 +4,7 @@ import {
   addChannelMember,
   getChannel,
   getChannelMembers,
+  inviteByEmail,
   removeChannelMember,
   updateChannel,
 } from '../api/channels';
@@ -26,6 +27,9 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
   const [candidates, setCandidates] = useState([]);
   const [busyUserId, setBusyUserId] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [invitingByEmail, setInvitingByEmail] = useState(false);
+  const [inviteSent, setInviteSent] = useState(false);
 
   const load = () => {
     setError(null);
@@ -97,6 +101,22 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
     }
   };
 
+  const sendInvite = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setInvitingByEmail(true);
+    try {
+      await inviteByEmail(channelId, inviteEmail.trim().toLowerCase());
+      setInviteEmail('');
+      setInviteSent(true);
+      setTimeout(() => setInviteSent(false), 2500);
+    } catch (e) {
+      setError(e.message || 'Could not send that invite.');
+    } finally {
+      setInvitingByEmail(false);
+    }
+  };
+
   const toggle = async (field, value) => {
     setError(null);
     try {
@@ -151,6 +171,32 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                 </button>
               </div>
             </div>
+
+            {isChannelAdmin && (
+              <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Invite by email</h4>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Sends the join link to their campus email instead of sharing it yourself.
+                </p>
+                <form onSubmit={sendInvite} className="mt-2 flex items-center gap-2">
+                  <input
+                    type="email"
+                    required
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="name@cutm.ac.in"
+                    className="min-w-0 flex-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+                  />
+                  <button
+                    type="submit"
+                    disabled={invitingByEmail}
+                    className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {invitingByEmail ? 'Sending…' : inviteSent ? 'Sent ✓' : 'Send'}
+                  </button>
+                </form>
+              </div>
+            )}
 
             {isChannelAdmin && (
               <div className="mt-6 space-y-3 border-t border-slate-200 pt-4 dark:border-slate-800">

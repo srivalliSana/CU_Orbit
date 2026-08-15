@@ -11,15 +11,22 @@ interface AuthState {
   status: AuthStatus;
   token: string | null;
   user: User | null;
+  // A join/:code deep link opened while signed out: AuthStack has no
+  // JoinChannel route for React Navigation's own linking config to resolve
+  // against, so the code is held here and consumed once signed in (see
+  // RootNavigator/AppShell) instead of being lost.
+  pendingJoinCode: string | null;
   hydrate: () => Promise<void>;
   setSession: (token: string, user: User) => Promise<void>;
   clear: () => Promise<void>;
+  setPendingJoinCode: (code: string | null) => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   status: "hydrating",
   token: null,
   user: null,
+  pendingJoinCode: null,
 
   hydrate: async () => {
     const token = await SecureStore.getItemAsync(SESSION_KEY);
@@ -39,4 +46,6 @@ export const useAuthStore = create<AuthState>((set) => ({
     await SecureStore.deleteItemAsync(SESSION_KEY);
     set({ token: null, user: null, status: "signedOut" });
   },
+
+  setPendingJoinCode: (code) => set({ pendingJoinCode: code }),
 }));
