@@ -41,7 +41,7 @@ export default function SettingsScreen() {
         </View>
         <Text style={[styles.hint, { color: colors.textMuted }]}>
           Your name, avatar, and status are visible to other CU Orbit users in
-          your channels and DMs. Your CampusOne email is only shown to people
+          your channels and DMs. Your campus email is only shown to people
           you message directly.
         </Text>
       </View>

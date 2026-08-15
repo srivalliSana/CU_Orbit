@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
+import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
-import * as Linking from "expo-linking";
 
-import { me, ssoExchange } from "../api/auth";
+import { me, requestOtp as apiRequestOtp, signInWithGoogle, verifyOtp as apiVerifyOtp } from "../api/auth";
 import { apiErrorMessage } from "../api/client";
-import { APP_SCHEME, CAMPUS_ONE_URL, SSO_CONNECT_PATH } from "../constants/config";
+import { APP_SCHEME, GOOGLE_ANDROID_CLIENT_ID } from "../constants/config";
 import { useAuthStore } from "../state/authStore";
 
 WebBrowser.maybeCompleteAuthSession();
 
-const AUTH_REDIRECT = `${APP_SCHEME}://auth`;
+const GOOGLE_DISCOVERY = {
+  authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
+  tokenEndpoint: "https://oauth2.googleapis.com/token",
+};
+
+const REDIRECT_URI = AuthSession.makeRedirectUri({ scheme: APP_SCHEME });
 
 export function useAuthSession() {
   const { status, user, hydrate, setSession, clear } = useAuthStore();
@@ -32,38 +37,79 @@ export function useAuthSession() {
       });
   }, [status, user, clear]);
 
-  const signIn = useCallback(async () => {
+  const signInWithGoogleAsync = useCallback(async () => {
     setError(null);
     setSigningIn(true);
     try {
-      const authUrl = `${CAMPUS_ONE_URL}${SSO_CONNECT_PATH}?redirect_uri=${encodeURIComponent(
-        AUTH_REDIRECT
-      )}`;
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, AUTH_REDIRECT);
-      if (result.type !== "success" || !result.url) {
+      const request = new AuthSession.AuthRequest({
+        clientId: GOOGLE_ANDROID_CLIENT_ID,
+        scopes: ["openid", "email", "profile"],
+        redirectUri: REDIRECT_URI,
+        responseType: AuthSession.ResponseType.Code,
+        usePKCE: true,
+      });
+      const result = await request.promptAsync(GOOGLE_DISCOVERY);
+      if (result.type !== "success") {
         if (result.type !== "cancel" && result.type !== "dismiss") {
-          setError("Sign-in was interrupted. Please try again.");
+          setError("Google sign-in was interrupted. Please try again.");
         }
         return;
       }
 
-      const { queryParams } = Linking.parse(result.url);
-      const token = queryParams?.token;
-      if (typeof token !== "string" || !token) {
-        setError("CampusOne did not provide a sign-in token.");
+      const tokenResult = await AuthSession.exchangeCodeAsync(
+        {
+          clientId: GOOGLE_ANDROID_CLIENT_ID,
+          code: result.params.code,
+          redirectUri: REDIRECT_URI,
+          extraParams: { code_verifier: request.codeVerifier ?? "" },
+        },
+        GOOGLE_DISCOVERY
+      );
+      const idToken = tokenResult.idToken;
+      if (!idToken) {
+        setError("Google did not return an ID token.");
         return;
       }
 
-      const { session, user: signedInUser } = await ssoExchange(token);
+      const { session, user: signedInUser } = await signInWithGoogle(idToken);
       await setSession(session, signedInUser);
     } catch (e) {
-      setError(apiErrorMessage(e, "Could not sign in."));
+      setError(apiErrorMessage(e, "Could not sign in with Google."));
     } finally {
       setSigningIn(false);
     }
   }, [setSession]);
 
+  const requestOtp = useCallback(async (email: string) => {
+    setError(null);
+    try {
+      await apiRequestOtp(email);
+      return true;
+    } catch (e) {
+      setError(apiErrorMessage(e, "Could not send a code."));
+      return false;
+    }
+  }, []);
+
+  const verifyOtp = useCallback(
+    async (email: string, code: string) => {
+      setError(null);
+      setSigningIn(true);
+      try {
+        const { session, user: signedInUser } = await apiVerifyOtp(email, code);
+        await setSession(session, signedInUser);
+        return true;
+      } catch (e) {
+        setError(apiErrorMessage(e, "Wrong code."));
+        return false;
+      } finally {
+        setSigningIn(false);
+      }
+    },
+    [setSession]
+  );
+
   const signOut = useCallback(() => clear(), [clear]);
 
-  return { status, user, signingIn, error, signIn, signOut };
+  return { status, user, signingIn, error, signInWithGoogleAsync, requestOtp, verifyOtp, signOut };
 }

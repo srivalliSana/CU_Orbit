@@ -1,16 +1,11 @@
-// API host unconfirmed — Android's RetrofitClient.kt hardcodes this same
-// value, separate from the campusone.cutm.ac.in SSO domain. Must be
-// reconfirmed before Phase 1 auth testing (see migration plan, "API host").
 export const API_BASE_URL = "https://cumess.cutm.ac.in/api";
-
-export const CAMPUS_ONE_URL = "https://campusone.cutm.ac.in";
 
 export const APP_SCHEME = "cuorbit";
 
-// Matches LoginActivity.kt's hardcoded path exactly — this is NOT the same
-// as the web client's /api/config-provided connect_path ("/connect"), which
-// is a different, browser-only entry point on CampusOne's side.
-export const SSO_CONNECT_PATH = "/connect/mobile";
+// The "Android" OAuth client from Google Cloud Console — a public client (no
+// secret), tied to this app's package name + signing certificate SHA-1.
+export const GOOGLE_ANDROID_CLIENT_ID =
+  "507457795270-i6l7709j47q1nki3da2epq2r239h1dqj.apps.googleusercontent.com";
 
 export const DEFAULT_WORKSPACE_ID = "default";
 

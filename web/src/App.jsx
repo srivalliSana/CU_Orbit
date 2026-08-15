@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { signIn, signOut } from './api/auth';
+import { checkSession, signOut } from './api/auth';
 import { getHome } from './api/chat';
 import { getWorkspaces } from './api/workspaces';
 import ChatList from './components/ChatList';
@@ -12,6 +12,7 @@ import ChannelInfoPanel from './components/ChannelInfoPanel';
 import MentionsPanel from './components/MentionsPanel';
 import ProfilePanel from './components/ProfilePanel';
 import SettingsPanel from './components/SettingsPanel';
+import SignInScreen from './components/SignInScreen';
 import { joinChannelByLink } from './api/channels';
 import { notifyMessage, permission, requestPermission, setBadge } from './lib/notify';
 import { connect, disconnect, on } from './api/socket';
@@ -20,8 +21,7 @@ const DEFAULT_WORKSPACE_ID = 'default';
 
 export default function App() {
   const [user, setUser] = useState(null);
-  const [status, setStatus] = useState('signing-in');   // signing-in | ready | error
-  const [error, setError] = useState(null);
+  const [status, setStatus] = useState('signing-in');   // signing-in | signed-out | ready | error
   const [workspaceId, setWorkspaceId] = useState(null);   // null until the real list loads
   const [active, setActive] = useState(null);
   const [newGroup, setNewGroup] = useState(false);
@@ -36,14 +36,16 @@ export default function App() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    signIn()
-      .then((u) => {
-        if (!u) return;              // standalone redirect in flight
-        setUser(u);
-        setStatus('ready');
-      })
-      .catch((e) => { setError(e.message); setStatus('error'); });
+    checkSession().then((u) => {
+      if (u) { setUser(u); setStatus('ready'); }
+      else setStatus('signed-out');
+    });
   }, []);
+
+  const handleSignedIn = (u) => {
+    setUser(u);
+    setStatus('ready');
+  };
 
   const { data: workspaces } = useQuery({
     queryKey: ['workspaces'],
@@ -162,21 +164,8 @@ export default function App() {
     );
   }
 
-  if (status === 'error') {
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-50 p-6 dark:bg-slate-950">
-        <div className="max-w-sm text-center">
-          <p className="text-lg font-semibold text-slate-800 dark:text-slate-100">Can’t open messaging</p>
-          <p className="mt-2 text-sm text-slate-500">{error}</p>
-          <button
-            onClick={() => location.reload()}
-            className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            Try again
-          </button>
-        </div>
-      </div>
-    );
+  if (status === 'signed-out') {
+    return <SignInScreen onSignedIn={handleSignedIn} />;
   }
 
   return (

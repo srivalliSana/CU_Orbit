@@ -19,9 +19,6 @@ export default function ProfileScreen({ navigation }: Props) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { user, signOut } = useAuthSession();
-  // Name is locked for CampusOne-linked accounts (server enforces this too —
-  // see the `if (name && !user.campus_email)` guard in PUT /api/users/:phone).
-  const nameEditable = !user?.campusEmail && !user?.campus_email;
 
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(user?.name ?? "");
@@ -44,7 +41,7 @@ export default function ProfileScreen({ navigation }: Props) {
     setError(null);
     try {
       const updated = await updateProfile({
-        name: nameEditable ? name.trim() : undefined,
+        name: name.trim(),
         bio: bio.trim(),
         status_text: statusText.trim(),
       });
@@ -112,12 +109,8 @@ export default function ProfileScreen({ navigation }: Props) {
         </>
       ) : (
         <View style={styles.form}>
-          {nameEditable && (
-            <>
-              <Text style={styles.label}>Name</Text>
-              <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Your name" />
-            </>
-          )}
+          <Text style={styles.label}>Name</Text>
+          <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Your name" />
           <Text style={styles.label}>Status</Text>
           <TextInput style={styles.input} value={statusText} onChangeText={setStatusText} placeholder="What's on your mind?" />
           <Text style={styles.label}>Bio</Text>

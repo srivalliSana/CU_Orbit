@@ -7,6 +7,8 @@ const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
 require('dotenv').config();
+const { OAuth2Client } = require('google-auth-library');
+const nodemailer = require('nodemailer');
 const auth = require('./lib/auth');
 const campus = require('./lib/campus');
 const realtime = require('./lib/realtime');
@@ -47,8 +49,24 @@ app.use((req, res, next) => {
 
 // Where an unauthenticated visitor is sent to sign in. Exposed to the client so
 // the redirect target is configured in one place.
+// Sign-in: Google (ID-token verification, no client secret needed for this
+// flow — a code-exchange flow would need GOOGLE_CLIENT_SECRET, verifying a
+// token Google already signed does not) and passwordless email OTP.
+const GOOGLE_WEB_CLIENT_ID = process.env.GOOGLE_WEB_CLIENT_ID;
+const GOOGLE_ANDROID_CLIENT_ID = process.env.GOOGLE_ANDROID_CLIENT_ID;
+const googleClient = new OAuth2Client();
+
+const mailer = process.env.SMTP_HOST
+    ? nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: Number(process.env.SMTP_PORT || 587),
+        secure: false, // STARTTLS on 587, not implicit TLS
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    })
+    : null;
+
 app.get('/api/config', (req, res) => {
-    res.json({ campus_url: CAMPUS_URL, connect_path: '/connect' });
+    res.json({ google_web_client_id: GOOGLE_WEB_CLIENT_ID || null });
 });
 
 // Serve the Web App assets (css/js). index:false so express.static does not
@@ -226,6 +244,16 @@ const Status = sequelize.define('Status', {
     type: { type: DataTypes.STRING, defaultValue: 'image' },
     mentions: { type: DataTypes.JSON, defaultValue: [] },
     expiresAt: { type: DataTypes.DATE }
+});
+
+// One-time codes for the email sign-in flow. Keyed by email so a fresh
+// request overwrites any still-pending code rather than accumulating rows.
+const EmailOtp = sequelize.define('EmailOtp', {
+    email: { type: DataTypes.STRING, primaryKey: true },
+    code_hash: { type: DataTypes.STRING, allowNull: false },
+    expires_at: { type: DataTypes.DATE, allowNull: false },
+    attempts: { type: DataTypes.INTEGER, defaultValue: 0 },
+    last_sent_at: { type: DataTypes.DATE, allowNull: false },
 });
 
 const TypingStatus = sequelize.define('TypingStatus', {
@@ -682,6 +710,9 @@ app.use('/downloads', express.static(path.join(__dirname, 'downloads')));
  */
 app.get('/api/directory/search', auth.requireAuth, async (req, res) => {
     try {
+        if (!isFacultyEmail(req.user.email)) {
+            return res.status(403).json({ error: 'forbidden', message: 'The campus directory is available to faculty accounts only.', results: [] });
+        }
         const term = String(req.query.q || '').trim().toLowerCase();
         const me = (req.user.email || '').toLowerCase();
 
@@ -732,6 +763,9 @@ app.get('/api/directory/search', auth.requireAuth, async (req, res) => {
 /** Full details for one person, by Orbit id or campus email. */
 app.get('/api/directory/person', auth.requireAuth, async (req, res) => {
     try {
+        if (!isFacultyEmail(req.user.email)) {
+            return res.status(403).json({ error: 'forbidden', message: 'The campus directory is available to faculty accounts only.' });
+        }
         const { id, email } = req.query;
         let user = null;
         if (id) user = await User.findByPk(String(id));
@@ -779,6 +813,9 @@ app.get('/api/directory/person', auth.requireAuth, async (req, res) => {
  */
 app.post('/api/directory/dm', auth.requireAuth, async (req, res) => {
     try {
+        if (!isFacultyEmail(req.user.email)) {
+            return res.status(403).json({ error: 'forbidden', message: 'The campus directory is available to faculty accounts only.' });
+        }
         const email = String(req.body.email || '').toLowerCase().trim();
         if (!email) return res.status(400).json({ error: 'bad_request', message: 'email required' });
         if (email === (req.user.email || '').toLowerCase()) {
@@ -1028,59 +1065,167 @@ async function canAccessContainer(userId, containerId, user = null) {
     return !!(await ChannelMember.findOne({ where: { channelId: containerId, userId } }));
 }
 
-app.post('/api/auth/sso', async (req, res) => {
-    try {
-        const { token } = req.body;
-        if (!token) return res.status(400).json({ error: 'bad_request', message: 'token required' });
+/**
+ * Shared by both sign-in methods: find the Orbit account for a verified
+ * campus email, or provision one. Role is derived from CUTM's own email
+ * convention (see isFacultyEmail) since neither Google nor an OTP proves
+ * anything beyond "this person controls this mailbox" — the institution's
+ * own naming convention is what actually says student vs. staff here.
+ */
+async function findOrCreateOrbitUser(campusEmail, displayName) {
+    const email = String(campusEmail).toLowerCase();
+    let user = await User.findOne({ where: { campus_email: email } });
+    if (!user) user = await User.findOne({ where: { email } });
 
-        let claims;
+    if (user) {
+        user.campus_email = email;
+        if (displayName && !user.name) user.name = displayName;
+        await user.save();
+    } else {
+        const role = isFacultyEmail(email) ? 'faculty' : 'student';
+        const base = (displayName || email.split('@')[0]).toLowerCase().replace(/\s+/g, '_');
+        user = await User.create({
+            campus_email: email,
+            email,
+            name: displayName || email.split('@')[0],
+            role,
+            handle: `${base}_${crypto.randomBytes(2).toString('hex')}`,
+        });
+    }
+
+    // Everyone lands in #general.
+    const gen = await Channel.findOne({ where: { name: 'general' } });
+    if (gen) {
+        await ChannelMember.findOrCreate({
+            where: { channelId: gen.id, userId: user.id },
+            defaults: { channelId: gen.id, userId: user.id, role: 'member' },
+        });
+    }
+    return user;
+}
+
+/**
+ * Sign in with Google. The client (web via Google Identity Services, mobile
+ * via a native/browser OAuth flow) hands us a Google-issued ID token; we
+ * verify its signature against Google's own public keys and check the
+ * audience is one of our two OAuth clients — no server-to-Google network
+ * call needed beyond the (cached) public-key fetch, and no client secret
+ * involved, since we are only checking a token Google already signed rather
+ * than exchanging an authorization code.
+ */
+app.post('/api/auth/google', async (req, res) => {
+    try {
+        const { idToken } = req.body;
+        if (!idToken) return res.status(400).json({ error: 'bad_request', message: 'idToken required' });
+
+        const audience = [GOOGLE_WEB_CLIENT_ID, GOOGLE_ANDROID_CLIENT_ID].filter(Boolean);
+        if (!audience.length) {
+            console.error('[google-signin] GOOGLE_WEB_CLIENT_ID / GOOGLE_ANDROID_CLIENT_ID not set');
+            return res.status(503).json({ error: 'not_configured' });
+        }
+
+        let payload;
         try {
-            claims = auth.verifyHandoff(token);
+            const ticket = await googleClient.verifyIdToken({ idToken, audience });
+            payload = ticket.getPayload();
         } catch (e) {
-            console.warn('[sso] rejected handoff token:', e.message);
             return res.status(401).json({ error: 'invalid_token', message: e.message });
         }
 
-        const campusEmail = String(claims.email).toLowerCase();
-        const role = ROLES.includes(claims.role) ? claims.role : 'student';
-
-        // Find by campus link first; fall back to a legacy row matched on email
-        // so pre-SSO accounts adopt their CampusOne identity instead of forking.
-        let user = await User.findOne({ where: { campus_email: campusEmail } });
-        if (!user) user = await User.findOne({ where: { email: campusEmail } });
-
-        if (user) {
-            user.campus_email = campusEmail;
-            user.name = claims.name || user.name;
-            user.role = role;
-            if (claims.cohort) user.cohort = claims.cohort;
-            if (claims.campus) user.campus = claims.campus;
-            await user.save();
-        } else {
-            const base = (claims.name || campusEmail.split('@')[0]).toLowerCase().replace(/\s+/g, '_');
-            user = await User.create({
-                campus_email: campusEmail,
-                email: campusEmail,
-                name: claims.name || campusEmail.split('@')[0],
-                role,
-                cohort: claims.cohort || null,
-                campus: claims.campus || null,
-                handle: `${base}_${crypto.randomBytes(2).toString('hex')}`,
-            });
+        if (!payload?.email) return res.status(401).json({ error: 'invalid_token', message: 'No email in token' });
+        if (!payload.email_verified) {
+            return res.status(403).json({ error: 'forbidden', message: 'Google email is not verified' });
+        }
+        const email = payload.email.toLowerCase();
+        if (!isCampusEmail(email)) {
+            return res.status(403).json({ error: 'forbidden', message: 'Sign in with your CUTM campus Google account' });
         }
 
-        // Everyone lands in #general.
-        const gen = await Channel.findOne({ where: { name: 'general' } });
-        if (gen) {
-            await ChannelMember.findOrCreate({
-                where: { channelId: gen.id, userId: user.id },
-                defaults: { channelId: gen.id, userId: user.id, role: 'member' },
-            });
-        }
-
+        const user = await findOrCreateOrbitUser(email, payload.name);
         res.json({ success: true, session: auth.issueSession(user), user });
     } catch (e) {
-        console.error('[sso] exchange failed:', e.message);
+        console.error('[google-signin] failed:', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
+const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_RESEND_COOLDOWN_MS = 45 * 1000;
+const OTP_MAX_ATTEMPTS = 5;
+
+/** Request a one-time code by email — the passwordless sign-in path. */
+app.post('/api/auth/otp/request', async (req, res) => {
+    try {
+        const email = String(req.body.email || '').toLowerCase().trim();
+        if (!email) return res.status(400).json({ error: 'bad_request', message: 'email required' });
+        if (!isCampusEmail(email)) {
+            return res.status(403).json({ error: 'forbidden', message: 'Use your CUTM campus email address' });
+        }
+        if (!mailer) {
+            console.error('[otp] SMTP is not configured — cannot send codes');
+            return res.status(503).json({ error: 'not_configured' });
+        }
+
+        const existing = await EmailOtp.findByPk(email);
+        if (existing && Date.now() - new Date(existing.last_sent_at).getTime() < OTP_RESEND_COOLDOWN_MS) {
+            return res.status(429).json({ error: 'rate_limited', message: 'Wait a moment before requesting another code' });
+        }
+
+        const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+        const code_hash = crypto.createHash('sha256').update(code).digest('hex');
+        await EmailOtp.upsert({
+            email, code_hash, attempts: 0,
+            expires_at: new Date(Date.now() + OTP_TTL_MS),
+            last_sent_at: new Date(),
+        });
+
+        await mailer.sendMail({
+            from: process.env.SMTP_FROM || process.env.SMTP_USER,
+            to: email,
+            subject: `${code} is your CU Orbit sign-in code`,
+            text: `Your CU Orbit sign-in code is ${code}. It expires in 10 minutes. If you didn't request this, you can ignore this email.`,
+        });
+
+        res.json({ success: true });
+    } catch (e) {
+        console.error('[otp-request] failed:', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
+/** Verify a one-time code and sign in. */
+app.post('/api/auth/otp/verify', async (req, res) => {
+    try {
+        const email = String(req.body.email || '').toLowerCase().trim();
+        const code = String(req.body.code || '').trim();
+        if (!email || !code) return res.status(400).json({ error: 'bad_request', message: 'email and code required' });
+
+        const record = await EmailOtp.findByPk(email);
+        if (!record) return res.status(401).json({ error: 'invalid_code', message: 'Request a new code' });
+        if (new Date(record.expires_at).getTime() < Date.now()) {
+            await record.destroy();
+            return res.status(401).json({ error: 'expired', message: 'That code expired — request a new one' });
+        }
+        if (record.attempts >= OTP_MAX_ATTEMPTS) {
+            await record.destroy();
+            return res.status(429).json({ error: 'too_many_attempts', message: 'Too many wrong tries — request a new code' });
+        }
+
+        const code_hash = crypto.createHash('sha256').update(code).digest('hex');
+        // Constant-time compare so response timing cannot narrow down the code.
+        const a = Buffer.from(code_hash);
+        const b = Buffer.from(record.code_hash);
+        if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+            record.attempts += 1;
+            await record.save();
+            return res.status(401).json({ error: 'invalid_code', message: 'Wrong code' });
+        }
+
+        await record.destroy();
+        const user = await findOrCreateOrbitUser(email, null);
+        res.json({ success: true, session: auth.issueSession(user), user });
+    } catch (e) {
+        console.error('[otp-verify] failed:', e.message);
         res.status(500).json({ error: 'server_error' });
     }
 });
@@ -1672,8 +1817,7 @@ app.put('/api/users/:phone', auth.requireAuth, async (req, res) => {
         const user = await User.findByPk(req.user.id);
         if (!user) return res.status(404).json({ error: 'User not found' });
         const { name, bio, avatarUrl, status_emoji, status_text } = req.body;
-        // name comes from CampusOne for linked accounts and must not drift.
-        if (name && !user.campus_email) user.name = name;
+        if (name) user.name = name;
         if (bio) user.bio = bio;
         if (avatarUrl) user.avatarUrl = avatarUrl;
         if (status_emoji) user.status_emoji = status_emoji;

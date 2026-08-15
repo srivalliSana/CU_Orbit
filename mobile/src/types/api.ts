@@ -12,12 +12,6 @@ export interface User {
   status_text?: string;
 }
 
-export interface SsoExchangeResponse {
-  success: boolean;
-  session: string;
-  user: User;
-}
-
 export interface MessagePreview {
   sender_id: string;
   sender_name: string;

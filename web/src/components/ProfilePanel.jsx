@@ -5,7 +5,6 @@ import { uploadFile } from '../api/chat';
 
 /** Own-profile view/edit panel, shown from the header avatar. */
 export default function ProfilePanel({ user, onClose, onUpdated, onOpenSettings }) {
-  const nameEditable = !user?.campus_email;
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(user?.name || '');
   const [bio, setBio] = useState(user?.bio || '');
@@ -27,7 +26,7 @@ export default function ProfilePanel({ user, onClose, onUpdated, onOpenSettings 
     setError(null);
     try {
       const updated = await updateProfile({
-        name: nameEditable ? name.trim() : undefined,
+        name: name.trim(),
         bio: bio.trim(),
         status_text: statusText.trim(),
       });
@@ -89,9 +88,7 @@ export default function ProfilePanel({ user, onClose, onUpdated, onOpenSettings 
             </>
           ) : (
             <div className="mt-4 w-full space-y-3 text-left">
-              {nameEditable && (
-                <Field label="Name" value={name} onChange={setName} placeholder="Your name" />
-              )}
+              <Field label="Name" value={name} onChange={setName} placeholder="Your name" />
               <Field label="Status" value={statusText} onChange={setStatusText} placeholder="What's on your mind?" />
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Bio</label>
