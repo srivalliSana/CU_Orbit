@@ -56,6 +56,24 @@ async function main() {
     await addColumn('Messages', 'deleted_at', 'deleted_at DATETIME NULL');
     await addColumn('Messages', 'edit_history', "edit_history JSON NOT NULL DEFAULT (JSON_ARRAY())");
 
+    // 'video' added to Messages.type — ALTER on an ENUM column is a MODIFY,
+    // not an ADD COLUMN, so this can't reuse addColumn() above.
+    const typeColRows = await sequelize.query(
+        `SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = :db AND TABLE_NAME = 'Messages' AND COLUMN_NAME = 'type'`,
+        { replacements: { db: DB }, type: QueryTypes.SELECT }
+    );
+    if (typeColRows[0] && typeColRows[0].COLUMN_TYPE.includes("'video'")) {
+        console.log("  skip  Messages.type already includes 'video'");
+    } else {
+        console.log("  alter Messages.type to add 'video'");
+        if (!DRY_RUN) {
+            await sequelize.query(
+                "ALTER TABLE Messages MODIFY COLUMN type ENUM('text','image','video','voice','file','system') NOT NULL DEFAULT 'text'"
+            );
+        }
+    }
+
     if (await tableExists('AuditLogs')) {
         console.log('  skip  AuditLogs (already present)');
     } else {

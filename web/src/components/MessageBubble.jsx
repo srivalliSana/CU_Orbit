@@ -19,6 +19,7 @@ export default function MessageBubble({ message, own, showSender, isGroup, canMo
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(m.text || '');
   const [busy, setBusy] = useState(false);
+  const [lightbox, setLightbox] = useState(false);
 
   const reactionCounts = useMemo(() => {
     const counts = new Map();
@@ -168,7 +169,19 @@ export default function MessageBubble({ message, own, showSender, isGroup, canMo
               src={media.url}
               alt={m.text || 'Shared image'}
               loading="lazy"
-              className="mb-1 max-h-80 w-full rounded-lg object-cover"
+              onClick={(e) => { e.stopPropagation(); setLightbox(true); }}
+              className="mb-1 max-h-80 w-full cursor-zoom-in rounded-lg object-cover"
+            />
+          )}
+
+          {media && m.type === 'video' && (
+            // controls includes the browser's own fullscreen button — no
+            // extra lightbox needed, unlike images which have no native one.
+            <video
+              controls
+              src={media.url}
+              onClick={(e) => e.stopPropagation()}
+              className="mb-1 max-h-80 w-full rounded-lg bg-black"
             />
           )}
 
@@ -177,15 +190,22 @@ export default function MessageBubble({ message, own, showSender, isGroup, canMo
           )}
 
           {media && m.type === 'file' && (
-            <a
-              href={media.url}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="mb-1 flex items-center gap-2 underline underline-offset-2"
-            >
-              📎 <span className="truncate">{fileName}</span>
-            </a>
+            <div className="mb-1" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-2">
+                📎 <span className="truncate">{fileName}</span>
+              </div>
+              <div className="mt-1 flex gap-3 text-xs">
+                <a href={media.url} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                  Open
+                </a>
+                {/* The file is stored on disk under a timestamp-prefixed name to
+                    avoid collisions — the download attribute is what makes the
+                    saved copy use the sender's real filename instead of that. */}
+                <a href={media.url} download={fileName} className="underline underline-offset-2">
+                  Save as
+                </a>
+              </div>
+            </div>
           )}
 
           {editing ? (
@@ -250,6 +270,22 @@ export default function MessageBubble({ message, own, showSender, isGroup, canMo
           )}
         </div>
       </div>
+
+      {lightbox && media && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+          onClick={() => setLightbox(false)}
+        >
+          <img src={media.url} alt={m.text || 'Shared image'} className="max-h-full max-w-full object-contain" />
+          <button
+            onClick={() => setLightbox(false)}
+            aria-label="Close"
+            className="absolute right-4 top-4 text-2xl text-white/80 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }

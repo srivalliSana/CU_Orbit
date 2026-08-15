@@ -183,7 +183,7 @@ const Message = sequelize.define('Message', {
     senderName: { type: DataTypes.STRING },
     senderAvatarUrl: { type: DataTypes.STRING },
     body: { type: DataTypes.TEXT },
-    type: { type: DataTypes.ENUM('text', 'image', 'voice', 'file', 'system'), defaultValue: 'text' },
+    type: { type: DataTypes.ENUM('text', 'image', 'video', 'voice', 'file', 'system'), defaultValue: 'text' },
     attachments: { type: DataTypes.JSON, defaultValue: [] },
     reactions: { type: DataTypes.JSON, defaultValue: [] },
     thread_reply_count: { type: DataTypes.INTEGER, defaultValue: 0 },

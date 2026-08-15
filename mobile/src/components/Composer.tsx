@@ -147,10 +147,11 @@ export default function Composer({
     if (result.canceled || !result.assets?.length) return;
     stageFiles(
       result.assets.map((asset) => {
-        const isImage = (asset.mimeType || "").startsWith("image/");
+        const mime = asset.mimeType || "";
+        const type = mime.startsWith("image/") ? "image" : mime.startsWith("video/") ? "video" : "file";
         return {
-          file: { uri: asset.uri, name: asset.name, mimeType: asset.mimeType || "application/octet-stream" },
-          type: isImage ? "image" : "file",
+          file: { uri: asset.uri, name: asset.name, mimeType: mime || "application/octet-stream" },
+          type,
         };
       })
     );
@@ -177,9 +178,6 @@ export default function Composer({
     if (result.canceled || !result.assets?.[0]) return;
     const asset = result.assets[0];
     const isVideo = asset.type === "video";
-    // The server's message.type enum has no 'video' value yet — video
-    // capture sends as a generic 'file' attachment (a link, not inline
-    // playback) until that's worth a schema change.
     stageFiles([
       {
         file: {
@@ -187,7 +185,7 @@ export default function Composer({
           name: asset.fileName || (isVideo ? "video.mp4" : "photo.jpg"),
           mimeType: asset.mimeType || (isVideo ? "video/mp4" : "image/jpeg"),
         },
-        type: isVideo ? "file" : "image",
+        type: isVideo ? "video" : "image",
       },
     ]);
   };

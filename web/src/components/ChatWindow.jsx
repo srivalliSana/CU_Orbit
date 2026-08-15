@@ -145,7 +145,7 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
         const up = await uploadFile(file);
         mediaUrl = up.url;
         mediaName = up.name || file.name;
-        type = file.type.startsWith('image/') ? 'image' : 'file';
+        type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file';
       }
       await sendMessage({ containerId: chat.id, body: text, type, mediaUrl, mediaName, mediaMimeType, enrichedMentions });
       const fresh = await getMessages(chat.id);

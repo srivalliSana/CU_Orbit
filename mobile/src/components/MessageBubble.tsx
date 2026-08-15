@@ -4,6 +4,7 @@ import { File, Paths } from "expo-file-system";
 import * as FileSystemLegacy from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
 import * as Sharing from "expo-sharing";
+import { VideoView, useVideoPlayer } from "expo-video";
 
 import ReactionPicker from "./ReactionPicker";
 import EditMessageModal from "./EditMessageModal";
@@ -136,6 +137,8 @@ export default function MessageBubble({
           <Pressable onPress={() => setImageViewerVisible(true)}>
             <Image source={{ uri: attachmentUrl }} style={styles.image} resizeMode="cover" />
           </Pressable>
+        ) : message.type === "video" && attachmentUrl ? (
+          <VideoBubble uri={attachmentUrl} style={styles.image} />
         ) : message.type === "file" && attachmentUrl ? (
           <Pressable onPress={handleOpen} onLongPress={onFileLongPress} style={styles.fileRow}>
             <Text style={styles.fileIcon}>📎</Text>
@@ -198,6 +201,23 @@ export default function MessageBubble({
         </Modal>
       ) : null}
     </View>
+  );
+}
+
+// A separate component (not inlined in MessageBubble) so useVideoPlayer —
+// which must run unconditionally, same order every render — only mounts for
+// rows that are actually a video, instead of needing a guard inside a hook.
+function VideoBubble({ uri, style }: { uri: string; style: object }) {
+  const player = useVideoPlayer(uri);
+  return (
+    <VideoView
+      player={player}
+      style={style}
+      nativeControls
+      // The native controls already include a fullscreen toggle; this just
+      // confirms the platform is allowed to honour it.
+      fullscreenOptions={{ enable: true }}
+    />
   );
 }
 
