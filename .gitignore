@@ -26,3 +26,8 @@ server/node_modules/
 
 # Vite build output for the web client (built during deploy)
 web/node_modules/
+
+# Secrets — real values live only on the server, never in git.
+.env
+.env.local
+!.env.example
