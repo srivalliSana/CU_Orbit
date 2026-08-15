@@ -6,7 +6,7 @@ import { isFacultyEmail } from '../lib/permissions';
 
 /** Left pane: search, then channels and direct messages. */
 
-export default function ChatList({ user, chats, workspaces, workspaceId, onSwitchWorkspace, activeId, onSelect, onNewGroup, onOpenContact, onOpenMentions, onOpenProfile }) {
+export default function ChatList({ user, chats, workspaces, workspaceId, onSwitchWorkspace, activeId, onSelect, onNewGroup, onOpenContact, onOpenMentions, onOpenProfile, onOpenAdmin }) {
   // Mirrors isFacultyEmail() on the server. The server is the authority for
   // channel creation; this only avoids showing an action that would 403.
   const canCreate = user?.role === 'admin' || isFacultyEmail(user?.campus_email || user?.email);
@@ -77,6 +77,18 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
             <p className="truncate text-xs text-slate-500">{user?.campus_email || user?.email}</p>
           )}
         </div>
+        {onOpenAdmin && (
+          <button
+            onClick={onOpenAdmin}
+            title="Admin"
+            aria-label="Admin"
+            className="shrink-0 rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z" />
+            </svg>
+          </button>
+        )}
         <button
           onClick={onOpenMentions}
           title="Mentions"

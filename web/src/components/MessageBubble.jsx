@@ -12,7 +12,7 @@ function Ticks({ status }) {
   return <span className="opacity-70" aria-label="Sent">✓</span>;
 }
 
-export default function MessageBubble({ message, own, showSender, isGroup, onChanged }) {
+export default function MessageBubble({ message, own, showSender, isGroup, canModerate, isSuperAdmin, onChanged }) {
   const m = message;
   const [reads, setReads] = useState(null);   // null = not requested
   const [menuOpen, setMenuOpen] = useState(false);
@@ -82,7 +82,10 @@ export default function MessageBubble({ message, own, showSender, isGroup, onCha
   // The server stores files under a timestamp-prefixed name to avoid disk
   // collisions — attachments[0].name is the sender's real filename.
   const fileName = media?.name || media?.url?.split('/').pop() || 'file';
-  const canEdit = own && m.type === 'text' && !m.pending;
+  // "SUPERADMIN: edit any message" / "ADMIN: cannot edit others' messages" —
+  // edit override is admin-only, unlike delete which channel admins share.
+  const canEdit = (own || isSuperAdmin) && m.type === 'text' && !m.pending;
+  const canDelete = (own || canModerate) && !m.pending;
 
   return (
     <div className={`group mb-1.5 flex ${own ? 'justify-end' : 'justify-start'}`}>
@@ -121,7 +124,7 @@ export default function MessageBubble({ message, own, showSender, isGroup, onCha
                 ✏️
               </button>
             )}
-            {own && (
+            {canDelete && (
               <button
                 onClick={remove}
                 disabled={busy}

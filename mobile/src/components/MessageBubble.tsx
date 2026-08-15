@@ -18,6 +18,8 @@ const FLAG_GRANT_READ_URI_PERMISSION = 1;
 export default function MessageBubble({
   message,
   isOwn,
+  canModerate,
+  isSuperAdmin,
   onReact,
   onDelete,
   onEdit,
@@ -25,6 +27,8 @@ export default function MessageBubble({
 }: {
   message: Message;
   isOwn: boolean;
+  canModerate?: boolean;
+  isSuperAdmin?: boolean;
   onReact: (emoji: string) => void;
   onDelete: () => void;
   onEdit: (text: string) => void;
@@ -56,7 +60,10 @@ export default function MessageBubble({
   // filename, shown/saved instead of "1755000000000-report.pdf".
   const fileName = message.attachments?.[0]?.name || attachmentUrl?.split("/").pop() || "file";
   const mimeType = message.attachments?.[0]?.mimeType;
-  const canEdit = isOwn && message.type === "text";
+  // "SUPERADMIN: edit any message" / "ADMIN: cannot edit others' messages" —
+  // edit override is admin-only, unlike delete which channel admins share.
+  const canEdit = (isOwn || !!isSuperAdmin) && message.type === "text";
+  const canDelete = isOwn || !!canModerate;
 
   const downloadToCache = async () => {
     if (!attachmentUrl) throw new Error("No attachment URL");
@@ -162,7 +169,7 @@ export default function MessageBubble({
       <ReactionPicker
         visible={pickerVisible}
         canEdit={canEdit}
-        canDelete={isOwn}
+        canDelete={canDelete}
         isPinned={!!message.is_pinned}
         onSelect={onReact}
         onEdit={() => setEditVisible(true)}

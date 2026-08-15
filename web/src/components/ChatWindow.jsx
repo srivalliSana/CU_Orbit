@@ -3,6 +3,7 @@ import Avatar from './Avatar';
 import MessageBubble from './MessageBubble';
 import Composer from './Composer';
 import { getMessages, markConversationRead, sendMessage, uploadFile } from '../api/chat';
+import { getChannelMembers } from '../api/channels';
 import { dayLabel, lastSeenLabel } from '../lib/format';
 import { join, leave, on, sendTyping } from '../api/socket';
 
@@ -16,8 +17,26 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
   const [loading, setLoading] = useState(true);
   const [typing, setTyping] = useState([]);
   const [sendError, setSendError] = useState(null);
+  const [canModerate, setCanModerate] = useState(false);
   const scroller = useRef(null);
   const atBottom = useRef(true);
+
+  // "ADMIN: delete messages in own channels (from anyone)" / "SUPERADMIN: any
+  // channel, any message" — a workspace admin always qualifies; a channel
+  // admin only for the channel they're actually admin of.
+  useEffect(() => {
+    if (user?.role === 'admin') { setCanModerate(true); return; }
+    if (chat.kind !== 'channel') { setCanModerate(false); return; }
+    let cancelled = false;
+    getChannelMembers(chat.id)
+      .then((members) => {
+        if (cancelled) return;
+        const me = members.find((m) => m.id === user?.id);
+        setCanModerate(me?.role === 'admin');
+      })
+      .catch(() => setCanModerate(false));
+    return () => { cancelled = true; };
+  }, [chat.id, chat.kind, user?.id, user?.role]);
 
   // Live updates for this conversation.
   useEffect(() => {
@@ -187,6 +206,8 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
                 own={m.sender_id === user?.id}
                 showSender={chat.kind === 'channel'}
                 isGroup={chat.kind === 'channel'}
+                canModerate={canModerate}
+                isSuperAdmin={user?.role === 'admin'}
                 onChanged={refreshMessages}
               />
             </React.Fragment>

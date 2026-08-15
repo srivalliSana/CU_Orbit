@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Button, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -7,6 +7,7 @@ import { useMessages } from "../../hooks/useMessages";
 import { useChannelSocket } from "../../hooks/useSocket";
 import { useTyping } from "../../hooks/useTyping";
 import { markConversationRead } from "../../api/messages";
+import { getChannelMembers } from "../../api/channels";
 import { apiErrorMessage } from "../../api/client";
 import { useAuthStore } from "../../state/authStore";
 import MessageBubble from "../../components/MessageBubble";
@@ -23,8 +24,27 @@ export default function ChatScreen({ route, navigation }: Props) {
   const { data: messages, isLoading, error, refetch, send, react, remove, edit, pin } = useMessages(containerId);
   const { typingName, notifyTyping } = useTyping(containerId);
   const selfId = useAuthStore((s) => s.user?.id);
+  const selfRole = useAuthStore((s) => s.user?.role);
+  const isSuperAdmin = selfRole === "admin";
+  const [canModerate, setCanModerate] = useState(false);
 
   useChannelSocket(containerId);
+
+  // "ADMIN: delete messages in own channels (from anyone)" — a channel's
+  // own admin qualifies only for that channel; a workspace admin always does.
+  useEffect(() => {
+    if (isSuperAdmin) { setCanModerate(true); return; }
+    if (kind !== "channel") { setCanModerate(false); return; }
+    let cancelled = false;
+    getChannelMembers(containerId)
+      .then((members) => {
+        if (cancelled) return;
+        const me = members.find((m) => m.id === selfId);
+        setCanModerate(me?.role === "admin");
+      })
+      .catch(() => setCanModerate(false));
+    return () => { cancelled = true; };
+  }, [containerId, kind, selfId, isSuperAdmin]);
 
   // DM containers are addressed as "<idA>_<idB>" sorted — the other
   // participant is whichever half of that isn't the signed-in user, so no
@@ -96,6 +116,8 @@ export default function ChatScreen({ route, navigation }: Props) {
           <MessageBubble
             message={item}
             isOwn={item.sender_id === selfId}
+            canModerate={canModerate}
+            isSuperAdmin={isSuperAdmin}
             onReact={(emoji) => react.mutate({ messageId: item.id, emoji })}
             onDelete={() => remove.mutate(item.id)}
             onEdit={(text) => edit.mutate({ messageId: item.id, body: text })}

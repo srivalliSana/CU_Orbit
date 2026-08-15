@@ -89,10 +89,12 @@ export default function NewGroupModal({ user, workspaceId, onClose, onCreated })
             className="mt-1 w-full rounded-lg bg-slate-100 px-3 py-2 text-sm outline-none ring-blue-500/40 focus:ring-2 dark:bg-slate-800 dark:text-slate-100"
           />
 
-          <label className="mt-4 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-            <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} className="h-4 w-4" />
-            Private — only invited members can find and join
-          </label>
+          {user?.role === 'admin' && (
+            <label className="mt-4 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+              <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} className="h-4 w-4" />
+              Private — only invited members can find and join
+            </label>
+          )}
 
           <div className="mt-5 flex items-baseline justify-between">
             <span className="text-xs font-medium text-slate-500">Add people</span>

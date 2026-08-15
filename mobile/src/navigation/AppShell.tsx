@@ -16,6 +16,7 @@ import ContactInfoScreen from "../screens/dms/ContactInfoScreen";
 import NewDirectMessageScreen from "../screens/dms/NewDirectMessageScreen";
 import ProfileScreen from "../screens/profile/ProfileScreen";
 import SettingsScreen from "../screens/profile/SettingsScreen";
+import AdminScreen from "../screens/admin/AdminScreen";
 import { useAuthSession } from "../hooks/useAuthSession";
 import { useThemeColors } from "../state/themeStore";
 import type { ActivityStackParamList, DrawerParamList, HomeStackParamList, ProfileStackParamList, TabParamList } from "./types";
@@ -76,6 +77,7 @@ function ProfileStackNavigator() {
     <ProfileStack.Navigator>
       <ProfileStack.Screen name="Profile" component={ProfileScreen} options={{ title: "You" }} />
       <ProfileStack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
+      <ProfileStack.Screen name="Admin" component={AdminScreen} options={{ title: "Admin" }} />
     </ProfileStack.Navigator>
   );
 }

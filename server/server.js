@@ -127,7 +127,11 @@ const User = sequelize.define('User', {
     presence: { type: DataTypes.ENUM('online', 'away', 'dnd', 'offline'), defaultValue: 'online' },
     // Drives "last seen" — refreshed on API activity, not on login, so it
     // reflects actual use.
-    last_seen_at: { type: DataTypes.DATE, allowNull: true }
+    last_seen_at: { type: DataTypes.DATE, allowNull: true },
+    // Superadmin-only account suspension ("Deactivate/reactivate members").
+    // A deactivated user's session is rejected on every request (see auth
+    // middleware), but their row and message history are kept intact.
+    is_active: { type: DataTypes.BOOLEAN, defaultValue: true },
 });
 
 const Workspace = sequelize.define('Workspace', {
@@ -186,7 +190,28 @@ const Message = sequelize.define('Message', {
     is_pinned: { type: DataTypes.BOOLEAN, defaultValue: false },
     status: { type: DataTypes.STRING, defaultValue: 'sent' },
     timestamp: { type: DataTypes.BIGINT, defaultValue: () => Date.now() },
-    edited_at: { type: DataTypes.DATE, allowNull: true }
+    edited_at: { type: DataTypes.DATE, allowNull: true },
+    // "View message edit history" (superadmin) — every prior body, oldest
+    // first, pushed here right before each overwrite.
+    edit_history: { type: DataTypes.JSON, defaultValue: [] },
+    // "View deleted messages" (superadmin) — messages are soft-deleted so
+    // this stays possible; every other read path filters deleted_at IS NULL.
+    deleted_at: { type: DataTypes.DATE, allowNull: true },
+});
+
+/**
+ * "View activity logs (audit trail)" — superadmin-only record of actions
+ * that affect other people's accounts, channels, or messages. Not every
+ * API call, just the ones a workspace owner would actually want to review.
+ */
+const AuditLog = sequelize.define('AuditLog', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    actor_id: { type: DataTypes.STRING, allowNull: false },
+    actor_name: { type: DataTypes.STRING },
+    action: { type: DataTypes.STRING, allowNull: false },
+    target_type: { type: DataTypes.STRING, allowNull: true },
+    target_id: { type: DataTypes.STRING, allowNull: true },
+    detail: { type: DataTypes.STRING, allowNull: true },
 });
 
 /**
@@ -658,6 +683,24 @@ function touchLastSeen(userId) {
 // requireAuth runs per route, so this is a hook rather than middleware —
 // middleware placed here would run before req.user exists.
 auth.setOnAuthenticated(touchLastSeen);
+
+// "Deactivate/reactivate members" — a deactivated account's session token is
+// otherwise still cryptographically valid, so the block has to happen here.
+auth.setActiveCheck(async (userId) => {
+    const user = await User.findByPk(userId, { attributes: ['is_active'] });
+    return !user || user.is_active !== false; // missing row: let requireAuth's own logic decide, not this hook
+});
+
+/** Helper for the audit trail — never let logging break the action it's recording. */
+async function logAudit(actor, action, targetType, targetId, detail) {
+    try {
+        await AuditLog.create({
+            actor_id: actor.id,
+            actor_name: actor.name || actor.email || actor.id,
+            action, target_type: targetType, target_id: targetId, detail,
+        });
+    } catch (e) { console.error('[audit-log]', e.message); }
+}
 
 /**
  * Latest published build, for the in-app update check.
@@ -1425,7 +1468,7 @@ app.get('/api/messages/:containerId', auth.requireAuth, async (req, res) => {
             return res.status(403).json({ error: 'forbidden', message: 'Not a participant in this conversation' });
         }
         const messages = await Message.findAll({
-            where: { [Op.or]: [{ channelId: containerId }, { dm_id: containerId }] },
+            where: { [Op.or]: [{ channelId: containerId }, { dm_id: containerId }], deleted_at: null },
             order: [['timestamp', 'ASC']],
             include: [{
                 model: Mention,
@@ -1481,6 +1524,7 @@ app.get('/api/search', auth.requireAuth, async (req, res) => {
         const messages = await Message.findAll({
             where: {
                 body: { [Op.like]: `%${q}%` },
+                deleted_at: null,
                 [Op.or]: [
                     { channelId: { [Op.in]: allChannelIds } },
                     { dm_id: { [Op.like]: `%${userId}%` } },
@@ -1567,7 +1611,13 @@ app.post('/api/messages', auth.requireAuth, async (req, res) => {
                 if (id && id !== senderId) mentionedIds.add(id);
             }
         }
-        if (body && (body.toLowerCase().includes('@all') || body.toLowerCase().includes('@everyone'))) {
+        // "@mention entire channel (@channel)" / "@mention all online members
+        // (@here)" — @here has no separate presence-filtered meaning here
+        // (nothing tracks "online in this channel" today), so it broadcasts
+        // the same as @channel/@all/@everyone rather than silently doing less
+        // than the name promises.
+        const BROADCAST_MENTIONS = ['@all', '@everyone', '@channel', '@here'];
+        if (body && BROADCAST_MENTIONS.some((tag) => body.toLowerCase().includes(tag))) {
             const members = await ChannelMember.findAll({ where: { channelId: channelId } });
             for (const member of members) {
                 if (member.userId !== senderId) mentionedIds.add(member.userId);
@@ -1621,15 +1671,24 @@ app.put('/api/messages/:id', auth.requireAuth, async (req, res) => {
     try {
         const { body, status, pinned } = req.body;
         const msg = await Message.findByPk(req.params.id);
-        if (!msg) return res.status(404).json({ error: 'Message not found' });
+        if (!msg || msg.deleted_at) return res.status(404).json({ error: 'Message not found' });
 
-        // Editing content is the author's alone.
+        // "SUPERADMIN: Edit any message (anytime)" / "ADMIN: cannot edit other
+        // people's messages" — unlike delete, a channel admin has no edit
+        // override here, only a global admin does; everyone else edits only
+        // their own, within the same grace window as deleting their own.
         if (body !== undefined) {
-            if (msg.senderId !== req.user.id) {
-                return res.status(403).json({ error: 'forbidden', message: 'Only the author can edit a message' });
+            const isAuthor = msg.senderId === req.user.id;
+            if (!isAuthor && !isGroupAdmin(req.user)) {
+                return res.status(403).json({ error: 'forbidden', message: 'Only the author or a workspace admin can edit this message' });
             }
+            if (isAuthor && !isGroupAdmin(req.user) && Date.now() - Number(msg.timestamp) > SELF_EDIT_WINDOW_MS) {
+                return res.status(403).json({ error: 'forbidden', message: 'This message is too old to edit yourself — ask a workspace admin' });
+            }
+            msg.edit_history = [...(msg.edit_history || []), { body: msg.body, edited_at: msg.edited_at || msg.timestamp }];
             msg.body = body;
             msg.edited_at = new Date();
+            if (!isAuthor) await logAudit(req.user, 'message.edited', 'message', msg.id, `by admin, container ${msg.channelId || msg.dm_id}`);
         }
 
         // Status is a read receipt, so recipients set it — but only forward, and
@@ -1715,20 +1774,46 @@ app.post('/api/messages/:id/reactions', auth.requireAuth, async (req, res) => {
  * Same story as reactions above: the Android app has called DELETE on this
  * route since it shipped, and it has always 404'd — never implemented here.
  */
+// "Edit/delete own messages (usually within time limit)" for regular users.
+const SELF_EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Who may act on someone else's message here: a global admin always can; a
+ * channel's own admin can within that one channel (never in a DM — there is
+ * no "admin" role in a two-person conversation, just its participants).
+ */
+async function canModerateContainer(user, containerId) {
+    if (isGroupAdmin(user)) return true;
+    if (!containerId || containerId.includes('_')) return false;
+    const member = await ChannelMember.findOne({ where: { channelId: containerId, userId: user.id } });
+    return !!member && member.role === 'admin';
+}
+
 app.delete('/api/messages/:id', auth.requireAuth, async (req, res) => {
     try {
         const msg = await Message.findByPk(req.params.id);
-        if (!msg) return res.status(404).json({ error: 'not_found', message: 'Message not found' });
-        if (msg.senderId !== req.user.id) {
-            return res.status(403).json({ error: 'forbidden', message: 'Only the author can delete a message' });
-        }
+        if (!msg || msg.deleted_at) return res.status(404).json({ error: 'not_found', message: 'Message not found' });
         const containerId = msg.channelId || msg.dm_id;
-        await msg.destroy();
+
+        const isAuthor = msg.senderId === req.user.id;
+        const moderator = !isAuthor && (await canModerateContainer(req.user, containerId));
+        if (!isAuthor && !moderator) {
+            return res.status(403).json({ error: 'forbidden', message: 'Only the author, a channel admin, or a workspace admin can delete this message' });
+        }
+        // The time window is the *author's own* grace period, not a limit on
+        // moderators acting on someone else's message.
+        if (isAuthor && !isGroupAdmin(req.user) && Date.now() - Number(msg.timestamp) > SELF_EDIT_WINDOW_MS) {
+            return res.status(403).json({ error: 'forbidden', message: 'This message is too old to delete yourself — ask a channel admin' });
+        }
+
+        // Soft delete: "View deleted messages" (superadmin) needs the row to
+        // still exist. Every other read path filters deleted_at IS NULL.
+        msg.deleted_at = new Date();
+        await msg.save();
+        if (!isAuthor) await logAudit(req.user, 'message.deleted', 'message', msg.id, `by ${moderator ? 'moderator' : 'admin'} in ${containerId}`);
         // No dedicated "deleted" realtime event exists on any client yet — the
         // next poll (web's 20s fallback, mobile's 3s) picks up the removal
-        // since a destroyed row simply stops appearing in GET /api/messages.
-        // Cheap enough at these intervals; a live-remove event can be added
-        // later if it's ever worth the added client-side complexity.
+        // since GET /api/messages filters deleted rows out.
         res.json({ success: true, id: req.params.id, container_id: containerId });
     } catch (e) {
         console.error('[DELETE-MESSAGE-ERROR]', e);
@@ -1803,6 +1888,96 @@ app.get('/api/users', auth.requireAuth, async (req, res) => {
     try { res.json(await User.findAll()); } catch (e) { res.json([]); }
 });
 
+// --- SUPERADMIN: user management ---
+// "View all members list" / "View who joined when" — the plain member
+// roster, workspace-wide, not scoped to any one channel.
+app.get('/api/admin/users', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const users = await User.findAll({ order: [['createdAt', 'ASC']] });
+        res.json(users);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** "Change member role (Member → Admin → Owner)" — our role enum's version of that ladder. */
+app.put('/api/admin/users/:id/role', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const { role } = req.body;
+        if (!ROLES.includes(role)) return res.status(400).json({ error: 'bad_request', message: `role must be one of: ${ROLES.join(', ')}` });
+        const target = await User.findByPk(req.params.id);
+        if (!target) return res.status(404).json({ error: 'not_found' });
+        const previous = target.role;
+        target.role = role;
+        await target.save();
+        await logAudit(req.user, 'user.role_changed', 'user', target.id, `${previous} → ${role}`);
+        res.json({ success: true, user: target });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** "Deactivate/reactivate members" */
+app.put('/api/admin/users/:id/active', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const { active } = req.body;
+        if (typeof active !== 'boolean') return res.status(400).json({ error: 'bad_request', message: 'active must be boolean' });
+        const target = await User.findByPk(req.params.id);
+        if (!target) return res.status(404).json({ error: 'not_found' });
+        if (target.id === req.user.id && !active) {
+            return res.status(400).json({ error: 'bad_request', message: "You can't deactivate your own account" });
+        }
+        target.is_active = active;
+        await target.save();
+        await logAudit(req.user, active ? 'user.reactivated' : 'user.deactivated', 'user', target.id, null);
+        res.json({ success: true, user: target });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/**
+ * "Remove members from workspace" — unlike deactivation, this actually
+ * evicts them: every channel membership is dropped and the account is
+ * deactivated (not deleted — their past messages stay attributed and
+ * readable, exactly like Slack's own "deactivated user" behaviour once
+ * removed; a hard delete would either orphan every message they ever sent
+ * or force cascading deletes through the whole conversation history).
+ */
+app.delete('/api/admin/users/:id', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const target = await User.findByPk(req.params.id);
+        if (!target) return res.status(404).json({ error: 'not_found' });
+        if (target.id === req.user.id) return res.status(400).json({ error: 'bad_request', message: "You can't remove your own account" });
+        await ChannelMember.destroy({ where: { userId: target.id } });
+        target.is_active = false;
+        await target.save();
+        await logAudit(req.user, 'user.removed', 'user', target.id, target.campus_email || target.email);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/**
+ * "Bulk add members (upload CSV)" — adapted for an SSO-less, no-manual-
+ * accounts app: there's no password to set on someone else's behalf, so
+ * this takes a list of campus emails instead of a CSV of credentials.
+ * Each becomes a real account the moment they first sign in with Google or
+ * an email code; here they're just provisioned and dropped into #general.
+ */
+app.post('/api/admin/users/bulk-add', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const emails = Array.isArray(req.body.emails) ? req.body.emails : [];
+        const results = { added: [], skipped: [] };
+        for (const raw of emails) {
+            const email = String(raw || '').toLowerCase().trim();
+            if (!email || !isCampusEmail(email)) { results.skipped.push({ email: raw, reason: 'not a campus email' }); continue; }
+            const user = await findOrCreateOrbitUser(email, null);
+            results.added.push({ id: user.id, email: user.campus_email });
+        }
+        await logAudit(req.user, 'user.bulk_added', 'user', null, `${results.added.length} added, ${results.skipped.length} skipped`);
+        res.json({ success: true, ...results });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
 app.get('/api/users/:identifier', auth.requireAuth, async (req, res) => {
     try {
         const user = await User.findOne({ where: { [Op.or]: [{ phone: req.params.identifier }, { id: req.params.identifier }] } });
@@ -1842,6 +2017,14 @@ app.post('/api/workspaces/:workspaceId/channels', auth.requireAuth, async (req, 
         }
         const { name, type, description, members } = req.body;
 
+        // "ADMIN: Create public channels (not private)" / "SUPERADMIN: Create
+        // channels (public & private)" — only a global admin may create a
+        // private one; everyone else who can create at all gets public only.
+        const wantsPrivate = type === 'private';
+        if (wantsPrivate && !isGroupAdmin(req.user)) {
+            return res.status(403).json({ error: 'forbidden', message: 'Only workspace admins can create private channels.' });
+        }
+
         const clean = String(name || '').trim().replace(/^#/, '');
         if (!clean) return res.status(400).json({ error: 'bad_request', message: 'Group name is required' });
         if (clean.length > 80) return res.status(400).json({ error: 'bad_request', message: 'Group name is too long' });
@@ -1854,7 +2037,7 @@ app.post('/api/workspaces/:workspaceId/channels', auth.requireAuth, async (req, 
         const creator = req.user.id;
 
         const channel = await Channel.create({
-            workspace_id: workspaceId, name: clean, type: type === 'private' ? 'private' : 'public',
+            workspace_id: workspaceId, name: clean, type: wantsPrivate ? 'private' : 'public',
             topic: description || '', invite_code: crypto.randomBytes(4).toString('hex'), created_by: creator
         });
         await ChannelMember.create({ channelId: channel.id, userId: creator, role: 'admin' });
@@ -1916,6 +2099,55 @@ app.put('/api/channels/:id', auth.requireAuth, async (req, res) => {
         }
         res.json(channel);
     } catch (e) { res.status(500).json(e); }
+});
+
+/** "View activity logs (audit trail)" */
+app.get('/api/admin/audit-log', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const entries = await AuditLog.findAll({ order: [['createdAt', 'DESC']], limit: 200 });
+        res.json(entries);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** "View deleted messages" */
+app.get('/api/admin/deleted-messages', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const messages = await Message.findAll({
+            where: { deleted_at: { [Op.ne]: null } },
+            order: [['deleted_at', 'DESC']],
+            limit: 200,
+        });
+        res.json(messages.map((m) => ({
+            id: m.id, container_id: m.channelId || m.dm_id, sender_id: m.senderId, sender_name: m.senderName,
+            text: m.body, sent_at: m.timestamp, deleted_at: m.deleted_at,
+        })));
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** "View message edit history" */
+app.get('/api/admin/messages/:id/history', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const msg = await Message.findByPk(req.params.id);
+        if (!msg) return res.status(404).json({ error: 'not_found' });
+        res.json({ current: msg.body, history: msg.edit_history || [] });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** "DELETE CHANNEL" — superadmin only, not even the channel's own creator/admin. */
+app.delete('/api/channels/:id', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden', message: 'Only workspace admins can delete a channel.' });
+    try {
+        const channel = await Channel.findByPk(req.params.id);
+        if (!channel) return res.status(404).json({ error: 'not_found' });
+        await ChannelMember.destroy({ where: { channelId: channel.id } });
+        await Message.destroy({ where: { channelId: channel.id } });
+        await logAudit(req.user, 'channel.deleted', 'channel', channel.id, channel.name);
+        await channel.destroy();
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
 app.get('/api/channels/:id/members', auth.requireAuth, async (req, res) => {
@@ -2045,8 +2277,22 @@ app.get('/api/channels/:id/typing', auth.requireAuth, async (req, res) => {
     } catch (e) { res.json([]); }
 });
 
-app.post('/api/upload', auth.requireAuth, upload.single('file'), (req, res) => {
+// "Upload files (unlimited / 50MB / 10MB)" — tiered by role.
+const FILE_SIZE_LIMIT_MEMBER = 10 * 1024 * 1024;
+const FILE_SIZE_LIMIT_CHANNEL_ADMIN = 50 * 1024 * 1024;
+
+app.post('/api/upload', auth.requireAuth, upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).send('No file uploaded.');
+
+    if (!isGroupAdmin(req.user)) {
+        const isChannelAdminAnywhere = !!(await ChannelMember.findOne({ where: { userId: req.user.id, role: 'admin' } }));
+        const limit = isChannelAdminAnywhere ? FILE_SIZE_LIMIT_CHANNEL_ADMIN : FILE_SIZE_LIMIT_MEMBER;
+        if (req.file.size > limit) {
+            fs.unlink(req.file.path, () => {});
+            return res.status(413).json({ error: 'file_too_large', message: `Files are limited to ${Math.round(limit / (1024 * 1024))}MB for your account.` });
+        }
+    }
+
     // req.file.filename is the on-disk name (timestamp-prefixed to avoid
     // collisions) — originalname is what the sender actually called it, and
     // is what should be shown to and saved by the recipient.

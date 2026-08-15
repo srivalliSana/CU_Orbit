@@ -140,6 +140,17 @@ export default function ProfileScreen({ navigation }: Props) {
         <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
       </Pressable>
 
+      {user?.role === "admin" && (
+        <Pressable
+          onPress={() => navigation.navigate("Admin")}
+          style={styles.settingsRow}
+        >
+          <Ionicons name="shield-checkmark-outline" size={20} color={colors.text} />
+          <Text style={styles.settingsRowText}>Admin</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </Pressable>
+      )}
+
       <View style={styles.spacer} />
       <Button title="Sign out" color={colors.danger} onPress={signOut} />
     </ScrollView>

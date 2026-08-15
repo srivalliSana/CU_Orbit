@@ -5,6 +5,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { createChannel } from "../../api/channels";
 import { apiErrorMessage } from "../../api/client";
+import { useAuthStore } from "../../state/authStore";
 import { useThemeColors } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
 
@@ -13,6 +14,7 @@ type Props = NativeStackScreenProps<HomeStackParamList, "CreateChannel">;
 export default function CreateChannelScreen({ navigation }: Props) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const isSuperAdmin = useAuthStore((s) => s.user?.role === "admin");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
@@ -47,10 +49,12 @@ export default function CreateChannelScreen({ navigation }: Props) {
         maxLength={140}
       />
 
-      <View style={styles.switchRow}>
-        <Text style={styles.switchLabel}>Private — only invited members can find and join</Text>
-        <Switch value={isPrivate} onValueChange={setIsPrivate} />
-      </View>
+      {isSuperAdmin ? (
+        <View style={styles.switchRow}>
+          <Text style={styles.switchLabel}>Private — only invited members can find and join</Text>
+          <Switch value={isPrivate} onValueChange={setIsPrivate} />
+        </View>
+      ) : null}
 
       {create.isError ? (
         <Text style={styles.error}>{apiErrorMessage(create.error, "Couldn't create the channel.")}</Text>

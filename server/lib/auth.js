@@ -51,12 +51,22 @@ function bearer(req) {
 let onAuthenticated = null;
 const setOnAuthenticated = (fn) => { onAuthenticated = fn; };
 
-function requireAuth(req, res, next) {
+// Unlike onAuthenticated, this one *can* reject the request — it's how
+// "Deactivate members" actually locks someone out rather than just being a
+// flag nobody checks. Return false to reject with 403.
+let activeCheck = null;
+const setActiveCheck = (fn) => { activeCheck = fn; };
+
+async function requireAuth(req, res, next) {
     const token = bearer(req);
     if (!token) return res.status(401).json({ error: 'unauthorized', message: 'Missing bearer token' });
     try {
         const claims = verifySession(token);
         req.user = { id: claims.sub, email: claims.email, role: claims.role };
+        if (activeCheck) {
+            const active = await activeCheck(req.user.id).catch(() => true); // fail open: a DB hiccup should not lock everyone out
+            if (!active) return res.status(403).json({ error: 'account_deactivated', message: 'This account has been deactivated.' });
+        }
         // Must never break the request it is observing.
         try { onAuthenticated?.(req.user.id); } catch (e) { /* ignore */ }
         next();
@@ -77,4 +87,4 @@ function requireRole(...roles) {
     };
 }
 
-module.exports = { issueSession, verifySession, requireAuth, requireRole, assertSecrets, setOnAuthenticated, AUDIENCE };
+module.exports = { issueSession, verifySession, requireAuth, requireRole, assertSecrets, setOnAuthenticated, setActiveCheck, AUDIENCE };

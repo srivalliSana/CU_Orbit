@@ -13,6 +13,7 @@ import MentionsPanel from './components/MentionsPanel';
 import ProfilePanel from './components/ProfilePanel';
 import SettingsPanel from './components/SettingsPanel';
 import SignInScreen from './components/SignInScreen';
+import AdminPanel from './components/AdminPanel';
 import { joinChannelByLink } from './api/channels';
 import { notifyMessage, permission, requestPermission, setBadge } from './lib/notify';
 import { connect, disconnect, on } from './api/socket';
@@ -31,6 +32,7 @@ export default function App() {
   const [mentionsOpen, setMentionsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
   const [joinBanner, setJoinBanner] = useState(null);   // result of an invite-link join attempt
   const seen = useRef(null);   // last-seen unread snapshot, for notifications
   const queryClient = useQueryClient();
@@ -182,6 +184,7 @@ export default function App() {
         onOpenContact={(c) => { setChannelInfoId(null); setContact(c); }}
         onOpenMentions={() => setMentionsOpen(true)}
         onOpenProfile={() => setProfileOpen(true)}
+        onOpenAdmin={user?.role === 'admin' ? () => setAdminOpen(true) : undefined}
       />
       {active
         ? (
@@ -235,6 +238,8 @@ export default function App() {
           onSignOut={() => { signOut(); location.reload(); }}
         />
       )}
+
+      {adminOpen && <AdminPanel currentUser={user} onClose={() => setAdminOpen(false)} />}
 
       {joinBanner && (
         <div

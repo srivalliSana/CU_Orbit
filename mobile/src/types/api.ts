@@ -10,6 +10,7 @@ export interface User {
   bio?: string;
   status_emoji?: string;
   status_text?: string;
+  is_active?: boolean;
 }
 
 export interface MessagePreview {

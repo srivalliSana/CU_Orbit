@@ -20,6 +20,7 @@ export type ActivityStackParamList = {
 export type ProfileStackParamList = {
   Profile: undefined;
   Settings: undefined;
+  Admin: undefined;
 };
 
 export type TabParamList = {
