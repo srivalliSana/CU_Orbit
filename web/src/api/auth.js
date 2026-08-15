@@ -20,7 +20,8 @@ const setToken = (t) => {
 /** Clears the local session; the app should show the sign-in screen afterward. */
 export const signOut = () => setToken(null);
 
-async function json(res) {
+async function json(resOrPromise) {
+  const res = await resOrPromise;   // accepts a Response or a still-pending fetch() call
   if (!res.ok) {
     const detail = await res.json().catch(() => ({}));
     const err = new Error(detail.message || `Request failed (${res.status})`);
@@ -57,7 +58,7 @@ export async function checkSession() {
 }
 
 export async function signInWithGoogle(idToken) {
-  const d = await json(await fetch('/api/auth/google', {
+  const d = await json(fetch('/api/auth/google', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ idToken }),

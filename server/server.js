@@ -399,13 +399,11 @@ app.get('/', async (req, res) => {
     }
 
     if (req.query.download === 'true') {
-        let release = null;
-        try {
-            release = await Release.findOne({ where: { version: req.query.v } });
-        } catch (e) {
-            console.error('Landing page: could not look up release —', e.message);
-        }
-        release = release || history[0];
+        // Always the newest build — there is no version picker on the page
+        // anymore, and per-version files aren't kept on this server anyway
+        // (only the current cu_orbit.apk is), so an explicit ?v= would only
+        // ever resolve back to the same file regardless.
+        const release = history[0];
         // Re-validate at the point of use: rows predating the check above, or
         // written by any other path, must not be able to escape the directory.
         const downloads = path.join(__dirname, 'downloads');
@@ -465,13 +463,13 @@ app.get('/', async (req, res) => {
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-10">
-                    <button onclick="showHistory()" class="btn-shine bg-blue-500 hover:bg-blue-400 text-slate-950 font-bold py-5 px-8 rounded-2xl flex items-center justify-center space-x-4 transition-all shadow-lg shadow-blue-500/20 group">
+                    <a href="/?download=true" class="btn-shine bg-blue-500 hover:bg-blue-400 text-slate-950 font-bold py-5 px-8 rounded-2xl flex items-center justify-center space-x-4 transition-all shadow-lg shadow-blue-500/20 group">
                         <i class="fa-brands fa-android text-3xl group-hover:scale-110 transition-transform"></i>
                         <div class="text-left">
                             <div class="text-[10px] uppercase opacity-70">Download for</div>
                             <div class="text-lg leading-none">Android APK</div>
                         </div>
-                    </button>
+                    </a>
 
                     <button onclick="alert('iOS App is currently in development. Registration will open soon!')" class="bg-slate-800/50 hover:bg-slate-800 text-slate-300 font-bold py-5 px-8 rounded-2xl flex items-center justify-center space-x-4 transition-all border border-slate-700/50 group">
                         <i class="fa-brands fa-apple text-3xl group-hover:scale-110 transition-transform"></i>
@@ -482,14 +480,12 @@ app.get('/', async (req, res) => {
                     </button>
                 </div>
 
-                <div class="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-8 mb-10">
+                <div class="flex flex-col sm:flex-row items-center justify-center space-y-2 sm:space-y-0 sm:space-x-8 mb-10">
                     <a href="/portal" class="text-blue-400 hover:text-blue-300 font-bold flex items-center group">
                         <span>Continue in Web Portal</span>
                         <i class="fa-solid fa-arrow-right ml-2 group-hover:translate-x-1 transition-transform"></i>
                     </a>
-                    <button onclick="showHistory()" class="text-slate-500 hover:text-white text-sm font-medium transition-colors">
-                        View Version History
-                    </button>
+                    ${history[0] ? `<span class="text-slate-500 text-sm">Latest: v${history[0].version} (build ${history[0].build_number})</span>` : ''}
                 </div>
 
                 <div class="bg-slate-950/40 rounded-3xl p-6 text-left border border-slate-800/50">
@@ -512,48 +508,6 @@ app.get('/', async (req, res) => {
                 </div>
             </div>
 
-            <!-- Version History Modal -->
-            <div id="history-modal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-6 z-50 hidden opacity-0 transition-opacity duration-300">
-                <div class="bg-[#1e293b] w-full max-w-lg rounded-[2.5rem] p-10 border border-slate-700 shadow-2xl relative">
-                    <button onclick="hideHistory()" class="absolute top-6 right-6 w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center hover:bg-slate-700 transition-colors">
-                        <i class="fa-solid fa-times text-slate-400"></i>
-                    </button>
-
-                    <h2 class="text-3xl font-bold text-white mb-2">Build Library</h2>
-                    <p class="text-slate-500 text-sm mb-8">Access historical versions of the Orbit client.</p>
-
-                    <div class="space-y-3 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
-                        ${history.map(r => `
-                            <div class="flex items-center justify-between p-5 bg-slate-900/50 rounded-2xl border border-slate-800 hover:border-blue-500/30 transition-all group">
-                                <div>
-                                    <div class="flex items-center space-x-2">
-                                        <span class="text-lg font-bold text-white">v${r.version}</span>
-                                        <span class="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 text-[10px] font-bold uppercase">Build ${r.build_number}</span>
-                                    </div>
-                                    <div class="text-xs text-slate-500 mt-1">${new Date(r.release_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
-                                </div>
-                                <a href="/?download=true&v=${r.version}" class="w-12 h-12 rounded-xl bg-blue-500 flex items-center justify-center text-slate-900 hover:scale-110 transition-transform">
-                                    <i class="fa-solid fa-download"></i>
-                                </a>
-                            </div>
-                        `).join('')}
-                        ${history.length === 0 ? '<div class="text-center py-10 opacity-30"><i class="fa-solid fa-box-open text-5xl mb-4"></i><p>No releases cataloged yet.</p></div>' : ''}
-                    </div>
-                </div>
-            </div>
-
-            <script>
-                function showHistory() {
-                    const m = document.getElementById('history-modal');
-                    m.classList.remove('hidden');
-                    setTimeout(() => m.classList.add('opacity-100'), 10);
-                }
-                function hideHistory() {
-                    const m = document.getElementById('history-modal');
-                    m.classList.remove('opacity-100');
-                    setTimeout(() => m.classList.add('hidden'), 300);
-                }
-            </script>
         </body>
         </html>
     `);
