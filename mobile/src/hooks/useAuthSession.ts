@@ -47,6 +47,9 @@ export function useAuthSession() {
         redirectUri: REDIRECT_URI,
         responseType: AuthSession.ResponseType.Code,
         usePKCE: true,
+        // Without this, Google silently signs back in with whatever account
+        // is already active on the device instead of showing the chooser.
+        extraParams: { prompt: "select_account" },
       });
       const result = await request.promptAsync(GOOGLE_DISCOVERY);
       if (result.type !== "success") {

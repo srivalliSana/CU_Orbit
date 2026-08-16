@@ -62,6 +62,12 @@ const mailer = process.env.SMTP_HOST
         port: Number(process.env.SMTP_PORT || 587),
         secure: false, // STARTTLS on 587, not implicit TLS
         auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+        // Without pooling, every send opens a fresh TCP+TLS+auth handshake to
+        // Gmail — a few seconds by itself. Pooling keeps connections warm so
+        // only the very first send after a cold start pays that cost.
+        pool: true,
+        maxConnections: 3,
+        maxMessages: 100,
     })
     : null;
 
@@ -164,6 +170,21 @@ const ChannelMember = sequelize.define('ChannelMember', {
     channelId: { type: DataTypes.UUID, allowNull: false },
     userId: { type: DataTypes.STRING, allowNull: false },
     role: { type: DataTypes.ENUM('admin', 'member'), defaultValue: 'member' }
+}, {
+    indexes: [
+        { fields: ['userId'] },
+        { fields: ['channelId'] },
+    ],
+});
+
+// A student's invite-link join is held here for a channel admin to act on,
+// instead of being silently dropped (see POST /api/channels/join-by-link).
+const ChannelJoinRequest = sequelize.define('ChannelJoinRequest', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    channelId: { type: DataTypes.UUID, allowNull: false },
+    userId: { type: DataTypes.STRING, allowNull: false },
+    userName: { type: DataTypes.STRING },
+    status: { type: DataTypes.ENUM('pending', 'approved', 'rejected'), defaultValue: 'pending' },
 });
 
 const ConversationPref = sequelize.define('ConversationPref', {
@@ -197,6 +218,15 @@ const Message = sequelize.define('Message', {
     // "View deleted messages" (superadmin) — messages are soft-deleted so
     // this stays possible; every other read path filters deleted_at IS NULL.
     deleted_at: { type: DataTypes.DATE, allowNull: true },
+}, {
+    // Every hot read path filters on one of these plus an ORDER BY timestamp
+    // (chat history, home feed's last-message lookup, unread counts) — without
+    // these, each of those queries is a full table scan that gets slower as
+    // message history grows.
+    indexes: [
+        { fields: ['channelId', 'timestamp'] },
+        { fields: ['dm_id', 'timestamp'] },
+    ],
 });
 
 /**
@@ -697,13 +727,10 @@ app.use('/downloads', express.static(path.join(__dirname, 'downloads')));
 /**
  * Search people.
  *
- * CampusOne is the authority for who exists and for their name, role and
- * department. CU Orbit rows are never a source of contacts — they only enrich a
- * directory entry with app-specific state (id, avatar, presence, last seen).
- *
- * That means someone removed from the campus directory stops being findable
- * here even if they still have an Orbit account, which is the intended
- * behaviour: one place governs the roll.
+ * CampusOne resolves the name/role/department for a match, but only people
+ * who have actually signed in to CU Orbit are returned — the campus roster
+ * is not a contact list. Someone who has never opened Orbit stays invisible
+ * here even if CampusOne knows them.
  */
 app.get('/api/directory/search', auth.requireAuth, async (req, res) => {
     try {
@@ -727,6 +754,7 @@ app.get('/api/directory/search', auth.requireAuth, async (req, res) => {
             const key = (p.email || '').toLowerCase();
             if (!key || key === me) continue;
             const u = byEmail.get(key);
+            if (!u) continue;   // never signed in to Orbit — not a contact
             results.push({
                 // Identity and profile: from CampusOne.
                 email: p.email,
@@ -804,9 +832,9 @@ app.get('/api/directory/person', auth.requireAuth, async (req, res) => {
 });
 
 /**
- * Open a DM with someone from the directory, creating their Orbit account if
- * this is the first time anyone has messaged them. Their real profile is filled
- * in when they first sign in.
+ * Open a DM with someone found in the directory search above. Only reaches
+ * people who already have an Orbit account — directory search itself no
+ * longer surfaces anyone else, so this just resolves the row it returned.
  */
 app.post('/api/directory/dm', auth.requireAuth, async (req, res) => {
     try {
@@ -819,26 +847,8 @@ app.post('/api/directory/dm', auth.requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'bad_request', message: 'Cannot message yourself' });
         }
 
-        let user = await User.findOne({ where: { campus_email: email } });
-        if (!user) {
-            // Only people CampusOne knows about — this must not become a way to
-            // create arbitrary accounts.
-            const entry = (await campus.searchDirectory(email, 5))
-                .find((p) => (p.email || '').toLowerCase() === email);
-            if (!entry) return res.status(404).json({ error: 'not_found', message: 'Not in the campus directory' });
-
-            const base = (entry.name || email.split('@')[0]).toLowerCase().replace(/\s+/g, '_');
-            user = await User.create({
-                campus_email: email,
-                email,
-                name: entry.name || email.split('@')[0],
-                role: ROLES.includes(entry.role) ? entry.role : 'student',
-                cohort: entry.cohort || null,
-                campus: entry.campus || null,
-                handle: `${base}_${crypto.randomBytes(2).toString('hex')}`,
-                presence: 'offline',
-            });
-        }
+        const user = await User.findOne({ where: { campus_email: email } });
+        if (!user) return res.status(404).json({ error: 'not_found', message: 'That person has not signed in to CU Orbit yet' });
 
         res.json({ dm_id: [req.user.id, user.id].sort().join('_'), user });
     } catch (e) {
@@ -1176,14 +1186,17 @@ app.post('/api/auth/otp/request', async (req, res) => {
             last_sent_at: new Date(),
         });
 
-        await mailer.sendMail({
+        // The code is already valid and stored — respond now rather than
+        // making the sign-in screen sit on Gmail's round-trip. If the send
+        // itself fails, the user just hits "resend" after the cooldown.
+        res.json({ success: true });
+
+        mailer.sendMail({
             from: process.env.SMTP_FROM || process.env.SMTP_USER,
             to: email,
             subject: `${code} is your CU Orbit sign-in code`,
             text: `Your CU Orbit sign-in code is ${code}. It expires in 10 minutes. If you didn't request this, you can ignore this email.`,
-        });
-
-        res.json({ success: true });
+        }).catch((e) => console.error('[otp-request] send failed:', e.message));
     } catch (e) {
         console.error('[otp-request] failed:', e.message);
         res.status(500).json({ error: 'server_error' });
@@ -1342,16 +1355,33 @@ app.get('/api/home/:userId/:workspaceId', auth.requireAuth, async (req, res) => 
                 has_unread_mention: hasUnreadMention
             };
         }));
-        // Identity is the UUID now. The previous filter compared phone to a user
-        // id and, because SQL drops NULLs from a != comparison, returned nobody
-        // once accounts arrived via SSO without a phone number.
-        const users = await User.findAll({ where: { id: { [Op.ne]: userId } } });
-        const dms = await Promise.all(users.map(async (u) => {
-            const dmId = [userId, u.id].sort().join('_');
+        // Only actual conversations — not one row per every account that has
+        // ever signed in to Orbit. Previously this scanned the entire Users
+        // table and ran 4 queries per row regardless of whether the two of you
+        // had ever exchanged a message, which was both the main source of home
+        // feed slowness at any real user count and the reason a DM entry
+        // (with a stranger's name and "not on Orbit" tag) showed up for
+        // literally everyone who had ever signed in. dm_id is
+        // `[a, b].sort().join('_')` — UUIDs never contain '_', so a LIKE on
+        // either end of that pair reliably finds only my own conversations.
+        const myDmMessages = await Message.findAll({
+            where: { dm_id: { [Op.or]: [{ [Op.like]: `${userId}\\_%` }, { [Op.like]: `%\\_${userId}` }] } },
+            order: [['timestamp', 'DESC']],
+        });
+        const dmIdToLastMsg = new Map();
+        for (const m of myDmMessages) {
+            if (!dmIdToLastMsg.has(m.dm_id)) dmIdToLastMsg.set(m.dm_id, m);
+        }
+        const otherIds = [...dmIdToLastMsg.keys()].map((dmId) => dmId.split('_').find((id) => id !== userId)).filter(Boolean);
+        const otherUsers = otherIds.length ? await User.findAll({ where: { id: { [Op.in]: otherIds } } }) : [];
+        const otherById = new Map(otherUsers.map((u) => [u.id, u]));
+
+        const dms = await Promise.all([...dmIdToLastMsg.entries()].map(async ([dmId, lastMsg]) => {
+            const otherId = dmId.split('_').find((id) => id !== userId);
+            const u = otherById.get(otherId);
+            if (!u) return null;   // the other account was removed
             const pref = await ConversationPref.findOne({ where: { userId, containerId: dmId } });
-            const lastMsg = await Message.findOne({ where: { dm_id: dmId }, order: [['timestamp', 'DESC']] });
-            if (pref && pref.isHidden && !lastMsg) return null;
-            if (pref && pref.isHidden && lastMsg && lastMsg.timestamp < pref.updatedAt) return null;
+            if (pref && pref.isHidden && lastMsg.timestamp < pref.updatedAt) return null;
             const hasUnreadMention = await Mention.count({ where: { mentioned_user_id: userId, source_channel_id: dmId, is_read: false } }) > 0;
             return {
                 id: dmId,
@@ -1363,12 +1393,12 @@ app.get('/api/home/:userId/:workspaceId', auth.requireAuth, async (req, res) => 
                 is_muted: pref ? pref.isMuted : false,
                 unread_count: await Message.count({ where: unreadWhere(userId, { dm_id: dmId }) }),
                 has_unread_mention: hasUnreadMention,
-                last_message_preview: lastMsg ? {
+                last_message_preview: {
                     sender_is_self: lastMsg.senderId === userId,
                     text: lastMsg.body || "",
                     sent_at: lastMsg.timestamp,
                     type: lastMsg.type
-                } : null
+                }
             };
         }));
         res.json({
@@ -1415,21 +1445,30 @@ app.post('/api/conversations/:id/prefs', auth.requireAuth, async (req, res) => {
 });
 
 // MESSAGES
+// Bounded to the most recent history rather than the whole conversation —
+// an active channel's full history could be thousands of rows, all of which
+// used to be fetched (and re-fetched on every 3s poll) on every open. Pass
+// ?before=<timestamp> to page further back.
+const MESSAGE_PAGE_SIZE = 200;
 app.get('/api/messages/:containerId', auth.requireAuth, async (req, res) => {
     try {
         const { containerId } = req.params;
         if (!(await canAccessContainer(req.user.id, containerId, req.user))) {
             return res.status(403).json({ error: 'forbidden', message: 'Not a participant in this conversation' });
         }
-        const messages = await Message.findAll({
-            where: { [Op.or]: [{ channelId: containerId }, { dm_id: containerId }], deleted_at: null },
-            order: [['timestamp', 'ASC']],
+        const before = req.query.before ? Number(req.query.before) : null;
+        const where = { [Op.or]: [{ channelId: containerId }, { dm_id: containerId }], deleted_at: null };
+        if (before) where.timestamp = { [Op.lt]: before };
+        const messages = (await Message.findAll({
+            where,
+            order: [['timestamp', 'DESC']],
+            limit: MESSAGE_PAGE_SIZE,
             include: [{
                 model: Mention,
                 as: 'mentions',
                 include: [{ model: User, as: 'user', attributes: ['id', 'name', 'handle'] }]
             }]
-        });
+        })).reverse();
         res.json(messages.map(m => ({
             id: m.id,
             channel_id: m.channelId,
@@ -2220,19 +2259,68 @@ app.post('/api/channels/:id/invite-email', auth.requireAuth, async (req, res) =>
 
         const joinUrl = `${process.env.APP_URL || 'https://cumess.cutm.ac.in'}/join/${channel.invite_code}`;
         const inviter = await User.findByPk(req.user.id);
-        await mailer.sendMail({
+        await logAudit(req.user, 'channel.invited_by_email', 'channel', channel.id, email);
+        res.json({ success: true });
+
+        mailer.sendMail({
             from: process.env.SMTP_FROM || process.env.SMTP_USER,
             to: email,
             subject: `${inviter?.name || 'Someone'} invited you to #${channel.name} on CU Orbit`,
             text: `${inviter?.name || 'Someone'} invited you to join #${channel.name} on CU Orbit.\n\nJoin here: ${joinUrl}\n\nIf you don't have a CU Orbit account yet, signing in with your campus Google account or email creates one automatically.`,
-        });
-
-        await logAudit(req.user, 'channel.invited_by_email', 'channel', channel.id, email);
-        res.json({ success: true });
+        }).catch((e) => console.error('[invite-email] send failed:', e.message));
     } catch (e) {
         console.error('[invite-email] failed:', e.message);
         res.status(500).json({ error: 'server_error' });
     }
+});
+
+/** Pending invite-link joins a channel admin (or superadmin) needs to act on. */
+app.get('/api/channels/:id/join-requests', auth.requireAuth, async (req, res) => {
+    try {
+        const me = await ChannelMember.findOne({ where: { channelId: req.params.id, userId: req.user.id } });
+        if (me?.role !== 'admin' && !isGroupAdmin(req.user)) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
+        const requests = await ChannelJoinRequest.findAll({ where: { channelId: req.params.id, status: 'pending' }, order: [['createdAt', 'ASC']] });
+        res.json(requests);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.post('/api/channels/:id/join-requests/:reqId/approve', auth.requireAuth, async (req, res) => {
+    try {
+        const me = await ChannelMember.findOne({ where: { channelId: req.params.id, userId: req.user.id } });
+        if (me?.role !== 'admin' && !isGroupAdmin(req.user)) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
+        const request = await ChannelJoinRequest.findOne({ where: { id: req.params.reqId, channelId: req.params.id, status: 'pending' } });
+        if (!request) return res.status(404).json({ error: 'not_found' });
+
+        const channel = await Channel.findByPk(req.params.id);
+        const [member, created] = await ChannelMember.findOrCreate({ where: { channelId: req.params.id, userId: request.userId }, defaults: { channelId: req.params.id, userId: request.userId, role: 'member' } });
+        if (created) {
+            if (channel) await channel.increment('member_count');
+            await Message.create({ channelId: req.params.id, senderId: request.userId, senderName: request.userName || 'Someone', body: `JOIN_LINK:${request.userId}`, type: 'system', timestamp: Date.now() });
+        }
+        request.status = 'approved';
+        await request.save();
+        await logAudit(req.user, 'channel.join_approved', 'channel', req.params.id, request.userName);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.post('/api/channels/:id/join-requests/:reqId/reject', auth.requireAuth, async (req, res) => {
+    try {
+        const me = await ChannelMember.findOne({ where: { channelId: req.params.id, userId: req.user.id } });
+        if (me?.role !== 'admin' && !isGroupAdmin(req.user)) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
+        const request = await ChannelJoinRequest.findOne({ where: { id: req.params.reqId, channelId: req.params.id, status: 'pending' } });
+        if (!request) return res.status(404).json({ error: 'not_found' });
+        request.status = 'rejected';
+        await request.save();
+        await logAudit(req.user, 'channel.join_rejected', 'channel', req.params.id, request.userName);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
 app.post('/api/channels/join-by-link', auth.requireAuth, async (req, res) => {
@@ -2247,7 +2335,21 @@ app.post('/api/channels/join-by-link', auth.requireAuth, async (req, res) => {
         const { inviteCode } = req.body;
         const channel = await Channel.findOne({ where: { invite_code: inviteCode } });
         if (!channel) return res.status(404).json({ error: 'not_found', message: 'Invalid or expired invite link' });
-        if (channel.approval_required) { return res.json({ success: true, pendingApproval: true, channel }); }
+        // Students always need an admin to let them in via invite link, even
+        // when the channel itself hasn't turned approval_required on — that
+        // toggle is for faculty-vs-faculty channels, not a way to accidentally
+        // let a link admit students unchecked.
+        const requiresApproval = channel.approval_required || req.user.role === 'student';
+        if (requiresApproval) {
+            const already = await ChannelMember.findOne({ where: { channelId: channel.id, userId } });
+            if (already) return res.json({ success: true, channel });
+            const user = await User.findByPk(userId);
+            await ChannelJoinRequest.findOrCreate({
+                where: { channelId: channel.id, userId, status: 'pending' },
+                defaults: { channelId: channel.id, userId, userName: user?.name || 'Someone' },
+            });
+            return res.json({ success: true, pendingApproval: true, channel });
+        }
         const [member, created] = await ChannelMember.findOrCreate({ where: { channelId: channel.id, userId: userId }, defaults: { channelId: channel.id, userId: userId, role: 'member' } });
         if (created) {
             await channel.increment('member_count');

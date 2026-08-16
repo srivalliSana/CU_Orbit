@@ -2,9 +2,12 @@ import React, { useEffect, useState } from 'react';
 import Avatar from './Avatar';
 import {
   addChannelMember,
+  approveJoinRequest,
   getChannel,
   getChannelMembers,
+  getJoinRequests,
   inviteByEmail,
+  rejectJoinRequest,
   removeChannelMember,
   updateChannel,
 } from '../api/channels';
@@ -30,6 +33,8 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
   const [inviteEmail, setInviteEmail] = useState('');
   const [invitingByEmail, setInvitingByEmail] = useState(false);
   const [inviteSent, setInviteSent] = useState(false);
+  const [joinRequests, setJoinRequests] = useState([]);
+  const [busyRequestId, setBusyRequestId] = useState(null);
 
   const load = () => {
     setError(null);
@@ -37,6 +42,10 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
       .then(([ch, mem]) => {
         setChannel(ch);
         setMembers(mem);
+        const amAdmin = mem.find((m) => m.id === currentUser?.id)?.role === 'admin';
+        if (amAdmin || currentUser?.role === 'admin') {
+          getJoinRequests(channelId).then(setJoinRequests).catch(() => setJoinRequests([]));
+        }
       })
       .catch((e) => setError(e.message || 'Could not load this channel.'));
   };
@@ -44,6 +53,7 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
   useEffect(() => {
     setChannel(null);
     setMembers([]);
+    setJoinRequests([]);
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId]);
@@ -51,6 +61,19 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
   const myMembership = members.find((m) => m.id === currentUser?.id);
   const isChannelAdmin = myMembership?.role === 'admin';
   const isCreator = (id) => channel?.created_by === id;
+
+  const respondToRequest = async (reqId, approve) => {
+    setBusyRequestId(reqId);
+    try {
+      await (approve ? approveJoinRequest : rejectJoinRequest)(channelId, reqId);
+      setJoinRequests((prev) => prev.filter((r) => r.id !== reqId));
+      if (approve) { load(); onChanged?.(); }
+    } catch (e) {
+      setError(e.message || 'Could not update that request.');
+    } finally {
+      setBusyRequestId(null);
+    }
+  };
 
   const startAdding = () => {
     setAdding(true);
@@ -195,6 +218,38 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                     {invitingByEmail ? 'Sending…' : inviteSent ? 'Sent ✓' : 'Send'}
                   </button>
                 </form>
+              </div>
+            )}
+
+            {joinRequests.length > 0 && (
+              <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Join requests · {joinRequests.length}
+                </h4>
+                <ul className="mt-2 space-y-2">
+                  {joinRequests.map((r) => (
+                    <li key={r.id} className="flex items-center gap-3">
+                      <Avatar name={r.userName} size={32} />
+                      <p className="min-w-0 flex-1 truncate text-sm text-slate-700 dark:text-slate-200">{r.userName}</p>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          disabled={busyRequestId === r.id}
+                          onClick={() => respondToRequest(r.id, true)}
+                          className="text-[11px] font-medium text-blue-600 hover:text-blue-700 disabled:opacity-40"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          disabled={busyRequestId === r.id}
+                          onClick={() => respondToRequest(r.id, false)}
+                          className="text-[11px] text-red-500 hover:text-red-600 disabled:opacity-40"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
 

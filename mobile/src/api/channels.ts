@@ -63,3 +63,19 @@ export const joinChannelByLink = (inviteCode: string) =>
 
 export const inviteByEmail = (id: string, email: string) =>
   client.post<{ success: boolean }>(`/channels/${id}/invite-email`, { email }).then((res) => res.data);
+
+export interface JoinRequest {
+  id: string;
+  channelId: string;
+  userId: string;
+  userName: string;
+}
+
+export const getJoinRequests = (id: string) =>
+  client.get<JoinRequest[]>(`/channels/${id}/join-requests`).then((res) => res.data);
+
+export const approveJoinRequest = (id: string, reqId: string) =>
+  client.post<{ success: boolean }>(`/channels/${id}/join-requests/${reqId}/approve`).then((res) => res.data);
+
+export const rejectJoinRequest = (id: string, reqId: string) =>
+  client.post<{ success: boolean }>(`/channels/${id}/join-requests/${reqId}/reject`).then((res) => res.data);

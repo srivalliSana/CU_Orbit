@@ -16,9 +16,12 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import {
   addChannelMember,
+  approveJoinRequest,
   getChannel,
   getChannelMembers,
+  getJoinRequests,
   inviteByEmail,
+  rejectJoinRequest,
   removeChannelMember,
   updateChannel,
 } from "../../api/channels";
@@ -62,10 +65,32 @@ export default function ChannelInfoScreen({ route }: Props) {
   const isChannelAdmin = myMembership?.role === "admin";
   const isCreator = (id: string) => channel?.created_by === id;
 
+  const joinRequestsQuery = useQuery({
+    queryKey: ["channelJoinRequests", channelId],
+    queryFn: () => getJoinRequests(channelId),
+    enabled: isChannelAdmin,
+  });
+  const joinRequests = joinRequestsQuery.data ?? [];
+  const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
+
   const reload = () => {
     queryClient.invalidateQueries({ queryKey: ["channel", channelId] });
     queryClient.invalidateQueries({ queryKey: ["channelMembers", channelId] });
+    queryClient.invalidateQueries({ queryKey: ["channelJoinRequests", channelId] });
     queryClient.invalidateQueries({ queryKey: ["home"] });
+  };
+
+  const respondToRequest = async (reqId: string, approve: boolean) => {
+    setBusyRequestId(reqId);
+    setError(null);
+    try {
+      await (approve ? approveJoinRequest : rejectJoinRequest)(channelId, reqId);
+      reload();
+    } catch (e) {
+      setError(apiErrorMessage(e, "Could not update that request."));
+    } finally {
+      setBusyRequestId(null);
+    }
   };
 
   const addMember = async (userId: string) => {
@@ -222,6 +247,26 @@ export default function ChannelInfoScreen({ route }: Props) {
           ) : null}
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
+
+          {isChannelAdmin && joinRequests.length > 0 ? (
+            <View style={styles.inviteBlock}>
+              <Text style={styles.sectionLabel}>JOIN REQUESTS · {joinRequests.length}</Text>
+              {joinRequests.map((r) => (
+                <View key={r.id} style={styles.memberRow}>
+                  <Avatar name={r.userName} size={32} />
+                  <Text style={[styles.memberMid, styles.memberName]}>{r.userName}</Text>
+                  <View style={styles.memberActions}>
+                    <Pressable disabled={busyRequestId === r.id} onPress={() => respondToRequest(r.id, true)}>
+                      <Text style={styles.actionText}>Approve</Text>
+                    </Pressable>
+                    <Pressable disabled={busyRequestId === r.id} onPress={() => respondToRequest(r.id, false)}>
+                      <Text style={styles.removeText}>Reject</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
 
           {isChannelAdmin && channel ? (
             <View style={styles.settingsBlock}>

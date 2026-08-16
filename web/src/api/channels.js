@@ -30,3 +30,9 @@ export const inviteByEmail = (id, email) =>
     method: 'POST',
     body: JSON.stringify({ email }),
   });
+
+export const getJoinRequests = (id) => api(`/api/channels/${id}/join-requests`);
+export const approveJoinRequest = (id, reqId) =>
+  api(`/api/channels/${id}/join-requests/${reqId}/approve`, { method: 'POST' });
+export const rejectJoinRequest = (id, reqId) =>
+  api(`/api/channels/${id}/join-requests/${reqId}/reject`, { method: 'POST' });
