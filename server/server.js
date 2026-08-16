@@ -670,9 +670,13 @@ auth.setOnAuthenticated(touchLastSeen);
 
 // "Deactivate/reactivate members" — a deactivated account's session token is
 // otherwise still cryptographically valid, so the block has to happen here.
+// Also refreshes req.user.role from the live row, so a role change in the
+// Admin Panel takes effect on the promoted/demoted person's very next
+// request instead of waiting for their token to expire.
 auth.setActiveCheck(async (userId) => {
-    const user = await User.findByPk(userId, { attributes: ['is_active'] });
-    return !user || user.is_active !== false; // missing row: let requireAuth's own logic decide, not this hook
+    const user = await User.findByPk(userId, { attributes: ['is_active', 'role'] });
+    if (!user) return { active: true }; // missing row: let requireAuth's own logic decide, not this hook
+    return { active: user.is_active !== false, role: user.role };
 });
 
 /** Helper for the audit trail — never let logging break the action it's recording. */

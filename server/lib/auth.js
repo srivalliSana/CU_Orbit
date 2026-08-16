@@ -53,7 +53,11 @@ const setOnAuthenticated = (fn) => { onAuthenticated = fn; };
 
 // Unlike onAuthenticated, this one *can* reject the request — it's how
 // "Deactivate members" actually locks someone out rather than just being a
-// flag nobody checks. Return false to reject with 403.
+// flag nobody checks, and it's also where the role baked into the token gets
+// refreshed. Without that, promoting/demoting someone in the Admin Panel had
+// no effect until their token happened to expire (up to 7 days) or they
+// manually signed out and back in. Return { active, role }; return false (or
+// throw) to fail open — a DB hiccup should not lock everyone out.
 let activeCheck = null;
 const setActiveCheck = (fn) => { activeCheck = fn; };
 
@@ -64,8 +68,10 @@ async function requireAuth(req, res, next) {
         const claims = verifySession(token);
         req.user = { id: claims.sub, email: claims.email, role: claims.role };
         if (activeCheck) {
-            const active = await activeCheck(req.user.id).catch(() => true); // fail open: a DB hiccup should not lock everyone out
-            if (!active) return res.status(403).json({ error: 'account_deactivated', message: 'This account has been deactivated.' });
+            const result = await activeCheck(req.user.id).catch(() => null); // fail open: a DB hiccup should not lock everyone out
+            if (result === false) return res.status(403).json({ error: 'account_deactivated', message: 'This account has been deactivated.' });
+            if (result && result.active === false) return res.status(403).json({ error: 'account_deactivated', message: 'This account has been deactivated.' });
+            if (result && result.role) req.user.role = result.role;
         }
         // Must never break the request it is observing.
         try { onAuthenticated?.(req.user.id); } catch (e) { /* ignore */ }
