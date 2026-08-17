@@ -198,6 +198,7 @@ export default function App() {
             onOpenContact={(c) => { setChannelInfoId(null); setContact(c); }}
             onOpenChannelInfo={(id) => { setContact(null); setChannelInfoId(id); }}
             onOpenProfile={(userId) => setProfileUserId(userId)}
+            onBack={() => setActive(null)}
           />
         )
         : <EmptyState user={user} onNewGroup={() => setNewGroup(true)} />}

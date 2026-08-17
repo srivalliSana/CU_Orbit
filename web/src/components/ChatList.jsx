@@ -55,7 +55,9 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
   const nothing = !showChannels && !showDms;
 
   return (
-    <aside className="flex w-full max-w-sm shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+    <aside
+      className={`${activeId ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:max-w-sm`}
+    >
       <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
         <button onClick={onOpenProfile} aria-label="Your profile" className="shrink-0 rounded-full">
           <Avatar name={user?.name} url={user?.avatarUrl} size={40} />

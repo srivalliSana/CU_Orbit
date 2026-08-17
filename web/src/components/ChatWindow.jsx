@@ -13,7 +13,7 @@ import { join, leave, on, sendTyping } from '../api/socket';
 const POLL_MS = 20000;
 const TYPING_TTL_MS = 4000;
 
-export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenChannelInfo, onOpenProfile }) {
+export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenChannelInfo, onOpenProfile, onBack }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [typing, setTyping] = useState([]);
@@ -167,7 +167,16 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
 
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-slate-50 dark:bg-slate-950">
-      <header className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900">
+      <header className="flex items-center gap-1 border-b border-slate-200 bg-white px-2 py-2.5 dark:border-slate-800 dark:bg-slate-900 md:gap-3 md:px-4">
+        <button
+          onClick={onBack}
+          aria-label="Back to chats"
+          className="shrink-0 rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 md:hidden"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
         <button
           onClick={() => {
             if (chat.kind === 'dm' && chat.email) onOpenContact?.({ email: chat.email, containerId: chat.id });

@@ -120,56 +120,58 @@ function MembersTab({ currentUser }) {
         </div>
       </form>
 
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="text-xs uppercase tracking-wide text-slate-400">
-            <th className="pb-2">Member</th>
-            <th className="pb-2">Role</th>
-            <th className="pb-2">Status</th>
-            <th className="pb-2" />
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((u) => (
-            <tr key={u.id} className="border-t border-slate-100 dark:border-slate-800">
-              <td className="py-2 pr-3">
-                <div className="flex items-center gap-2">
-                  <Avatar name={u.name} url={u.avatarUrl} size={28} />
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-slate-800 dark:text-slate-100">{u.name}</p>
-                    <p className="truncate text-xs text-slate-400">{u.campus_email || u.email}</p>
-                  </div>
-                </div>
-              </td>
-              <td className="py-2 pr-3">
-                <select
-                  value={u.role}
-                  onChange={(e) => onRoleChange(u.id, e.target.value)}
-                  disabled={u.id === currentUser?.id}
-                  className="rounded border border-slate-200 bg-transparent px-2 py-1 text-xs dark:border-slate-700"
-                >
-                  {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </td>
-              <td className="py-2 pr-3">
-                {u.is_active === false
-                  ? <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-700 dark:bg-red-950 dark:text-red-300">Deactivated</span>
-                  : <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs text-green-700 dark:bg-green-950 dark:text-green-300">Active</span>}
-              </td>
-              <td className="py-2 text-right">
-                {u.id !== currentUser?.id && (
-                  <div className="flex justify-end gap-2">
-                    <button onClick={() => onToggleActive(u)} className="text-xs text-slate-500 hover:text-slate-700">
-                      {u.is_active === false ? 'Reactivate' : 'Deactivate'}
-                    </button>
-                    <button onClick={() => onRemove(u)} className="text-xs text-red-600 hover:text-red-700">Remove</button>
-                  </div>
-                )}
-              </td>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-left text-sm">
+          <thead>
+            <tr className="text-xs uppercase tracking-wide text-slate-400">
+              <th className="pb-2">Member</th>
+              <th className="pb-2">Role</th>
+              <th className="pb-2">Status</th>
+              <th className="pb-2" />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id} className="border-t border-slate-100 dark:border-slate-800">
+                <td className="py-2 pr-3">
+                  <div className="flex items-center gap-2">
+                    <Avatar name={u.name} url={u.avatarUrl} size={28} />
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-slate-800 dark:text-slate-100">{u.name}</p>
+                      <p className="truncate text-xs text-slate-400">{u.campus_email || u.email}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="py-2 pr-3">
+                  <select
+                    value={u.role}
+                    onChange={(e) => onRoleChange(u.id, e.target.value)}
+                    disabled={u.id === currentUser?.id}
+                    className="rounded border border-slate-200 bg-transparent px-2 py-1 text-xs dark:border-slate-700"
+                  >
+                    {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </td>
+                <td className="py-2 pr-3">
+                  {u.is_active === false
+                    ? <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-700 dark:bg-red-950 dark:text-red-300">Deactivated</span>
+                    : <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs text-green-700 dark:bg-green-950 dark:text-green-300">Active</span>}
+                </td>
+                <td className="py-2 text-right">
+                  {u.id !== currentUser?.id && (
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => onToggleActive(u)} className="text-xs text-slate-500 hover:text-slate-700">
+                        {u.is_active === false ? 'Reactivate' : 'Deactivate'}
+                      </button>
+                      <button onClick={() => onRemove(u)} className="text-xs text-red-600 hover:text-red-700">Remove</button>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
