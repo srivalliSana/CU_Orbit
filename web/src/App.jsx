@@ -14,6 +14,7 @@ import ProfilePanel from './components/ProfilePanel';
 import SettingsPanel from './components/SettingsPanel';
 import SignInScreen from './components/SignInScreen';
 import AdminPanel from './components/AdminPanel';
+import UserProfileModal from './components/UserProfileModal';
 import { joinChannelByLink } from './api/channels';
 import { notifyMessage, permission, requestPermission, setBadge } from './lib/notify';
 import { connect, disconnect, on } from './api/socket';
@@ -33,6 +34,7 @@ export default function App() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [profileUserId, setProfileUserId] = useState(null);   // clicked-on message sender
   const [joinBanner, setJoinBanner] = useState(null);   // result of an invite-link join attempt
   const seen = useRef(null);   // last-seen unread snapshot, for notifications
   const queryClient = useQueryClient();
@@ -195,6 +197,7 @@ export default function App() {
             onSent={refreshChats}
             onOpenContact={(c) => { setChannelInfoId(null); setContact(c); }}
             onOpenChannelInfo={(id) => { setContact(null); setChannelInfoId(id); }}
+            onOpenProfile={(userId) => setProfileUserId(userId)}
           />
         )
         : <EmptyState user={user} onNewGroup={() => setNewGroup(true)} />}
@@ -240,6 +243,15 @@ export default function App() {
       )}
 
       {adminOpen && <AdminPanel currentUser={user} onClose={() => setAdminOpen(false)} />}
+
+      {profileUserId && (
+        <UserProfileModal
+          userId={profileUserId}
+          currentUser={user}
+          onClose={() => setProfileUserId(null)}
+          onOpenChat={(chat) => { setProfileUserId(null); setActive(chat); }}
+        />
+      )}
 
       {joinBanner && (
         <div

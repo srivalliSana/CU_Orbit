@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { clockLabel } from '../lib/format';
 import { linkify } from '../lib/linkify';
-import { deleteMessage, editMessage, getReads, reactToMessage, setMessagePinned } from '../api/chat';
+import { deleteMessage, editMessage, getReads, reactToMessage, setMessagePinned, starMessage, unstarMessage } from '../api/chat';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -12,7 +12,10 @@ function Ticks({ status }) {
   return <span className="opacity-70" aria-label="Sent">✓</span>;
 }
 
-export default function MessageBubble({ message, own, showSender, isGroup, canModerate, isSuperAdmin, onChanged }) {
+export default function MessageBubble({
+  message, own, showSender, isGroup, canModerate, isSuperAdmin, onChanged,
+  onReply, onForward, onOpenProfile,
+}) {
   const m = message;
   const [reads, setReads] = useState(null);   // null = not requested
   const [menuOpen, setMenuOpen] = useState(false);
@@ -20,6 +23,7 @@ export default function MessageBubble({ message, own, showSender, isGroup, canMo
   const [editText, setEditText] = useState(m.text || '');
   const [busy, setBusy] = useState(false);
   const [lightbox, setLightbox] = useState(false);
+  const [starred, setStarred] = useState(!!m.is_starred);
 
   const reactionCounts = useMemo(() => {
     const counts = new Map();
@@ -48,6 +52,12 @@ export default function MessageBubble({ message, own, showSender, isGroup, canMo
     setMenuOpen(false);
     setBusy(true);
     try { await setMessagePinned(m.id, !m.is_pinned); onChanged?.(); } finally { setBusy(false); }
+  };
+
+  const toggleStar = async () => {
+    const next = !starred;
+    setStarred(next);   // optimistic — starring is private, no need to wait on onChanged's refetch
+    try { await (next ? starMessage : unstarMessage)(m.id); } catch { setStarred(!next); }
   };
 
   const remove = async () => {
@@ -109,6 +119,27 @@ export default function MessageBubble({ message, own, showSender, isGroup, canMo
               😀
             </button>
             <button
+              onClick={() => onReply?.(m)}
+              className="rounded-full px-1.5 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-700"
+              title="Reply"
+            >
+              ↩️
+            </button>
+            <button
+              onClick={() => onForward?.(m)}
+              className="rounded-full px-1.5 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-700"
+              title="Forward"
+            >
+              ➡️
+            </button>
+            <button
+              onClick={toggleStar}
+              className="rounded-full px-1.5 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-700"
+              title={starred ? 'Unstar' : 'Star'}
+            >
+              {starred ? '⭐' : '☆'}
+            </button>
+            <button
               onClick={togglePin}
               disabled={busy}
               className="rounded-full px-1.5 py-0.5 hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-700"
@@ -161,7 +192,29 @@ export default function MessageBubble({ message, own, showSender, isGroup, canMo
           } ${m.pending ? 'opacity-60' : ''}`}
         >
           {showSender && !own && (
-            <p className="mb-0.5 text-xs font-semibold text-blue-600 dark:text-blue-400">{m.sender_name}</p>
+            <button
+              onClick={(e) => { e.stopPropagation(); onOpenProfile?.(m.sender_id); }}
+              className="mb-0.5 block text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400"
+            >
+              {m.sender_name}
+            </button>
+          )}
+
+          {m.forwarded_from && (
+            <p className={`mb-0.5 text-[11px] italic ${own ? 'text-blue-100' : 'text-slate-400'}`}>
+              ➡️ Forwarded from {m.forwarded_from.sender_name}
+            </p>
+          )}
+
+          {m.reply_to && (
+            <div
+              className={`mb-1 rounded-lg border-l-2 px-2 py-1 text-xs ${
+                own ? 'border-blue-200 bg-blue-500/30 text-blue-50' : 'border-blue-400 bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+              }`}
+            >
+              <p className="font-semibold">{m.reply_to.sender_name}</p>
+              <p className="truncate">{m.reply_to.text || 'Attachment'}</p>
+            </div>
           )}
 
           {media && m.type === 'image' && (
@@ -175,14 +228,13 @@ export default function MessageBubble({ message, own, showSender, isGroup, canMo
           )}
 
           {media && m.type === 'video' && (
-            // controls includes the browser's own fullscreen button — no
-            // extra lightbox needed, unlike images which have no native one.
-            <video
-              controls
-              src={media.url}
-              onClick={(e) => e.stopPropagation()}
-              className="mb-1 max-h-80 w-full rounded-lg bg-black"
-            />
+            <div className="mb-1" onClick={(e) => e.stopPropagation()}>
+              {/* controls includes the browser's own fullscreen button */}
+              <video controls src={media.url} className="w-full rounded-lg bg-black" style={{ maxHeight: 320 }} />
+              <a href={media.url} download={fileName} className="mt-1 inline-block text-xs underline underline-offset-2">
+                Save video
+              </a>
+            </div>
           )}
 
           {media && m.type === 'voice' && (
@@ -277,6 +329,16 @@ export default function MessageBubble({ message, own, showSender, isGroup, canMo
           onClick={() => setLightbox(false)}
         >
           <img src={media.url} alt={m.text || 'Shared image'} className="max-h-full max-w-full object-contain" />
+          <a
+            href={media.url}
+            download={fileName}
+            onClick={(e) => e.stopPropagation()}
+            aria-label="Save image"
+            title="Save image"
+            className="absolute right-16 top-4 text-2xl text-white/80 hover:text-white"
+          >
+            ⬇️
+          </a>
           <button
             onClick={() => setLightbox(false)}
             aria-label="Close"

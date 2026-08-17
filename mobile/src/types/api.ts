@@ -78,6 +78,9 @@ export interface Message {
   reactions: Reaction[];
   status: string;
   is_pinned?: boolean;
+  is_starred?: boolean;
   edited_at?: string | null;
+  reply_to?: { id: string; sender_name: string; text: string } | null;
+  forwarded_from?: { sender_name: string } | null;
   enriched_mentions: EnrichedMention[];
 }

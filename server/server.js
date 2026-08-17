@@ -218,6 +218,13 @@ const Message = sequelize.define('Message', {
     // "View deleted messages" (superadmin) — messages are soft-deleted so
     // this stays possible; every other read path filters deleted_at IS NULL.
     deleted_at: { type: DataTypes.DATE, allowNull: true },
+    // Snapshotted at send time ({id, sender_name, text}), not a live FK — a
+    // quoted reply should still render even if the original is later edited
+    // or soft-deleted.
+    reply_to: { type: DataTypes.JSON, allowNull: true },
+    // Forwarded messages carry the original sender's name for a "Forwarded
+    // from X" label; the body/attachments are already a plain copy.
+    forwarded_from: { type: DataTypes.JSON, allowNull: true },
 }, {
     // Every hot read path filters on one of these plus an ORDER BY timestamp
     // (chat history, home feed's last-message lookup, unread counts) — without
@@ -242,6 +249,16 @@ const AuditLog = sequelize.define('AuditLog', {
     target_type: { type: DataTypes.STRING, allowNull: true },
     target_id: { type: DataTypes.STRING, allowNull: true },
     detail: { type: DataTypes.STRING, allowNull: true },
+});
+
+/** "Starred messages" — a private per-user bookmark, not visible to anyone else. */
+const StarredMessage = sequelize.define('StarredMessage', {
+    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    user_id: { type: DataTypes.STRING, allowNull: false },
+    message_id: { type: DataTypes.UUID, allowNull: false },
+    container_id: { type: DataTypes.STRING, allowNull: false },
+}, {
+    indexes: [{ unique: true, fields: ['user_id', 'message_id'] }],
 });
 
 /**
@@ -1473,6 +1490,12 @@ app.get('/api/messages/:containerId', auth.requireAuth, async (req, res) => {
                 include: [{ model: User, as: 'user', attributes: ['id', 'name', 'handle'] }]
             }]
         })).reverse();
+        const starred = new Set(
+            (await StarredMessage.findAll({
+                where: { user_id: req.user.id, message_id: { [Op.in]: messages.map((m) => m.id) } },
+                attributes: ['message_id'],
+            })).map((s) => s.message_id)
+        );
         res.json(messages.map(m => ({
             id: m.id,
             channel_id: m.channelId,
@@ -1483,11 +1506,14 @@ app.get('/api/messages/:containerId', auth.requireAuth, async (req, res) => {
             text: m.body,
             sent_at: m.timestamp,
             type: m.type,
+            is_starred: starred.has(m.id),
             attachments: m.attachments || [],
             reactions: m.reactions || [],
             status: m.status,
             is_pinned: m.is_pinned,
             edited_at: m.edited_at,
+            reply_to: m.reply_to,
+            forwarded_from: m.forwarded_from,
             enriched_mentions: (m.mentions || []).map(mn => ({
                 user_id: mn.user ? mn.user.id : '',
                 display_name: mn.user ? mn.user.name : '',
@@ -1556,7 +1582,7 @@ app.get('/api/search', auth.requireAuth, async (req, res) => {
 
 app.post('/api/messages', auth.requireAuth, async (req, res) => {
     try {
-        const { body, channelId, type, mediaUrl, mediaName, mediaMimeType, mentions, enrichedMentions } = req.body;
+        const { body, channelId, type, mediaUrl, mediaName, mediaMimeType, mentions, enrichedMentions, replyToId, forwardedFromName } = req.body;
 
         // Sender identity comes from the session, never the request body — a
         // client-supplied senderId let anyone post as anyone. Display fields are
@@ -1588,10 +1614,19 @@ app.post('/api/messages', auth.requireAuth, async (req, res) => {
                  }
              }
         }
+        // Snapshotted server-side (not trusted from the client) so a reply
+        // preview can't be spoofed to show text the quoted message never had.
+        let reply_to = null;
+        if (replyToId) {
+            const original = await Message.findByPk(replyToId);
+            if (original) reply_to = { id: original.id, sender_name: original.senderName, text: original.body };
+        }
         const msg = await Message.create({
             senderId, senderName, body, channelId, type: type || 'text',
             senderAvatarUrl, dm_id: (channelId && channelId.includes('_')) ? channelId : null,
-            attachments: mediaUrl ? [{ type: type, url: mediaUrl, name: mediaName, mimeType: mediaMimeType }] : []
+            attachments: mediaUrl ? [{ type: type, url: mediaUrl, name: mediaName, mimeType: mediaMimeType }] : [],
+            reply_to,
+            forwarded_from: forwardedFromName ? { sender_name: forwardedFromName } : null,
         });
         // Mentions are keyed on User.id. This block previously ran entirely on
         // phone numbers — comparing normalized UUIDs, and looking up members by
@@ -1652,6 +1687,8 @@ app.post('/api/messages', auth.requireAuth, async (req, res) => {
             attachments: msg.attachments,
             sent_at: Number(msg.timestamp),
             status: msg.status,
+            reply_to: msg.reply_to,
+            forwarded_from: msg.forwarded_from,
         });
         for (const uid of recipientIds) {
             if (uid !== senderId) realtime.toUser(uid, 'unread-changed', { container_id: container });
@@ -1765,6 +1802,96 @@ app.post('/api/messages/:id/reactions', auth.requireAuth, async (req, res) => {
         console.error('[REACTION-ERROR]', e);
         res.status(500).json(e);
     }
+});
+
+/** "Star" a message — a private bookmark, never visible to anyone else. */
+app.post('/api/messages/:id/star', auth.requireAuth, async (req, res) => {
+    try {
+        const msg = await Message.findByPk(req.params.id);
+        if (!msg || msg.deleted_at) return res.status(404).json({ error: 'not_found' });
+        const containerId = msg.channelId || msg.dm_id;
+        if (!(await canAccessContainer(req.user.id, containerId, req.user))) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
+        await StarredMessage.findOrCreate({
+            where: { user_id: req.user.id, message_id: msg.id },
+            defaults: { container_id: containerId },
+        });
+        res.json({ success: true, starred: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.delete('/api/messages/:id/star', auth.requireAuth, async (req, res) => {
+    try {
+        await StarredMessage.destroy({ where: { user_id: req.user.id, message_id: req.params.id } });
+        res.json({ success: true, starred: false });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** All of the caller's starred messages, optionally scoped to one conversation. */
+app.get('/api/starred', auth.requireAuth, async (req, res) => {
+    try {
+        const where = { user_id: req.user.id };
+        if (req.query.container_id) where.container_id = req.query.container_id;
+        const stars = await StarredMessage.findAll({ where, order: [['createdAt', 'DESC']] });
+        const messageIds = stars.map((s) => s.message_id);
+        const messages = messageIds.length
+            ? await Message.findAll({ where: { id: { [Op.in]: messageIds }, deleted_at: null } })
+            : [];
+        const byId = new Map(messages.map((m) => [m.id, m]));
+        res.json(stars.map((s) => byId.get(s.message_id)).filter(Boolean).map((m) => ({
+            id: m.id, container_id: m.channelId || m.dm_id, sender_id: m.senderId, sender_name: m.senderName,
+            text: m.body, type: m.type, attachments: m.attachments, sent_at: Number(m.timestamp),
+        })));
+    } catch (e) { res.status(500).json([]); }
+});
+
+/** "View all pinned messages" for a channel or DM. */
+app.get('/api/containers/:id/pinned', auth.requireAuth, async (req, res) => {
+    try {
+        const containerId = req.params.id;
+        if (!(await canAccessContainer(req.user.id, containerId, req.user))) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
+        const messages = await Message.findAll({
+            where: { [Op.or]: [{ channelId: containerId }, { dm_id: containerId }], is_pinned: true, deleted_at: null },
+            order: [['timestamp', 'DESC']],
+        });
+        res.json(messages.map((m) => ({
+            id: m.id, container_id: containerId, sender_id: m.senderId, sender_name: m.senderName,
+            text: m.body, type: m.type, attachments: m.attachments, sent_at: Number(m.timestamp),
+        })));
+    } catch (e) { res.status(500).json([]); }
+});
+
+const LINK_REGEX = /https?:\/\/\S+/i;
+
+/**
+ * "Shared media" browser for a channel/DM's info panel — Photos / Videos /
+ * Documents / Links, matching the category chips Slack shows there.
+ */
+app.get('/api/containers/:id/media', auth.requireAuth, async (req, res) => {
+    try {
+        const containerId = req.params.id;
+        if (!(await canAccessContainer(req.user.id, containerId, req.user))) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
+        const category = String(req.query.type || 'image');
+        const where = { [Op.or]: [{ channelId: containerId }, { dm_id: containerId }], deleted_at: null };
+        if (category === 'link') {
+            where.body = { [Op.like]: '%http%' };
+        } else {
+            const typeMap = { image: 'image', video: 'video', document: 'file' };
+            where.type = typeMap[category] || 'image';
+        }
+        const messages = await Message.findAll({ where, order: [['timestamp', 'DESC']], limit: 200 });
+        const filtered = category === 'link' ? messages.filter((m) => LINK_REGEX.test(m.body || '')) : messages;
+        res.json(filtered.map((m) => ({
+            id: m.id, container_id: containerId, sender_id: m.senderId, sender_name: m.senderName,
+            text: m.body, type: m.type, attachments: m.attachments, sent_at: Number(m.timestamp),
+            links: category === 'link' ? (m.body.match(new RegExp(LINK_REGEX, 'gi')) || []) : undefined,
+        })));
+    } catch (e) { res.status(500).json([]); }
 });
 
 /**

@@ -5,7 +5,7 @@ import Avatar from './Avatar';
 // Matches an in-progress "@word" run at the end of the typed text.
 const MENTION_TRIGGER = /(?:^|\s)@(\w*)$/;
 
-export default function Composer({ chatId, isChannel, onSend, onTyping }) {
+export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo, onCancelReply }) {
   const [text, setText] = useState('');
   const [file, setFile] = useState(null);
   const [members, setMembers] = useState([]);
@@ -40,11 +40,16 @@ export default function Composer({ chatId, isChannel, onSend, onTyping }) {
     // Only keep tags whose "@Name" text is still actually present — guards
     // against a mention surviving in state after the user deleted it.
     const enrichedMentions = taggedUsers.filter((t) => body.includes(`@${t.display_name}`));
-    onSend({ text: body, file, enrichedMentions: enrichedMentions.length ? enrichedMentions : undefined });
+    onSend({
+      text: body, file,
+      enrichedMentions: enrichedMentions.length ? enrichedMentions : undefined,
+      replyToId: replyTo?.id,
+    });
     setText('');
     setFile(null);
     setTaggedUsers([]);
     setMentionQuery(null);
+    onCancelReply?.();
     if (fileInput.current) fileInput.current.value = '';
     grow(box.current);
   };
@@ -88,6 +93,15 @@ export default function Composer({ chatId, isChannel, onSend, onTyping }) {
               <span className="text-slate-700 dark:text-slate-200">{m.name}</span>
             </button>
           ))}
+        </div>
+      )}
+      {replyTo && (
+        <div className="mb-2 flex items-center gap-2 rounded-lg border-l-2 border-blue-500 bg-slate-100 px-3 py-1.5 text-xs dark:bg-slate-800">
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-slate-600 dark:text-slate-300">Replying to {replyTo.sender_name}</p>
+            <p className="truncate text-slate-500 dark:text-slate-400">{replyTo.text || 'Attachment'}</p>
+          </div>
+          <button onClick={onCancelReply} className="ml-auto shrink-0 text-slate-400 hover:text-slate-600" aria-label="Cancel reply">✕</button>
         </div>
       )}
       {file && (

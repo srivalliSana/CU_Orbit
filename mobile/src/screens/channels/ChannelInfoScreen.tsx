@@ -26,6 +26,7 @@ import {
   updateChannel,
 } from "../../api/channels";
 import { listUsers } from "../../api/users";
+import { deleteChannel } from "../../api/admin";
 import { apiErrorMessage } from "../../api/client";
 import { useAuthStore } from "../../state/authStore";
 import Avatar from "../../components/Avatar";
@@ -40,17 +41,19 @@ type Props = NativeStackScreenProps<HomeStackParamList, "ChannelInfo">;
  * server/server.js) — this screen just reflects what the server will
  * actually allow, surfacing its rejection reason rather than guessing.
  */
-export default function ChannelInfoScreen({ route }: Props) {
+export default function ChannelInfoScreen({ route, navigation }: Props) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { channelId } = route.params;
   const selfId = useAuthStore((s) => s.user?.id);
+  const isSuperAdmin = useAuthStore((s) => s.user?.role === "admin");
   const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [invitingByEmail, setInvitingByEmail] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const channelQuery = useQuery({ queryKey: ["channel", channelId], queryFn: () => getChannel(channelId) });
   const membersQuery = useQuery({
@@ -167,6 +170,32 @@ export default function ChannelInfoScreen({ route }: Props) {
   };
 
   const candidates = (usersQuery.data ?? []).filter((u) => !members.some((m) => m.id === u.id));
+
+  const confirmDeleteChannel = () => {
+    if (!channel) return;
+    Alert.alert(
+      `Delete #${channel.name}?`,
+      "This removes it for every member and cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await deleteChannel(channelId);
+              queryClient.invalidateQueries({ queryKey: ["home"] });
+              navigation.goBack();
+            } catch (e) {
+              setError(apiErrorMessage(e, "Could not delete this channel."));
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   if (channelQuery.isLoading || membersQuery.isLoading) {
     return (
@@ -286,6 +315,35 @@ export default function ChannelInfoScreen({ route }: Props) {
                 value={channel.approval_required}
                 onChange={(v) => toggle("approval_required", v)}
               />
+            </View>
+          ) : null}
+
+          <View style={styles.settingsBlock}>
+            <Pressable
+              style={styles.navRow}
+              onPress={() => navigation.navigate("MessageList", { containerId: channelId, mode: "media", title: "Shared media" })}
+            >
+              <Text style={styles.navRowText}>🖼️ Shared media</Text>
+            </Pressable>
+            <Pressable
+              style={styles.navRow}
+              onPress={() => navigation.navigate("MessageList", { containerId: channelId, mode: "pinned", title: "Pinned messages" })}
+            >
+              <Text style={styles.navRowText}>📌 Pinned messages</Text>
+            </Pressable>
+            <Pressable
+              style={styles.navRow}
+              onPress={() => navigation.navigate("MessageList", { containerId: channelId, mode: "starred", title: "Starred messages" })}
+            >
+              <Text style={styles.navRowText}>⭐ Starred messages</Text>
+            </Pressable>
+          </View>
+
+          {isSuperAdmin && channel ? (
+            <View style={styles.settingsBlock}>
+              <Pressable style={styles.navRow} onPress={confirmDeleteChannel} disabled={deleting}>
+                <Text style={styles.deleteChannelText}>{deleting ? "Deleting…" : "🗑️ Delete channel"}</Text>
+              </Pressable>
             </View>
           ) : null}
 
@@ -471,6 +529,18 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     flex: 1,
     fontSize: 13,
     color: colors.text,
+  },
+  navRow: {
+    paddingVertical: 10,
+  },
+  navRowText: {
+    fontSize: 14,
+    color: colors.text,
+  },
+  deleteChannelText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.danger,
   },
   membersHeaderRow: {
     flexDirection: "row",

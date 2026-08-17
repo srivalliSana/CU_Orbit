@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import Avatar from './Avatar';
 import MessageBubble from './MessageBubble';
 import Composer from './Composer';
+import ForwardModal from './ForwardModal';
 import { getMessages, markConversationRead, sendMessage, uploadFile } from '../api/chat';
 import { getChannelMembers } from '../api/channels';
 import { dayLabel, lastSeenLabel } from '../lib/format';
@@ -12,12 +13,14 @@ import { join, leave, on, sendTyping } from '../api/socket';
 const POLL_MS = 20000;
 const TYPING_TTL_MS = 4000;
 
-export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenChannelInfo }) {
+export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenChannelInfo, onOpenProfile }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [typing, setTyping] = useState([]);
   const [sendError, setSendError] = useState(null);
   const [canModerate, setCanModerate] = useState(false);
+  const [replyTo, setReplyTo] = useState(null);
+  const [forwarding, setForwarding] = useState(null);
   const scroller = useRef(null);
   const atBottom = useRef(true);
 
@@ -123,7 +126,10 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
     atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
 
-  const handleSend = async ({ text, file, enrichedMentions }) => {
+  // A different conversation starts with a clean composer, not a stale reply.
+  useEffect(() => { setReplyTo(null); }, [chat.id]);
+
+  const handleSend = async ({ text, file, enrichedMentions, replyToId }) => {
     setSendError(null);
     // Optimistic bubble so the UI feels immediate; reconciled by the next poll.
     const temp = {
@@ -147,7 +153,7 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
         mediaName = up.name || file.name;
         type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file';
       }
-      await sendMessage({ containerId: chat.id, body: text, type, mediaUrl, mediaName, mediaMimeType, enrichedMentions });
+      await sendMessage({ containerId: chat.id, body: text, type, mediaUrl, mediaName, mediaMimeType, enrichedMentions, replyToId });
       const fresh = await getMessages(chat.id);
       setMessages(fresh);
       onSent?.();
@@ -209,6 +215,9 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
                 canModerate={canModerate}
                 isSuperAdmin={user?.role === 'admin'}
                 onChanged={refreshMessages}
+                onReply={setReplyTo}
+                onForward={setForwarding}
+                onOpenProfile={onOpenProfile}
               />
             </React.Fragment>
           );
@@ -226,7 +235,17 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
         isChannel={chat.kind === 'channel'}
         onSend={handleSend}
         onTyping={() => sendTyping(chat.id, user?.name)}
+        replyTo={replyTo}
+        onCancelReply={() => setReplyTo(null)}
       />
+
+      {forwarding && (
+        <ForwardModal
+          message={forwarding}
+          onClose={() => setForwarding(null)}
+          onForwarded={() => setForwarding(null)}
+        />
+      )}
     </section>
   );
 }

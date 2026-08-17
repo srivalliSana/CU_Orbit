@@ -34,3 +34,5 @@ export const bulkAddUsers = (emails: string[]) =>
 export const getAuditLog = () => client.get<AuditLogEntry[]>("/admin/audit-log").then((res) => res.data);
 
 export const getDeletedMessages = () => client.get<DeletedMessage[]>("/admin/deleted-messages").then((res) => res.data);
+
+export const deleteChannel = (id: string) => client.delete(`/channels/${id}`);

@@ -10,20 +10,28 @@ export default function ReactionPicker({
   canEdit,
   canDelete,
   isPinned,
+  isStarred,
   onSelect,
   onEdit,
   onDelete,
   onPin,
+  onReply,
+  onForward,
+  onStar,
   onClose,
 }: {
   visible: boolean;
   canEdit: boolean;
   canDelete: boolean;
   isPinned: boolean;
+  isStarred?: boolean;
   onSelect: (emoji: string) => void;
   onEdit?: () => void;
   onDelete?: () => void;
   onPin?: () => void;
+  onReply?: () => void;
+  onForward?: () => void;
+  onStar?: () => void;
   onClose: () => void;
 }) {
   const colors = useThemeColors();
@@ -46,6 +54,36 @@ export default function ReactionPicker({
               </Pressable>
             ))}
           </View>
+
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => {
+              onReply?.();
+              onClose();
+            }}
+          >
+            <Text style={styles.actionText}>Reply</Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => {
+              onForward?.();
+              onClose();
+            }}
+          >
+            <Text style={styles.actionText}>Forward</Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => {
+              onStar?.();
+              onClose();
+            }}
+          >
+            <Text style={styles.actionText}>{isStarred ? "Unstar message" : "Star message"}</Text>
+          </Pressable>
 
           <Pressable
             style={styles.actionButton}

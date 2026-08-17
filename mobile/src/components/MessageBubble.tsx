@@ -25,6 +25,10 @@ export default function MessageBubble({
   onDelete,
   onEdit,
   onPin,
+  onReply,
+  onForward,
+  onStar,
+  onOpenProfile,
 }: {
   message: Message;
   isOwn: boolean;
@@ -34,6 +38,10 @@ export default function MessageBubble({
   onDelete: () => void;
   onEdit: (text: string) => void;
   onPin: (pinned: boolean) => void;
+  onReply?: () => void;
+  onForward?: () => void;
+  onStar?: (starred: boolean) => void;
+  onOpenProfile?: (userId: string) => void;
 }) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -131,14 +139,31 @@ export default function MessageBubble({
         onLongPress={() => setPickerVisible(true)}
         style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}
       >
-        {!isOwn ? <Text style={styles.senderName}>{message.sender_name}</Text> : null}
+        {!isOwn ? (
+          <Pressable onPress={() => onOpenProfile?.(message.sender_id)} hitSlop={4}>
+            <Text style={styles.senderName}>{message.sender_name}</Text>
+          </Pressable>
+        ) : null}
+
+        {message.forwarded_from ? (
+          <Text style={styles.forwardedLabel}>➡️ Forwarded from {message.forwarded_from.sender_name}</Text>
+        ) : null}
+
+        {message.reply_to ? (
+          <View style={styles.replyQuote}>
+            <Text style={styles.replyQuoteSender}>{message.reply_to.sender_name}</Text>
+            <Text style={styles.replyQuoteText} numberOfLines={1}>{message.reply_to.text || "Attachment"}</Text>
+          </View>
+        ) : null}
 
         {message.type === "image" && attachmentUrl ? (
           <Pressable onPress={() => setImageViewerVisible(true)}>
             <Image source={{ uri: attachmentUrl }} style={styles.image} resizeMode="cover" />
           </Pressable>
         ) : message.type === "video" && attachmentUrl ? (
-          <VideoBubble uri={attachmentUrl} style={styles.image} />
+          <Pressable onLongPress={handleSave}>
+            <VideoBubble uri={attachmentUrl} style={styles.image} />
+          </Pressable>
         ) : message.type === "file" && attachmentUrl ? (
           <Pressable onPress={handleOpen} onLongPress={onFileLongPress} style={styles.fileRow}>
             <Text style={styles.fileIcon}>📎</Text>
@@ -174,10 +199,14 @@ export default function MessageBubble({
         canEdit={canEdit}
         canDelete={canDelete}
         isPinned={!!message.is_pinned}
+        isStarred={!!message.is_starred}
         onSelect={onReact}
         onEdit={() => setEditVisible(true)}
         onDelete={onDelete}
         onPin={() => onPin(!message.is_pinned)}
+        onReply={onReply}
+        onForward={onForward}
+        onStar={() => onStar?.(!message.is_starred)}
         onClose={() => setPickerVisible(false)}
       />
 
@@ -197,6 +226,9 @@ export default function MessageBubble({
         >
           <Pressable style={styles.viewerBackdrop} onPress={() => setImageViewerVisible(false)}>
             <Image source={{ uri: attachmentUrl }} style={styles.viewerImage} resizeMode="contain" />
+            <Pressable style={styles.viewerSaveButton} onPress={handleSave}>
+              <Text style={styles.viewerSaveText}>Save image</Text>
+            </Pressable>
           </Pressable>
         </Modal>
       ) : null}
@@ -255,6 +287,30 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     fontWeight: "700",
     color: colors.primary,
     marginBottom: 2,
+  },
+  forwardedLabel: {
+    fontSize: 11,
+    fontStyle: "italic",
+    color: colors.textMuted,
+    marginBottom: 2,
+  },
+  replyQuote: {
+    borderLeftWidth: 2,
+    borderLeftColor: colors.primary,
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginBottom: 4,
+  },
+  replyQuoteSender: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  replyQuoteText: {
+    fontSize: 12,
+    color: colors.textMuted,
   },
   text: {
     fontSize: 15,
@@ -339,5 +395,18 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   viewerImage: {
     width: "100%",
     height: "100%",
+  },
+  viewerSaveButton: {
+    position: "absolute",
+    bottom: 40,
+    alignSelf: "center",
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  viewerSaveText: {
+    color: "#fff",
+    fontWeight: "600",
   },
 });

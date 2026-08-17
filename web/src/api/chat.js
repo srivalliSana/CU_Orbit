@@ -8,11 +8,22 @@ export const getHome = (workspaceId = 'default') =>
 export const getMessages = (containerId) =>
   api(`/api/messages/${encodeURIComponent(containerId)}`);
 
-export const sendMessage = ({ containerId, body, type = 'text', mediaUrl, mediaName, mediaMimeType, enrichedMentions }) =>
+export const sendMessage = ({ containerId, body, type = 'text', mediaUrl, mediaName, mediaMimeType, enrichedMentions, replyToId, forwardedFromName }) =>
   api('/api/messages', {
     method: 'POST',
-    body: JSON.stringify({ channelId: containerId, body, type, mediaUrl, mediaName, mediaMimeType, enrichedMentions }),
+    body: JSON.stringify({ channelId: containerId, body, type, mediaUrl, mediaName, mediaMimeType, enrichedMentions, replyToId, forwardedFromName }),
   });
+
+export const starMessage = (messageId) => api(`/api/messages/${messageId}/star`, { method: 'POST' });
+export const unstarMessage = (messageId) => api(`/api/messages/${messageId}/star`, { method: 'DELETE' });
+export const getStarredMessages = (containerId) =>
+  api(`/api/starred${containerId ? `?container_id=${encodeURIComponent(containerId)}` : ''}`);
+
+export const getPinnedMessages = (containerId) =>
+  api(`/api/containers/${encodeURIComponent(containerId)}/pinned`);
+
+export const getSharedMedia = (containerId, type) =>
+  api(`/api/containers/${encodeURIComponent(containerId)}/media?type=${encodeURIComponent(type)}`);
 
 export const reactToMessage = (messageId, emoji) =>
   api(`/api/messages/${messageId}/reactions`, { method: 'POST', body: JSON.stringify({ emoji }) });

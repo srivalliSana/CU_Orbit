@@ -10,6 +10,7 @@ export type HomeStackParamList = {
   ChannelInfo: { channelId: string };
   JoinChannel: { code: string };
   ContactInfo: { userId: string; name: string; containerId: string };
+  MessageList: { containerId: string; mode: "pinned" | "starred" | "media"; title: string };
 };
 
 export type ActivityStackParamList = {

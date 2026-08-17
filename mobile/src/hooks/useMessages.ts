@@ -8,6 +8,8 @@ import {
   reactToMessage,
   sendMessage,
   setMessagePinned,
+  starMessage,
+  unstarMessage,
 } from "../api/messages";
 
 export function useMessages(containerId: string) {
@@ -32,6 +34,8 @@ export function useMessages(containerId: string) {
       mediaName?: string;
       mediaMimeType?: string;
       enrichedMentions?: { user_id: string; display_name: string }[];
+      replyToId?: string;
+      forwardedFromName?: string;
     }) => sendMessage({ containerId, ...params }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["messages", containerId] });
@@ -70,5 +74,13 @@ export function useMessages(containerId: string) {
     },
   });
 
-  return { ...query, send, react, remove, edit, pin };
+  const star = useMutation({
+    mutationFn: (params: { messageId: string; starred: boolean }) =>
+      (params.starred ? starMessage : unstarMessage)(params.messageId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["messages", containerId] });
+    },
+  });
+
+  return { ...query, send, react, remove, edit, pin, star };
 }

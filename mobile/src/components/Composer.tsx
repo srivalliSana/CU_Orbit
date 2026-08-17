@@ -16,6 +16,13 @@ export interface SendPayload {
   mediaName?: string;
   mediaMimeType?: string;
   enrichedMentions?: { user_id: string; display_name: string }[];
+  replyToId?: string;
+}
+
+export interface ReplyTarget {
+  id: string;
+  sender_name: string;
+  text: string;
 }
 
 // Matches an in-progress "@word" run at the end of the typed text — the
@@ -29,11 +36,15 @@ export default function Composer({
   onTyping,
   channelId,
   kind,
+  replyTo,
+  onCancelReply,
 }: {
   onSend: (payload: SendPayload) => void;
   onTyping?: () => void;
   channelId?: string;
   kind?: "channel" | "dm";
+  replyTo?: ReplyTarget | null;
+  onCancelReply?: () => void;
 }) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -69,10 +80,15 @@ export default function Composer({
     // against a mention surviving in state after the user deleted it from
     // the message.
     const enrichedMentions = taggedUsers.filter((t) => body.includes(`@${t.display_name}`));
-    onSend({ body, enrichedMentions: enrichedMentions.length ? enrichedMentions : undefined });
+    onSend({
+      body,
+      enrichedMentions: enrichedMentions.length ? enrichedMentions : undefined,
+      replyToId: replyTo?.id,
+    });
     setText("");
     setTaggedUsers([]);
     setMentionQuery(null);
+    onCancelReply?.();
   };
 
   const onChangeText = (value: string) => {
@@ -123,11 +139,13 @@ export default function Composer({
           mediaUrl: url,
           mediaName: name || file.name,
           mediaMimeType: file.mimeType,
+          replyToId: i === 0 ? replyTo?.id : undefined,
         });
       }
       setText("");
       setPending([]);
       setCaption("");
+      onCancelReply?.();
     } catch (e) {
       Alert.alert(
         "Upload failed",
@@ -207,6 +225,17 @@ export default function Composer({
           />
         </View>
       )}
+      {replyTo && (
+        <View style={styles.replyBar}>
+          <View style={styles.replyTextWrap}>
+            <Text style={styles.replySender}>Replying to {replyTo.sender_name}</Text>
+            <Text style={styles.replyPreview} numberOfLines={1}>{replyTo.text || "Attachment"}</Text>
+          </View>
+          <Pressable onPress={onCancelReply} hitSlop={8}>
+            <Text style={styles.replyCancel}>✕</Text>
+          </Pressable>
+        </View>
+      )}
       <View style={styles.container}>
         <Pressable onPress={pickDocument} style={styles.iconButton}>
           <Text style={styles.icon}>📎</Text>
@@ -246,6 +275,33 @@ export default function Composer({
 }
 
 const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
+  replyBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primary,
+    backgroundColor: colors.surface,
+  },
+  replyTextWrap: {
+    flex: 1,
+  },
+  replySender: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  replyPreview: {
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  replyCancel: {
+    fontSize: 16,
+    color: colors.textMuted,
+    paddingHorizontal: 4,
+  },
   suggestions: {
     maxHeight: 200,
     borderTopWidth: StyleSheet.hairlineWidth,

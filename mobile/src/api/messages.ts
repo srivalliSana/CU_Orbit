@@ -14,6 +14,8 @@ export const sendMessage = (params: {
   mediaName?: string;
   mediaMimeType?: string;
   enrichedMentions?: { user_id: string; display_name: string }[];
+  replyToId?: string;
+  forwardedFromName?: string;
 }) =>
   client
     .post<Message>("/messages", {
@@ -24,6 +26,8 @@ export const sendMessage = (params: {
       mediaName: params.mediaName,
       mediaMimeType: params.mediaMimeType,
       enrichedMentions: params.enrichedMentions,
+      replyToId: params.replyToId,
+      forwardedFromName: params.forwardedFromName,
     })
     .then((res) => res.data);
 
@@ -48,3 +52,35 @@ export const editMessage = (messageId: string, body: string) =>
 
 export const setMessagePinned = (messageId: string, pinned: boolean) =>
   client.put<Message>(`/messages/${messageId}`, { pinned }).then((res) => res.data);
+
+export const starMessage = (messageId: string) =>
+  client.post(`/messages/${messageId}/star`, {}).then((res) => res.data);
+
+export const unstarMessage = (messageId: string) =>
+  client.delete(`/messages/${messageId}/star`).then((res) => res.data);
+
+export interface StarredMessage {
+  id: string;
+  container_id: string;
+  sender_id: string;
+  sender_name: string;
+  text: string;
+  type: string;
+  attachments: { url: string; name?: string; mimeType?: string }[];
+  sent_at: number;
+}
+
+export const getStarredMessages = (containerId?: string) =>
+  client
+    .get<StarredMessage[]>(`/starred${containerId ? `?container_id=${encodeURIComponent(containerId)}` : ""}`)
+    .then((res) => res.data);
+
+export const getPinnedMessages = (containerId: string) =>
+  client.get<StarredMessage[]>(`/containers/${encodeURIComponent(containerId)}/pinned`).then((res) => res.data);
+
+export const getSharedMedia = (containerId: string, type: string) =>
+  client
+    .get<(StarredMessage & { links?: string[] })[]>(
+      `/containers/${encodeURIComponent(containerId)}/media?type=${encodeURIComponent(type)}`
+    )
+    .then((res) => res.data);

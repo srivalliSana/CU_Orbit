@@ -12,8 +12,11 @@ import { apiErrorMessage } from "../../api/client";
 import { useAuthStore } from "../../state/authStore";
 import MessageBubble from "../../components/MessageBubble";
 import Composer from "../../components/Composer";
+import ForwardModal from "../../components/ForwardModal";
+import UserProfileModal from "../../components/UserProfileModal";
 import { useThemeColors } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
+import type { Message } from "../../types/api";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "Chat">;
 
@@ -21,12 +24,15 @@ export default function ChatScreen({ route, navigation }: Props) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { containerId, title, kind } = route.params;
-  const { data: messages, isLoading, error, refetch, send, react, remove, edit, pin } = useMessages(containerId);
+  const { data: messages, isLoading, error, refetch, send, react, remove, edit, pin, star } = useMessages(containerId);
   const { typingName, notifyTyping } = useTyping(containerId);
   const selfId = useAuthStore((s) => s.user?.id);
   const selfRole = useAuthStore((s) => s.user?.role);
   const isSuperAdmin = selfRole === "admin";
   const [canModerate, setCanModerate] = useState(false);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [forwarding, setForwarding] = useState<Message | null>(null);
+  const [profileUserId, setProfileUserId] = useState<string | null>(null);
 
   useChannelSocket(containerId);
 
@@ -122,6 +128,10 @@ export default function ChatScreen({ route, navigation }: Props) {
             onDelete={() => remove.mutate(item.id)}
             onEdit={(text) => edit.mutate({ messageId: item.id, body: text })}
             onPin={(pinned) => pin.mutate({ messageId: item.id, pinned })}
+            onReply={() => setReplyTo(item)}
+            onForward={() => setForwarding(item)}
+            onStar={(starred) => star.mutate({ messageId: item.id, starred })}
+            onOpenProfile={(userId) => setProfileUserId(userId)}
           />
         )}
         contentContainerStyle={styles.list}
@@ -134,6 +144,25 @@ export default function ChatScreen({ route, navigation }: Props) {
         onTyping={notifyTyping}
         channelId={containerId}
         kind={kind}
+        replyTo={replyTo}
+        onCancelReply={() => setReplyTo(null)}
+      />
+
+      <ForwardModal
+        message={forwarding}
+        visible={!!forwarding}
+        onClose={() => setForwarding(null)}
+        onForwarded={() => setForwarding(null)}
+      />
+
+      <UserProfileModal
+        userId={profileUserId}
+        currentUserId={selfId}
+        onClose={() => setProfileUserId(null)}
+        onOpenChat={(chat) => {
+          setProfileUserId(null);
+          navigation.push("Chat", { containerId: chat.id, title: chat.title, kind: "dm" });
+        }}
       />
     </KeyboardAvoidingView>
   );

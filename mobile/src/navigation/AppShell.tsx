@@ -11,6 +11,7 @@ import ThreadsScreen from "../screens/activity/ThreadsScreen";
 import MentionsScreen from "../screens/activity/MentionsScreen";
 import CreateChannelScreen from "../screens/channels/CreateChannelScreen";
 import ChannelInfoScreen from "../screens/channels/ChannelInfoScreen";
+import MessageListScreen from "../screens/channels/MessageListScreen";
 import JoinChannelScreen from "../screens/channels/JoinChannelScreen";
 import ContactInfoScreen from "../screens/dms/ContactInfoScreen";
 import NewDirectMessageScreen from "../screens/dms/NewDirectMessageScreen";
@@ -54,6 +55,7 @@ function HomeStackNavigator() {
         component={ContactInfoScreen}
         options={{ title: "Contact info" }}
       />
+      <HomeStack.Screen name="MessageList" component={MessageListScreen} />
     </HomeStack.Navigator>
   );
 }

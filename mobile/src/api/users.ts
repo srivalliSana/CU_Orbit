@@ -4,6 +4,11 @@ import type { User } from "../types/api";
 
 export const listUsers = () => client.get<User[]>("/users").then((res) => res.data);
 
+// Any signed-in user may look up any other by id — how tapping a name on a
+// message opens their profile card, unrelated to the CampusOne directory
+// search (which stays faculty-only).
+export const getUser = (id: string) => client.get<User>(`/users/${encodeURIComponent(id)}`).then((res) => res.data);
+
 export interface ProfileUpdate {
   name?: string;
   bio?: string;
