@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Avatar from './Avatar';
 import {
-  bulkAddUsers, changeUserRole, getAdminUsers, getAuditLog, getDeletedMessages, removeUser, setUserActive,
+  bulkAddUsers, changeUserRole, getAdminUsers, getAuditLog, getDeletedMessages, promoteByEmail, removeUser, setUserActive,
 } from '../api/admin';
 import { timeLabel } from '../lib/format';
 
@@ -56,6 +56,9 @@ function MembersTab({ currentUser }) {
   const [bulkEmails, setBulkEmails] = useState('');
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkResult, setBulkResult] = useState(null);
+  const [promoteEmail, setPromoteEmail] = useState('');
+  const [promoteBusy, setPromoteBusy] = useState(false);
+  const [promoteDone, setPromoteDone] = useState(false);
 
   const load = () => getAdminUsers().then(setUsers).catch((e) => setError(e.message));
   useEffect(() => { load(); }, []);
@@ -90,11 +93,52 @@ function MembersTab({ currentUser }) {
     }
   };
 
+  const onPromote = async (e) => {
+    e.preventDefault();
+    setPromoteBusy(true);
+    setError(null);
+    try {
+      await promoteByEmail(promoteEmail.trim().toLowerCase());
+      setPromoteEmail('');
+      setPromoteDone(true);
+      setTimeout(() => setPromoteDone(false), 2500);
+      load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setPromoteBusy(false);
+    }
+  };
+
   if (error) return <p role="alert" className="text-sm text-red-600">{error}</p>;
   if (!users) return <p className="text-sm text-slate-400">Loading…</p>;
 
   return (
     <div className="space-y-6">
+      <form onSubmit={onPromote} className="rounded-xl border border-slate-200 p-3 dark:border-slate-800">
+        <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">Make superadmin by email</label>
+        <div className="mt-1 flex items-center gap-2">
+          <input
+            type="email"
+            required
+            value={promoteEmail}
+            onChange={(e) => setPromoteEmail(e.target.value)}
+            placeholder="name@cutm.ac.in"
+            className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:text-slate-100"
+          />
+          <button
+            type="submit"
+            disabled={promoteBusy || !promoteEmail.trim()}
+            className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {promoteBusy ? 'Promoting…' : promoteDone ? 'Done ✓' : 'Promote'}
+          </button>
+        </div>
+        <p className="mt-1 text-[11px] text-slate-400">
+          Creates the account if they haven't signed in yet, then gives them full superadmin access.
+        </p>
+      </form>
+
       <form onSubmit={onBulkAdd} className="rounded-xl border border-slate-200 p-3 dark:border-slate-800">
         <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">Bulk add by campus email</label>
         <textarea

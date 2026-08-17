@@ -82,5 +82,16 @@ export interface Message {
   edited_at?: string | null;
   reply_to?: { id: string; sender_name: string; text: string } | null;
   forwarded_from?: { sender_name: string } | null;
+  poll?: {
+    id: string;
+    channel_id: string;
+    question: string;
+    options: string[];
+    multiple_choice: boolean;
+    closed: boolean;
+    total_votes: number;
+    counts: number[];
+    my_votes: number[];
+  } | null;
   enriched_mentions: EnrichedMention[];
 }

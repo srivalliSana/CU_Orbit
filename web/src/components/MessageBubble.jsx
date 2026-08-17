@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { clockLabel } from '../lib/format';
 import { linkify } from '../lib/linkify';
-import { deleteMessage, editMessage, getReads, reactToMessage, setMessagePinned, starMessage, unstarMessage } from '../api/chat';
+import { deleteMessage, editMessage, getReads, reactToMessage, setMessagePinned, starMessage, unstarMessage, votePoll } from '../api/chat';
+import EmojiPicker from './EmojiPicker';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -24,6 +25,7 @@ export default function MessageBubble({
   const [busy, setBusy] = useState(false);
   const [lightbox, setLightbox] = useState(false);
   const [starred, setStarred] = useState(!!m.is_starred);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
 
   const reactionCounts = useMemo(() => {
     const counts = new Map();
@@ -64,6 +66,11 @@ export default function MessageBubble({
     setMenuOpen(false);
     setBusy(true);
     try { await deleteMessage(m.id); onChanged?.(); } finally { setBusy(false); }
+  };
+
+  const vote = async (optionIndex) => {
+    setBusy(true);
+    try { await votePoll(m.poll.id, optionIndex); onChanged?.(); } finally { setBusy(false); }
   };
 
   const saveEdit = async () => {
@@ -180,7 +187,21 @@ export default function MessageBubble({
                 {e}
               </button>
             ))}
+            <button
+              onClick={() => { setMenuOpen(false); setEmojiPickerOpen(true); }}
+              title="More emojis"
+              className="rounded-full px-1.5 text-lg font-semibold text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700"
+            >
+              +
+            </button>
           </div>
+        )}
+
+        {emojiPickerOpen && (
+          <EmojiPicker
+            onPick={(emoji) => { react(emoji); setEmojiPickerOpen(false); }}
+            onClose={() => setEmojiPickerOpen(false)}
+          />
         )}
 
         <div
@@ -214,6 +235,44 @@ export default function MessageBubble({
             >
               <p className="font-semibold">{m.reply_to.sender_name}</p>
               <p className="truncate">{m.reply_to.text || 'Attachment'}</p>
+            </div>
+          )}
+
+          {m.type === 'poll' && m.poll && (
+            <div className="mb-1 min-w-[220px]" onClick={(e) => e.stopPropagation()}>
+              <p className={`mb-2 text-sm font-semibold ${own ? 'text-white' : 'text-slate-800 dark:text-slate-100'}`}>
+                📊 {m.poll.question}
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {m.poll.options.map((opt, i) => {
+                  const count = m.poll.counts[i] || 0;
+                  const pct = m.poll.total_votes ? Math.round((count / m.poll.total_votes) * 100) : 0;
+                  const mine = (m.poll.my_votes || []).includes(i);
+                  return (
+                    <button
+                      key={i}
+                      disabled={busy || m.poll.closed}
+                      onClick={() => vote(i)}
+                      className={`relative overflow-hidden rounded-lg px-2.5 py-1.5 text-left text-xs disabled:opacity-70 ${
+                        own ? 'bg-blue-500/40' : 'bg-slate-100 dark:bg-slate-700'
+                      }`}
+                    >
+                      <span
+                        className={`absolute inset-y-0 left-0 ${own ? 'bg-blue-400/50' : 'bg-blue-500/20'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                      <span className="relative flex items-center justify-between gap-2">
+                        <span className={mine ? 'font-semibold' : ''}>{mine ? '✓ ' : ''}{opt}</span>
+                        <span className="shrink-0 opacity-70">{pct}%</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className={`mt-1.5 text-[11px] ${own ? 'text-blue-100' : 'text-slate-400'}`}>
+                {m.poll.total_votes} vote{m.poll.total_votes === 1 ? '' : 's'}
+                {m.poll.multiple_choice ? ' · Select one or more' : ' · Select one'}
+              </p>
             </div>
           )}
 

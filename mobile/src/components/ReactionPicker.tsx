@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
+import EmojiPicker from "./EmojiPicker";
 import { useThemeColors } from "../state/themeStore";
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
@@ -36,6 +37,7 @@ export default function ReactionPicker({
 }) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [emojiPickerVisible, setEmojiPickerVisible] = useState(false);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
@@ -53,7 +55,20 @@ export default function ReactionPicker({
                 <Text style={styles.emoji}>{emoji}</Text>
               </Pressable>
             ))}
+            <Pressable style={styles.emojiButton} onPress={() => setEmojiPickerVisible(true)}>
+              <Text style={styles.moreEmoji}>+</Text>
+            </Pressable>
           </View>
+
+          <EmojiPicker
+            visible={emojiPickerVisible}
+            onPick={(emoji) => {
+              setEmojiPickerVisible(false);
+              onSelect(emoji);
+              onClose();
+            }}
+            onClose={() => setEmojiPickerVisible(false)}
+          />
 
           <Pressable
             style={styles.actionButton}
@@ -148,6 +163,11 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   },
   emoji: {
     fontSize: 28,
+  },
+  moreEmoji: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: colors.textMuted,
   },
   actionButton: {
     borderTopWidth: StyleSheet.hairlineWidth,

@@ -84,3 +84,30 @@ export const getSharedMedia = (containerId: string, type: string) =>
       `/containers/${encodeURIComponent(containerId)}/media?type=${encodeURIComponent(type)}`
     )
     .then((res) => res.data);
+
+export interface PollSummary {
+  id: string;
+  channel_id: string;
+  question: string;
+  options: string[];
+  multiple_choice: boolean;
+  closed: boolean;
+  total_votes: number;
+  counts: number[];
+  my_votes: number[];
+}
+
+export const createPoll = (
+  channelId: string,
+  params: { question: string; options: string[]; multipleChoice?: boolean }
+) =>
+  client
+    .post<{ message: Message; poll: PollSummary }>(`/channels/${channelId}/polls`, {
+      question: params.question,
+      options: params.options,
+      multipleChoice: params.multipleChoice,
+    })
+    .then((res) => res.data);
+
+export const votePoll = (pollId: string, optionIndex: number) =>
+  client.post<PollSummary>(`/polls/${pollId}/vote`, { optionIndex }).then((res) => res.data);

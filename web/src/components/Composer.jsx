@@ -5,7 +5,7 @@ import Avatar from './Avatar';
 // Matches an in-progress "@word" run at the end of the typed text.
 const MENTION_TRIGGER = /(?:^|\s)@(\w*)$/;
 
-export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo, onCancelReply }) {
+export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo, onCancelReply, onCreatePoll }) {
   const [text, setText] = useState('');
   const [file, setFile] = useState(null);
   const [members, setMembers] = useState([]);
@@ -126,6 +126,17 @@ export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo,
           hidden
           onChange={(e) => setFile(e.target.files?.[0] || null)}
         />
+
+        {isChannel && onCreatePoll && (
+          <button
+            onClick={onCreatePoll}
+            aria-label="Create a poll"
+            title="Create a poll"
+            className="shrink-0 rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            📊
+          </button>
+        )}
 
         <textarea
           ref={box}

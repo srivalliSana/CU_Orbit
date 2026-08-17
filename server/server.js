@@ -204,7 +204,7 @@ const Message = sequelize.define('Message', {
     senderName: { type: DataTypes.STRING },
     senderAvatarUrl: { type: DataTypes.STRING },
     body: { type: DataTypes.TEXT },
-    type: { type: DataTypes.ENUM('text', 'image', 'video', 'voice', 'file', 'system'), defaultValue: 'text' },
+    type: { type: DataTypes.ENUM('text', 'image', 'video', 'voice', 'file', 'system', 'poll'), defaultValue: 'text' },
     attachments: { type: DataTypes.JSON, defaultValue: [] },
     reactions: { type: DataTypes.JSON, defaultValue: [] },
     thread_reply_count: { type: DataTypes.INTEGER, defaultValue: 0 },
@@ -225,6 +225,8 @@ const Message = sequelize.define('Message', {
     // Forwarded messages carry the original sender's name for a "Forwarded
     // from X" label; the body/attachments are already a plain copy.
     forwarded_from: { type: DataTypes.JSON, allowNull: true },
+    // Set only when type === 'poll' — the Poll row holds the question/options/votes.
+    poll_id: { type: DataTypes.UUID, allowNull: true },
 }, {
     // Every hot read path filters on one of these plus an ORDER BY timestamp
     // (chat history, home feed's last-message lookup, unread counts) — without
@@ -249,6 +251,26 @@ const AuditLog = sequelize.define('AuditLog', {
     target_type: { type: DataTypes.STRING, allowNull: true },
     target_id: { type: DataTypes.STRING, allowNull: true },
     detail: { type: DataTypes.STRING, allowNull: true },
+});
+
+/** "Polls in channels" — options are a plain array of strings, indexed by position. */
+const Poll = sequelize.define('Poll', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    channel_id: { type: DataTypes.STRING, allowNull: false },
+    question: { type: DataTypes.STRING, allowNull: false },
+    options: { type: DataTypes.JSON, allowNull: false },   // string[]
+    multiple_choice: { type: DataTypes.BOOLEAN, defaultValue: false },
+    created_by: { type: DataTypes.STRING, allowNull: false },
+    closed: { type: DataTypes.BOOLEAN, defaultValue: false },
+});
+
+const PollVote = sequelize.define('PollVote', {
+    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    poll_id: { type: DataTypes.UUID, allowNull: false },
+    user_id: { type: DataTypes.STRING, allowNull: false },
+    option_index: { type: DataTypes.INTEGER, allowNull: false },
+}, {
+    indexes: [{ unique: true, fields: ['poll_id', 'user_id', 'option_index'] }],
 });
 
 /** "Starred messages" — a private per-user bookmark, not visible to anyone else. */
@@ -1496,6 +1518,10 @@ app.get('/api/messages/:containerId', auth.requireAuth, async (req, res) => {
                 attributes: ['message_id'],
             })).map((s) => s.message_id)
         );
+        const pollIds = messages.filter((m) => m.type === 'poll' && m.poll_id).map((m) => m.poll_id);
+        const polls = pollIds.length ? await Poll.findAll({ where: { id: { [Op.in]: pollIds } } }) : [];
+        const pollSummaries = new Map();
+        for (const poll of polls) pollSummaries.set(poll.id, await pollSummary(poll, req.user.id));
         res.json(messages.map(m => ({
             id: m.id,
             channel_id: m.channelId,
@@ -1514,6 +1540,7 @@ app.get('/api/messages/:containerId', auth.requireAuth, async (req, res) => {
             edited_at: m.edited_at,
             reply_to: m.reply_to,
             forwarded_from: m.forwarded_from,
+            poll: m.type === 'poll' ? pollSummaries.get(m.poll_id) || null : undefined,
             enriched_mentions: (m.mentions || []).map(mn => ({
                 user_id: mn.user ? mn.user.id : '',
                 display_name: mn.user ? mn.user.name : '',
@@ -1894,6 +1921,99 @@ app.get('/api/containers/:id/media', auth.requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json([]); }
 });
 
+/** Vote counts + "did I vote" shape shared by every poll read path. */
+async function pollSummary(poll, userId) {
+    const votes = await PollVote.findAll({ where: { poll_id: poll.id } });
+    const counts = (poll.options || []).map((_, i) => votes.filter((v) => v.option_index === i).length);
+    return {
+        id: poll.id,
+        channel_id: poll.channel_id,
+        question: poll.question,
+        options: poll.options,
+        multiple_choice: poll.multiple_choice,
+        closed: poll.closed,
+        total_votes: votes.length,
+        counts,
+        my_votes: votes.filter((v) => v.user_id === userId).map((v) => v.option_index),
+    };
+}
+
+/** "Polls in channels" — creating one posts a normal poll-type message alongside it. */
+app.post('/api/channels/:id/polls', auth.requireAuth, async (req, res) => {
+    try {
+        const channelId = req.params.id;
+        const { question, options, multipleChoice } = req.body;
+        if (!question || !Array.isArray(options) || options.length < 2) {
+            return res.status(400).json({ error: 'bad_request', message: 'A poll needs a question and at least 2 options' });
+        }
+        const member = await ChannelMember.findOne({ where: { channelId, userId: req.user.id } });
+        if (!member && !isGroupAdmin(req.user)) {
+            return res.status(403).json({ error: 'forbidden', message: 'Not a member of this channel' });
+        }
+        const sender = await User.findByPk(req.user.id);
+        const poll = await Poll.create({
+            channel_id: channelId, question, options: options.map(String),
+            multiple_choice: !!multipleChoice, created_by: req.user.id,
+        });
+        const msg = await Message.create({
+            senderId: sender.id, senderName: sender.name, senderAvatarUrl: sender.avatarUrl,
+            channelId, type: 'poll', body: question, poll_id: poll.id,
+        });
+        const summary = await pollSummary(poll, req.user.id);
+        realtime.toContainer(channelId, 'message', {
+            id: msg.id, container_id: channelId, sender_id: msg.senderId, sender_name: msg.senderName,
+            sender_avatar_url: msg.senderAvatarUrl, text: msg.body, type: 'poll', poll: summary,
+            sent_at: Number(msg.timestamp), status: msg.status,
+        });
+        res.json({ message: msg, poll: summary });
+    } catch (e) {
+        console.error('[poll-create] failed:', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
+app.get('/api/polls/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const poll = await Poll.findByPk(req.params.id);
+        if (!poll) return res.status(404).json({ error: 'not_found' });
+        if (!(await canAccessContainer(req.user.id, poll.channel_id, req.user))) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
+        res.json(await pollSummary(poll, req.user.id));
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** Toggles the caller's vote on one option; single-choice polls clear any other vote first. */
+app.post('/api/polls/:id/vote', auth.requireAuth, async (req, res) => {
+    try {
+        const poll = await Poll.findByPk(req.params.id);
+        if (!poll) return res.status(404).json({ error: 'not_found' });
+        if (poll.closed) return res.status(403).json({ error: 'forbidden', message: 'This poll is closed' });
+        if (!(await canAccessContainer(req.user.id, poll.channel_id, req.user))) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
+        const optionIndex = Number(req.body.optionIndex);
+        if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= (poll.options || []).length) {
+            return res.status(400).json({ error: 'bad_request', message: 'Invalid option' });
+        }
+        const existing = await PollVote.findOne({ where: { poll_id: poll.id, user_id: req.user.id, option_index: optionIndex } });
+        if (existing) {
+            await existing.destroy();
+        } else {
+            if (!poll.multiple_choice) {
+                await PollVote.destroy({ where: { poll_id: poll.id, user_id: req.user.id } });
+            }
+            await PollVote.create({ poll_id: poll.id, user_id: req.user.id, option_index: optionIndex });
+        }
+        const summary = await pollSummary(poll, req.user.id);
+        realtime.toContainer(poll.channel_id, 'poll-updated', summary);
+        res.json(summary);
+    } catch (e) {
+        console.error('[poll-vote] failed:', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
 /**
  * Same story as reactions above: the Android app has called DELETE on this
  * route since it shipped, and it has always 404'd — never implemented here.
@@ -2099,6 +2219,27 @@ app.post('/api/admin/users/bulk-add', auth.requireAuth, async (req, res) => {
         }
         await logAudit(req.user, 'user.bulk_added', 'user', null, `${results.added.length} added, ${results.skipped.length} skipped`);
         res.json({ success: true, ...results });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/**
+ * "Superadmin can make other people superadmin by email" — provisions the
+ * account if it doesn't exist yet (same as bulk-add), then promotes it
+ * straight to the global admin role, so this also works for someone who
+ * hasn't signed in for the first time yet.
+ */
+app.post('/api/admin/users/promote-by-email', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const email = String(req.body.email || '').toLowerCase().trim();
+        if (!email || !isCampusEmail(email)) {
+            return res.status(400).json({ error: 'bad_request', message: 'Enter a valid cutm.ac.in / cutmap.ac.in address' });
+        }
+        const user = await findOrCreateOrbitUser(email, null);
+        user.role = 'admin';
+        await user.save();
+        await logAudit(req.user, 'user.promoted_superadmin', 'user', user.id, user.campus_email || user.email);
+        res.json({ success: true, user });
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 

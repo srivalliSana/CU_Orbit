@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, TextIn
 
 import Avatar from "../../components/Avatar";
 import {
-  bulkAddUsers, changeUserRole, getAdminUsers, getAuditLog, getDeletedMessages, removeUser, setUserActive,
+  bulkAddUsers, changeUserRole, getAdminUsers, getAuditLog, getDeletedMessages, promoteByEmail, removeUser, setUserActive,
   type AuditLogEntry, type DeletedMessage,
 } from "../../api/admin";
 import { apiErrorMessage } from "../../api/client";
@@ -46,6 +46,8 @@ function MembersTab() {
   const [error, setError] = useState<string | null>(null);
   const [bulkEmails, setBulkEmails] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [promoteEmail, setPromoteEmail] = useState("");
+  const [promoteBusy, setPromoteBusy] = useState(false);
 
   const load = () => getAdminUsers().then(setUsers).catch((e) => setError(apiErrorMessage(e)));
   useEffect(() => { load(); }, []);
@@ -86,6 +88,20 @@ function MembersTab() {
     }
   };
 
+  const onPromote = async () => {
+    setPromoteBusy(true);
+    try {
+      await promoteByEmail(promoteEmail.trim().toLowerCase());
+      Alert.alert("Promoted", `${promoteEmail.trim()} is now a superadmin.`);
+      setPromoteEmail("");
+      load();
+    } catch (e) {
+      setError(apiErrorMessage(e));
+    } finally {
+      setPromoteBusy(false);
+    }
+  };
+
   if (error) return <Text style={styles.error}>{error}</Text>;
   if (!users) return <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />;
 
@@ -95,6 +111,22 @@ function MembersTab() {
       keyExtractor={(u) => u.id}
       contentContainerStyle={{ paddingBottom: 24 }}
       ListHeaderComponent={
+        <View>
+          <View style={styles.bulkBox}>
+            <Text style={styles.bulkLabel}>Make superadmin by email</Text>
+            <TextInput
+              value={promoteEmail}
+              onChangeText={setPromoteEmail}
+              placeholder="name@cutm.ac.in"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              style={styles.bulkInput}
+            />
+            <Pressable onPress={onPromote} disabled={promoteBusy || !promoteEmail.trim()} style={styles.bulkButton}>
+              <Text style={styles.bulkButtonText}>{promoteBusy ? "Promoting…" : "Promote"}</Text>
+            </Pressable>
+          </View>
         <View style={styles.bulkBox}>
           <Text style={styles.bulkLabel}>Bulk add by campus email</Text>
           <TextInput
@@ -108,6 +140,7 @@ function MembersTab() {
           <Pressable onPress={onBulkAdd} disabled={bulkBusy || !bulkEmails.trim()} style={styles.bulkButton}>
             <Text style={styles.bulkButtonText}>{bulkBusy ? "Adding…" : "Add"}</Text>
           </Pressable>
+          </View>
         </View>
       }
       renderItem={({ item }) => (

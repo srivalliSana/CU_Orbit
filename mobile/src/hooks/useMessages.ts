@@ -10,6 +10,7 @@ import {
   setMessagePinned,
   starMessage,
   unstarMessage,
+  votePoll,
 } from "../api/messages";
 
 export function useMessages(containerId: string) {
@@ -82,5 +83,12 @@ export function useMessages(containerId: string) {
     },
   });
 
-  return { ...query, send, react, remove, edit, pin, star };
+  const vote = useMutation({
+    mutationFn: (params: { pollId: string; optionIndex: number }) => votePoll(params.pollId, params.optionIndex),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["messages", containerId] });
+    },
+  });
+
+  return { ...query, send, react, remove, edit, pin, star, vote };
 }

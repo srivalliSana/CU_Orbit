@@ -31,6 +31,9 @@ export const removeUser = (id: string) => client.delete(`/admin/users/${id}`);
 export const bulkAddUsers = (emails: string[]) =>
   client.post<{ added: unknown[]; skipped: unknown[] }>("/admin/users/bulk-add", { emails }).then((res) => res.data);
 
+export const promoteByEmail = (email: string) =>
+  client.post<{ success: boolean; user: User }>("/admin/users/promote-by-email", { email }).then((res) => res.data);
+
 export const getAuditLog = () => client.get<AuditLogEntry[]>("/admin/audit-log").then((res) => res.data);
 
 export const getDeletedMessages = () => client.get<DeletedMessage[]>("/admin/deleted-messages").then((res) => res.data);

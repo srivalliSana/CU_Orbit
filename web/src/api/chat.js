@@ -22,6 +22,15 @@ export const getStarredMessages = (containerId) =>
 export const getPinnedMessages = (containerId) =>
   api(`/api/containers/${encodeURIComponent(containerId)}/pinned`);
 
+export const createPoll = (channelId, { question, options, multipleChoice }) =>
+  api(`/api/channels/${encodeURIComponent(channelId)}/polls`, {
+    method: 'POST',
+    body: JSON.stringify({ question, options, multipleChoice }),
+  });
+
+export const votePoll = (pollId, optionIndex) =>
+  api(`/api/polls/${pollId}/vote`, { method: 'POST', body: JSON.stringify({ optionIndex }) });
+
 export const getSharedMedia = (containerId, type) =>
   api(`/api/containers/${encodeURIComponent(containerId)}/media?type=${encodeURIComponent(type)}`);
 

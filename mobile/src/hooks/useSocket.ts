@@ -51,9 +51,17 @@ export function useChannelSocket(containerId: string) {
         queryClient.invalidateQueries({ queryKey: ["messages", containerId] });
       }
     });
+    // Vote counts change without a new message being sent, so this needs its
+    // own listener rather than riding along with the one above.
+    const unsubscribePoll = socket.on("poll-updated", (poll: { channel_id: string }) => {
+      if (poll.channel_id === containerId) {
+        queryClient.invalidateQueries({ queryKey: ["messages", containerId] });
+      }
+    });
 
     return () => {
       unsubscribe();
+      unsubscribePoll();
       socket.leave(containerId);
     };
   }, [containerId, queryClient]);

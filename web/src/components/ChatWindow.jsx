@@ -3,7 +3,8 @@ import Avatar from './Avatar';
 import MessageBubble from './MessageBubble';
 import Composer from './Composer';
 import ForwardModal from './ForwardModal';
-import { getMessages, markConversationRead, sendMessage, uploadFile } from '../api/chat';
+import PollComposerModal from './PollComposerModal';
+import { createPoll, getMessages, markConversationRead, sendMessage, uploadFile } from '../api/chat';
 import { getChannelMembers } from '../api/channels';
 import { dayLabel, lastSeenLabel } from '../lib/format';
 import { join, leave, on, sendTyping } from '../api/socket';
@@ -21,6 +22,7 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
   const [canModerate, setCanModerate] = useState(false);
   const [replyTo, setReplyTo] = useState(null);
   const [forwarding, setForwarding] = useState(null);
+  const [creatingPoll, setCreatingPoll] = useState(false);
   const scroller = useRef(null);
   const atBottom = useRef(true);
 
@@ -60,7 +62,11 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
         return [...next, { userId: t.userId, userName: t.name, at: Date.now() }];
       });
     });
-    return () => { offMessage(); offRead(); offTyping(); leave(chat.id); };
+    // Every viewer's vote counts update live, not just the voter's own screen.
+    const offPoll = on('poll-updated', (poll) => {
+      setMessages((prev) => prev.map((m) => (m.poll?.id === poll.id ? { ...m, poll } : m)));
+    });
+    return () => { offMessage(); offRead(); offTyping(); offPoll(); leave(chat.id); };
   }, [chat.id, user?.id]);
 
   // Typing indicators expire on their own; the server never sends a "stopped".
@@ -163,6 +169,12 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
     }
   };
 
+  const handleCreatePoll = async ({ question, options, multipleChoice }) => {
+    await createPoll(chat.id, { question, options, multipleChoice });
+    setCreatingPoll(false);
+    onSent?.();
+  };
+
   let lastDay = null;
 
   return (
@@ -246,7 +258,12 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
         onTyping={() => sendTyping(chat.id, user?.name)}
         replyTo={replyTo}
         onCancelReply={() => setReplyTo(null)}
+        onCreatePoll={chat.kind === 'channel' ? () => setCreatingPoll(true) : undefined}
       />
+
+      {creatingPoll && (
+        <PollComposerModal onCreate={handleCreatePoll} onClose={() => setCreatingPoll(false)} />
+      )}
 
       {forwarding && (
         <ForwardModal

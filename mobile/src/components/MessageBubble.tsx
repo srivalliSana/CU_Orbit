@@ -29,6 +29,7 @@ export default function MessageBubble({
   onForward,
   onStar,
   onOpenProfile,
+  onVote,
 }: {
   message: Message;
   isOwn: boolean;
@@ -42,6 +43,7 @@ export default function MessageBubble({
   onForward?: () => void;
   onStar?: (starred: boolean) => void;
   onOpenProfile?: (userId: string) => void;
+  onVote?: (optionIndex: number) => void;
 }) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -153,6 +155,35 @@ export default function MessageBubble({
           <View style={styles.replyQuote}>
             <Text style={styles.replyQuoteSender}>{message.reply_to.sender_name}</Text>
             <Text style={styles.replyQuoteText} numberOfLines={1}>{message.reply_to.text || "Attachment"}</Text>
+          </View>
+        ) : null}
+
+        {message.type === "poll" && message.poll ? (
+          <View style={styles.pollBox}>
+            <Text style={styles.pollQuestion}>📊 {message.poll.question}</Text>
+            {message.poll.options.map((opt, i) => {
+              const count = message.poll!.counts[i] ?? 0;
+              const pct = message.poll!.total_votes ? Math.round((count / message.poll!.total_votes) * 100) : 0;
+              const mine = (message.poll!.my_votes ?? []).includes(i);
+              return (
+                <Pressable
+                  key={i}
+                  disabled={message.poll!.closed}
+                  onPress={() => onVote?.(i)}
+                  style={styles.pollOption}
+                >
+                  <View style={[styles.pollOptionFill, { width: `${pct}%` }]} />
+                  <Text style={[styles.pollOptionText, mine && styles.pollOptionTextMine]} numberOfLines={1}>
+                    {mine ? "✓ " : ""}{opt}
+                  </Text>
+                  <Text style={styles.pollOptionPct}>{pct}%</Text>
+                </Pressable>
+              );
+            })}
+            <Text style={styles.pollMeta}>
+              {message.poll.total_votes} vote{message.poll.total_votes === 1 ? "" : "s"}
+              {message.poll.multiple_choice ? " · Select one or more" : " · Select one"}
+            </Text>
           </View>
         ) : null}
 
@@ -326,6 +357,52 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     borderRadius: 10,
     marginBottom: 4,
     backgroundColor: colors.surface,
+  },
+  pollBox: {
+    minWidth: 220,
+    marginBottom: 4,
+  },
+  pollQuestion: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 8,
+  },
+  pollOption: {
+    position: "relative",
+    overflow: "hidden",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 6,
+  },
+  pollOptionFill: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: colors.primary,
+    opacity: 0.15,
+  },
+  pollOptionText: {
+    fontSize: 13,
+    color: colors.text,
+    flexShrink: 1,
+  },
+  pollOptionTextMine: {
+    fontWeight: "700",
+  },
+  pollOptionPct: {
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  pollMeta: {
+    fontSize: 11,
+    color: colors.textMuted,
   },
   fileRow: {
     flexDirection: "row",

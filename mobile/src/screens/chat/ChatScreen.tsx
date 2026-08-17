@@ -14,6 +14,8 @@ import MessageBubble from "../../components/MessageBubble";
 import Composer from "../../components/Composer";
 import ForwardModal from "../../components/ForwardModal";
 import UserProfileModal from "../../components/UserProfileModal";
+import PollComposerModal from "../../components/PollComposerModal";
+import { createPoll } from "../../api/messages";
 import { useThemeColors } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
 import type { Message } from "../../types/api";
@@ -24,7 +26,7 @@ export default function ChatScreen({ route, navigation }: Props) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { containerId, title, kind } = route.params;
-  const { data: messages, isLoading, error, refetch, send, react, remove, edit, pin, star } = useMessages(containerId);
+  const { data: messages, isLoading, error, refetch, send, react, remove, edit, pin, star, vote } = useMessages(containerId);
   const { typingName, notifyTyping } = useTyping(containerId);
   const selfId = useAuthStore((s) => s.user?.id);
   const selfRole = useAuthStore((s) => s.user?.role);
@@ -33,6 +35,7 @@ export default function ChatScreen({ route, navigation }: Props) {
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [forwarding, setForwarding] = useState<Message | null>(null);
   const [profileUserId, setProfileUserId] = useState<string | null>(null);
+  const [creatingPoll, setCreatingPoll] = useState(false);
 
   useChannelSocket(containerId);
 
@@ -132,6 +135,7 @@ export default function ChatScreen({ route, navigation }: Props) {
             onForward={() => setForwarding(item)}
             onStar={(starred) => star.mutate({ messageId: item.id, starred })}
             onOpenProfile={(userId) => setProfileUserId(userId)}
+            onVote={item.poll ? (optionIndex) => vote.mutate({ pollId: item.poll!.id, optionIndex }) : undefined}
           />
         )}
         contentContainerStyle={styles.list}
@@ -146,6 +150,17 @@ export default function ChatScreen({ route, navigation }: Props) {
         kind={kind}
         replyTo={replyTo}
         onCancelReply={() => setReplyTo(null)}
+        onCreatePoll={kind === "channel" ? () => setCreatingPoll(true) : undefined}
+      />
+
+      <PollComposerModal
+        visible={creatingPoll}
+        onCreate={async ({ question, options, multipleChoice }) => {
+          await createPoll(containerId, { question, options, multipleChoice });
+          setCreatingPoll(false);
+          refetch();
+        }}
+        onClose={() => setCreatingPoll(false)}
       />
 
       <ForwardModal

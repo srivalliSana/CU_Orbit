@@ -38,6 +38,7 @@ export default function Composer({
   kind,
   replyTo,
   onCancelReply,
+  onCreatePoll,
 }: {
   onSend: (payload: SendPayload) => void;
   onTyping?: () => void;
@@ -45,6 +46,7 @@ export default function Composer({
   kind?: "channel" | "dm";
   replyTo?: ReplyTarget | null;
   onCancelReply?: () => void;
+  onCreatePoll?: () => void;
 }) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -243,6 +245,11 @@ export default function Composer({
         <Pressable onPress={openCamera} style={styles.iconButton}>
           <Text style={styles.icon}>📷</Text>
         </Pressable>
+        {kind === "channel" && onCreatePoll ? (
+          <Pressable onPress={onCreatePoll} style={styles.iconButton}>
+            <Text style={styles.icon}>📊</Text>
+          </Pressable>
+        ) : null}
 
         <TextInput
           value={text}

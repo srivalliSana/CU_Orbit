@@ -14,6 +14,9 @@ export const removeUser = (id) =>
 export const bulkAddUsers = (emails) =>
   api('/api/admin/users/bulk-add', { method: 'POST', body: JSON.stringify({ emails }) });
 
+export const promoteByEmail = (email) =>
+  api('/api/admin/users/promote-by-email', { method: 'POST', body: JSON.stringify({ email }) });
+
 export const getAuditLog = () => api('/api/admin/audit-log');
 
 export const getDeletedMessages = () => api('/api/admin/deleted-messages');
