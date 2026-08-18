@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { clockLabel } from '../lib/format';
 import { linkify } from '../lib/linkify';
 import { deleteMessage, editMessage, getReads, hideMessage, reactToMessage, setMessagePinned, starMessage, unstarMessage, votePoll } from '../api/chat';
+import Avatar from './Avatar';
 import EmojiPicker from './EmojiPicker';
 import PollVotesModal from './PollVotesModal';
 import { saveFile } from '../lib/saveFile';
@@ -266,6 +267,9 @@ export default function MessageBubble({
                   const count = m.poll.counts[i] || 0;
                   const pct = m.poll.total_votes ? Math.round((count / m.poll.total_votes) * 100) : 0;
                   const mine = (m.poll.my_votes || []).includes(i);
+                  const optionVoters = m.poll.voters?.[i] || [];
+                  const shown = optionVoters.slice(0, 3);
+                  const extra = optionVoters.length - shown.length;
                   return (
                     <button
                       key={i}
@@ -280,8 +284,24 @@ export default function MessageBubble({
                         style={{ width: `${pct}%` }}
                       />
                       <span className="relative flex items-center justify-between gap-2">
-                        <span className={mine ? 'font-semibold' : ''}>{mine ? '✓ ' : ''}{opt}</span>
-                        <span className="shrink-0 opacity-70">{pct}%</span>
+                        <span className={`truncate ${mine ? 'font-semibold' : ''}`}>{mine ? '✓ ' : ''}{opt}</span>
+                        <span className="flex shrink-0 items-center gap-1.5">
+                          {shown.length > 0 && (
+                            <span className="flex items-center">
+                              {shown.map((v, vi) => (
+                                <span key={v.id} className={vi > 0 ? '-ml-2' : ''} title={v.name}>
+                                  <Avatar name={v.name} url={v.avatarUrl} size={18} />
+                                </span>
+                              ))}
+                              {extra > 0 && (
+                                <span className="-ml-2 flex h-[18px] w-[18px] items-center justify-center rounded-full bg-slate-400 text-[9px] font-semibold text-white ring-2 ring-white dark:ring-slate-700">
+                                  +{extra}
+                                </span>
+                              )}
+                            </span>
+                          )}
+                          <span className="opacity-70">{count}</span>
+                        </span>
                       </span>
                     </button>
                   );
@@ -364,7 +384,7 @@ export default function MessageBubble({
               </div>
             </div>
           ) : (
-            m.text ? (
+            m.text && m.type !== 'poll' ? (
               <p className="whitespace-pre-wrap break-words text-sm">
                 {linkify(m.text, own ? 'underline underline-offset-2 text-blue-100' : 'underline underline-offset-2 text-blue-600 dark:text-blue-400')}
               </p>

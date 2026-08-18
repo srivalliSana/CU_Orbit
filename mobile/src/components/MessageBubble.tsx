@@ -180,6 +180,9 @@ export default function MessageBubble({
               const count = message.poll!.counts[i] ?? 0;
               const pct = message.poll!.total_votes ? Math.round((count / message.poll!.total_votes) * 100) : 0;
               const mine = (message.poll!.my_votes ?? []).includes(i);
+              const optionVoters = message.poll!.voters?.[i] ?? [];
+              const shown = optionVoters.slice(0, 3);
+              const extra = optionVoters.length - shown.length;
               return (
                 <Pressable
                   key={i}
@@ -191,7 +194,23 @@ export default function MessageBubble({
                   <Text style={[styles.pollOptionText, mine && styles.pollOptionTextMine]} numberOfLines={1}>
                     {mine ? "✓ " : ""}{opt}
                   </Text>
-                  <Text style={styles.pollOptionPct}>{pct}%</Text>
+                  <View style={styles.pollOptionRight}>
+                    {shown.length > 0 ? (
+                      <View style={styles.voterStack}>
+                        {shown.map((v, vi) => (
+                          <View key={v.id} style={[styles.voterStackAvatar, vi > 0 && styles.voterStackAvatarOverlap]}>
+                            <Avatar name={v.name} url={v.avatarUrl} size={18} />
+                          </View>
+                        ))}
+                        {extra > 0 ? (
+                          <View style={[styles.voterStackExtra, styles.voterStackAvatarOverlap]}>
+                            <Text style={styles.voterStackExtraText}>+{extra}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    ) : null}
+                    <Text style={styles.pollOptionPct}>{count}</Text>
+                  </View>
                 </Pressable>
               );
             })}
@@ -261,7 +280,7 @@ export default function MessageBubble({
           </Pressable>
         ) : null}
 
-        {message.text ? (
+        {message.text && message.type !== "poll" ? (
           <Text style={styles.text}>{linkify(message.text, styles.link)}</Text>
         ) : null}
         <View style={styles.metaRow}>
@@ -460,6 +479,39 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   pollOptionPct: {
     fontSize: 12,
     color: colors.textMuted,
+  },
+  pollOptionRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  voterStack: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  voterStackAvatar: {
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: colors.surface,
+    overflow: "hidden",
+  },
+  voterStackAvatarOverlap: {
+    marginLeft: -8,
+  },
+  voterStackExtra: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.textMuted,
+    borderWidth: 1.5,
+    borderColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  voterStackExtraText: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: colors.surface,
   },
   pollMeta: {
     fontSize: 11,
