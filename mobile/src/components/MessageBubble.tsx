@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Alert, Image, Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { File, Paths } from "expo-file-system";
 import * as FileSystemLegacy from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
@@ -8,6 +8,7 @@ import { VideoView, useVideoPlayer } from "expo-video";
 
 import ReactionPicker from "./ReactionPicker";
 import EditMessageModal from "./EditMessageModal";
+import Avatar from "./Avatar";
 import { linkify } from "../lib/linkify";
 import { resolveMediaUrl } from "../constants/config";
 import { clockLabel } from "../lib/format";
@@ -214,18 +215,30 @@ export default function MessageBubble({
                 <Text style={styles.votesSubtitle}>
                   {message.poll.voted_members} of {message.poll.total_members} member{message.poll.total_members === 1 ? "" : "s"} voted
                 </Text>
-                {message.poll.options.map((opt, i) => {
-                  const count = message.poll!.counts[i] ?? 0;
-                  const mine = (message.poll!.my_votes ?? []).includes(i);
-                  return (
-                    <View key={i} style={styles.votesRow}>
-                      <Text style={styles.votesOptionText} numberOfLines={1}>{opt}</Text>
-                      <Text style={styles.votesCount}>
-                        {count} vote{count === 1 ? "" : "s"}{mine ? " ⭐" : ""}
-                      </Text>
-                    </View>
-                  );
-                })}
+                <ScrollView style={styles.votesScroll}>
+                  {message.poll.options.map((opt, i) => {
+                    const count = message.poll!.counts[i] ?? 0;
+                    const optionVoters = message.poll!.voters?.[i] ?? [];
+                    return (
+                      <View key={i} style={styles.votesGroup}>
+                        <View style={styles.votesGroupHeader}>
+                          <Text style={styles.votesOptionText} numberOfLines={1}>{opt}</Text>
+                          <Text style={styles.votesCount}>{count} vote{count === 1 ? "" : "s"}</Text>
+                        </View>
+                        {optionVoters.length > 0 ? (
+                          optionVoters.map((v) => (
+                            <View key={v.id} style={styles.voterRow}>
+                              <Avatar name={v.name} url={v.avatarUrl} size={22} />
+                              <Text style={styles.voterName} numberOfLines={1}>{v.name}</Text>
+                            </View>
+                          ))
+                        ) : (
+                          <Text style={styles.voterEmpty}>No votes yet</Text>
+                        )}
+                      </View>
+                    );
+                  })}
+                </ScrollView>
               </Pressable>
             </Pressable>
           </Modal>
@@ -484,19 +497,26 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     marginTop: 2,
     marginBottom: 12,
   },
-  votesRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+  votesScroll: {
+    maxHeight: 340,
+  },
+  votesGroup: {
     backgroundColor: colors.background,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    marginBottom: 8,
+  },
+  votesGroupHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
     marginBottom: 6,
   },
   votesOptionText: {
     fontSize: 13,
+    fontWeight: "600",
     color: colors.text,
     flexShrink: 1,
   },
@@ -504,6 +524,22 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     fontSize: 12,
     fontWeight: "600",
     color: colors.textMuted,
+  },
+  voterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 3,
+  },
+  voterName: {
+    fontSize: 12,
+    color: colors.textMuted,
+    flexShrink: 1,
+  },
+  voterEmpty: {
+    fontSize: 12,
+    color: colors.textMuted,
+    fontStyle: "italic",
   },
   fileRow: {
     flexDirection: "row",

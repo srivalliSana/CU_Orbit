@@ -6,7 +6,7 @@ import { isFacultyEmail } from '../lib/permissions';
 
 /** Left pane: search, then channels and direct messages. */
 
-export default function ChatList({ user, chats, workspaces, workspaceId, onSwitchWorkspace, activeId, onSelect, onNewGroup, onOpenContact, onOpenMentions, onOpenProfile, onOpenAdmin }) {
+export default function ChatList({ user, chats, workspaces, workspaceId, onSwitchWorkspace, activeId, onSelect, onNewGroup, onOpenContact, onOpenMentions, onOpenProfile, onOpenAdmin, width }) {
   // Mirrors isFacultyEmail() on the server. The server is the authority for
   // channel creation; this only avoids showing an action that would 403.
   const canCreate = user?.role === 'admin' || isFacultyEmail(user?.campus_email || user?.email);
@@ -56,7 +56,8 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
 
   return (
     <aside
-      className={`${activeId ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:max-w-sm`}
+      style={width ? { '--sidebar-width': `${width}px` } : undefined}
+      className={`${activeId ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:w-[var(--sidebar-width,20rem)] md:max-w-[none]`}
     >
       <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
         <button onClick={onOpenProfile} aria-label="Your profile" className="shrink-0 rounded-full">

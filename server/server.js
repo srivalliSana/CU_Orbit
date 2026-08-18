@@ -1953,6 +1953,19 @@ async function pollSummary(poll, userId) {
     const votes = await PollVote.findAll({ where: { poll_id: poll.id } });
     const counts = (poll.options || []).map((_, i) => votes.filter((v) => v.option_index === i).length);
     const totalMembers = await ChannelMember.count({ where: { channelId: poll.channel_id } });
+    const voterIds = [...new Set(votes.map((v) => v.user_id))];
+    const voterUsers = voterIds.length
+        ? await User.findAll({ where: { id: { [Op.in]: voterIds } }, attributes: ['id', 'name', 'avatarUrl'] })
+        : [];
+    const voterById = new Map(voterUsers.map((u) => [u.id, u]));
+    const voters = (poll.options || []).map((_, i) =>
+        votes
+            .filter((v) => v.option_index === i)
+            .map((v) => {
+                const u = voterById.get(v.user_id);
+                return { id: v.user_id, name: u?.name || 'Unknown', avatarUrl: u?.avatarUrl || null };
+            })
+    );
     return {
         id: poll.id,
         channel_id: poll.channel_id,
@@ -1962,10 +1975,11 @@ async function pollSummary(poll, userId) {
         closed: poll.closed,
         total_votes: votes.length,
         counts,
+        voters,
         my_votes: votes.filter((v) => v.user_id === userId).map((v) => v.option_index),
         // A member can pick several options in a multiple-choice poll, so
         // "voted" is counted by distinct person, not by ballot.
-        voted_members: new Set(votes.map((v) => v.user_id)).size,
+        voted_members: voterIds.length,
         total_members: totalMembers,
     };
 }

@@ -91,6 +91,7 @@ export interface Message {
     closed: boolean;
     total_votes: number;
     counts: number[];
+    voters: { id: string; name: string; avatarUrl: string | null }[][];
     my_votes: number[];
     voted_members: number;
     total_members: number;

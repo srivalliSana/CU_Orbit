@@ -37,8 +37,40 @@ export default function App() {
   const [profileUserId, setProfileUserId] = useState(null);   // clicked-on message sender
   const [scrollToMessageId, setScrollToMessageId] = useState(null);   // set from a pinned/starred/media list click
   const [joinBanner, setJoinBanner] = useState(null);   // result of an invite-link join attempt
+  const [sidebarWidth, setSidebarWidth] = useState(
+    () => Number(localStorage.getItem('cuorbit_sidebar_width')) || 320
+  );
+  const resizing = useRef(false);
   const seen = useRef(null);   // last-seen unread snapshot, for notifications
   const queryClient = useQueryClient();
+
+  const SIDEBAR_MIN = 260;
+  const SIDEBAR_MAX = 560;
+
+  // Drag-to-resize the chat-list/chat-window split — desktop only (below the
+  // md breakpoint the list is a full-width single pane, no divider to grab).
+  const startResizing = useCallback((e) => {
+    e.preventDefault();
+    resizing.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMove = (moveEvent) => {
+      if (!resizing.current) return;
+      const next = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, moveEvent.clientX));
+      setSidebarWidth(next);
+    };
+    const onUp = () => {
+      resizing.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      setSidebarWidth((w) => { localStorage.setItem('cuorbit_sidebar_width', String(w)); return w; });
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, []);
 
   useEffect(() => {
     checkSession().then((u) => {
@@ -188,6 +220,14 @@ export default function App() {
         onOpenMentions={() => setMentionsOpen(true)}
         onOpenProfile={() => setProfileOpen(true)}
         onOpenAdmin={user?.role === 'admin' ? () => setAdminOpen(true) : undefined}
+        width={sidebarWidth}
+      />
+      <div
+        onMouseDown={startResizing}
+        className="hidden w-1 shrink-0 cursor-col-resize bg-slate-200 hover:bg-blue-400 active:bg-blue-500 dark:bg-slate-800 dark:hover:bg-blue-500 md:block"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize chat list"
       />
       {active
         ? (
