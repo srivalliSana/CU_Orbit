@@ -138,9 +138,9 @@ export default function MessageBubble({
             onClick={() => setActionsOpen((v) => !v)}
             aria-label="Message actions"
             title="Message actions"
-            className={`absolute -top-3 z-10 hidden h-6 w-6 items-center justify-center rounded-full bg-white text-slate-500 shadow ring-1 ring-slate-200 group-hover:flex hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-700 ${
+            className={`absolute -top-3 right-2 z-10 hidden h-6 w-6 items-center justify-center rounded-full bg-white text-slate-500 shadow ring-1 ring-slate-200 group-hover:flex hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-700 ${
               actionsOpen ? 'flex' : ''
-            } ${own ? 'right-2' : 'left-2'}`}
+            }`}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M6 9l6 6 6-6" />
@@ -152,9 +152,7 @@ export default function MessageBubble({
           <>
           <div className="fixed inset-0 z-10" onClick={() => setActionsOpen(false)} />
           <div
-            className={`absolute -top-2 z-20 w-44 -translate-y-full overflow-hidden rounded-2xl bg-white py-1.5 shadow-xl ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700 ${
-              own ? 'right-2' : 'left-2'
-            }`}
+            className="absolute -top-2 right-2 z-20 w-44 -translate-y-full overflow-hidden rounded-2xl bg-white py-1.5 shadow-xl ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700"
           >
             <div className="flex items-center justify-between px-2 pb-1.5">
               {QUICK_EMOJIS.map((e) => (
