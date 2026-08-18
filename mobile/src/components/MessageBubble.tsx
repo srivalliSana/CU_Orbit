@@ -5,6 +5,7 @@ import * as FileSystemLegacy from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
 import * as Sharing from "expo-sharing";
 import { VideoView, useVideoPlayer } from "expo-video";
+import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 
 import ReactionPicker from "./ReactionPicker";
 import EditMessageModal from "./EditMessageModal";
@@ -271,6 +272,8 @@ export default function MessageBubble({
           <Pressable onLongPress={handleSave}>
             <VideoBubble uri={attachmentUrl} style={styles.image} />
           </Pressable>
+        ) : message.type === "voice" && attachmentUrl ? (
+          <VoiceBubble uri={attachmentUrl} styles={styles} />
         ) : message.type === "file" && attachmentUrl ? (
           <Pressable onPress={handleOpen} onLongPress={onFileLongPress} style={styles.fileRow}>
             <Text style={styles.fileIcon}>📎</Text>
@@ -357,6 +360,29 @@ function VideoBubble({ uri, style }: { uri: string; style: object }) {
       // confirms the platform is allowed to honour it.
       fullscreenOptions={{ enable: true }}
     />
+  );
+}
+
+function VoiceBubble({ uri, styles }: { uri: string; styles: ReturnType<typeof makeStyles> }) {
+  const player = useAudioPlayer(uri);
+  const status = useAudioPlayerStatus(player);
+  const seconds = Math.round((status.playing ? status.currentTime : status.duration) || 0);
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+
+  return (
+    <Pressable
+      style={styles.voiceRow}
+      onPress={() => (status.playing ? player.pause() : player.play())}
+    >
+      <View style={styles.voicePlayButton}>
+        <Text style={styles.voicePlayIcon}>{status.playing ? "⏸" : "▶"}</Text>
+      </View>
+      <View style={styles.voiceTrack}>
+        <View style={[styles.voiceTrackFill, { width: `${status.duration ? (status.currentTime / status.duration) * 100 : 0}%` }]} />
+      </View>
+      <Text style={styles.voiceDuration}>{`${m}:${String(s).padStart(2, "0")}`}</Text>
+    </Pressable>
   );
 }
 
@@ -606,6 +632,41 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     fontSize: 14,
     color: colors.primary,
     maxWidth: 180,
+  },
+  voiceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 180,
+    paddingVertical: 4,
+  },
+  voicePlayButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.primary,
+  },
+  voicePlayIcon: {
+    fontSize: 12,
+    color: colors.primaryText,
+  },
+  voiceTrack: {
+    flex: 1,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    overflow: "hidden",
+  },
+  voiceTrackFill: {
+    height: "100%",
+    backgroundColor: colors.primary,
+  },
+  voiceDuration: {
+    fontSize: 11,
+    color: colors.textMuted,
+    fontVariant: ["tabular-nums"],
   },
   metaRow: {
     flexDirection: "row",

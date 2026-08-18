@@ -2,6 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
+import {
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+  useAudioRecorderState,
+} from "expo-audio";
 
 import { uploadFile, type PickedFile } from "../api/upload";
 import { getChannelMembers, type ChannelMemberRow } from "../api/channels";
@@ -31,6 +38,12 @@ export interface ReplyTarget {
 // plumbing, and composing a mention mid-message is a rare edit pattern.
 const MENTION_TRIGGER = /(?:^|\s)@(\w*)$/;
 
+const formatDuration = (totalSeconds: number) => {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+};
+
 export default function Composer({
   onSend,
   onTyping,
@@ -59,6 +72,8 @@ export default function Composer({
   const [taggedUsers, setTaggedUsers] = useState<{ user_id: string; display_name: string }[]>([]);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const lastTyped = useRef(0);
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorderState = useAudioRecorderState(recorder);
 
   // Only channels have a fixed member list worth tagging from — a DM is
   // already a conversation with exactly one other person.
@@ -211,6 +226,29 @@ export default function Composer({
     ]);
   };
 
+  const startVoiceRecording = async () => {
+    const permission = await requestRecordingPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Microphone access needed", "Enable microphone access in settings to record voice messages.");
+      return;
+    }
+    await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+    await recorder.prepareToRecordAsync();
+    recorder.record();
+  };
+
+  const stopVoiceRecording = async (keep: boolean) => {
+    const seconds = Math.round(recorderState.durationMillis / 1000);
+    await recorder.stop();
+    if (!keep || !recorder.uri) return;
+    stageFiles([
+      {
+        file: { uri: recorder.uri, name: `Voice message (${formatDuration(seconds)}).m4a`, mimeType: "audio/m4a" },
+        type: "voice",
+      },
+    ]);
+  };
+
   return (
     <View>
       {suggestions.length > 0 && (
@@ -283,6 +321,23 @@ export default function Composer({
           style={styles.input}
           multiline
         />
+
+        {recorderState.isRecording ? (
+          <View style={styles.recordingRow}>
+            <View style={styles.recordingDot} />
+            <Text style={styles.recordingTimer}>{formatDuration(Math.round(recorderState.durationMillis / 1000))}</Text>
+            <Pressable onPress={() => stopVoiceRecording(false)} hitSlop={8} style={styles.recordingCancel}>
+              <Text style={styles.recordingCancelText}>✕</Text>
+            </Pressable>
+            <Pressable onPress={() => stopVoiceRecording(true)} style={styles.recordingStop}>
+              <View style={styles.recordingStopIcon} />
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable onPress={startVoiceRecording} style={styles.iconButton}>
+            <Text style={styles.icon}>🎙️</Text>
+          </Pressable>
+        )}
 
         <Pressable
           onPress={submitText}
@@ -365,6 +420,48 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   },
   icon: {
     fontSize: 20,
+  },
+  recordingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 18,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: `${colors.danger}1a`,
+  },
+  recordingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.danger,
+  },
+  recordingTimer: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.danger,
+    fontVariant: ["tabular-nums"],
+  },
+  recordingCancel: {
+    paddingHorizontal: 4,
+  },
+  recordingCancelText: {
+    fontSize: 13,
+    color: colors.textMuted,
+  },
+  recordingStop: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.danger,
+  },
+  recordingStopIcon: {
+    width: 10,
+    height: 10,
+    borderRadius: 2,
+    backgroundColor: "#fff",
   },
   menuBackdrop: {
     position: "absolute",

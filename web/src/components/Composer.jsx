@@ -6,6 +6,12 @@ import EmojiPicker from './EmojiPicker';
 // Matches an in-progress "@word" run at the end of the typed text.
 const MENTION_TRIGGER = /(?:^|\s)@(\w*)$/;
 
+const formatDuration = (totalSeconds) => {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+};
+
 /** One button in the formatting toolbar. */
 function ToolButton({ label, onClick, children }) {
   return (
@@ -31,9 +37,17 @@ export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo,
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [formattingOpen, setFormattingOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
   const fileInput = useRef(null);
+  const cameraInput = useRef(null);
   const lastTyped = useRef(0);
   const box = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const streamRef = useRef(null);
+  const chunksRef = useRef([]);
+  const secondsRef = useRef(0);
+  const timerRef = useRef(null);
 
   // Only channels have a fixed member list worth tagging from — a DM is
   // already a conversation with exactly one other person.
@@ -181,6 +195,46 @@ export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo,
     setMentionQuery('');
   };
 
+  // Recording ends up staged in the same `file` slot a picked attachment
+  // would use — the composer's existing preview/remove/send path already
+  // handles anything in `file`, so a voice note needs no new send path.
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      streamRef.current = stream;
+      chunksRef.current = [];
+      secondsRef.current = 0;
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        if (mr.keepRecording) {
+          const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+          setFile(new File([blob], `Voice message (${formatDuration(secondsRef.current)}).webm`, { type: 'audio/webm' }));
+        }
+      };
+      mr.start();
+      mediaRecorderRef.current = mr;
+      setRecording(true);
+      setRecordSeconds(0);
+      timerRef.current = setInterval(() => {
+        secondsRef.current += 1;
+        setRecordSeconds(secondsRef.current);
+      }, 1000);
+    } catch {
+      window.alert('Microphone access is needed to record a voice message.');
+    }
+  };
+
+  const stopRecording = (keep) => {
+    clearInterval(timerRef.current);
+    setRecording(false);
+    if (mediaRecorderRef.current) mediaRecorderRef.current.keepRecording = keep;
+    mediaRecorderRef.current?.stop();
+  };
+
+  useEffect(() => () => clearInterval(timerRef.current), []);
+
   return (
     <div className="relative border-t border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
       {suggestions.length > 0 && (
@@ -246,6 +300,14 @@ export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo,
             hidden
             onChange={(e) => setFile(e.target.files?.[0] || null)}
           />
+          <input
+            ref={cameraInput}
+            type="file"
+            accept="image/*,video/*"
+            capture="environment"
+            hidden
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+          />
           {attachMenuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setAttachMenuOpen(false)} />
@@ -261,6 +323,12 @@ export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo,
                   className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
                   <span className="w-4 text-center">🖼️</span><span>Photos &amp; videos</span>
+                </button>
+                <button
+                  onClick={() => { setAttachMenuOpen(false); cameraInput.current?.click(); }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  <span className="w-4 text-center">📷</span><span>Camera</span>
                 </button>
                 {isChannel && onCreatePoll && (
                   <button
@@ -321,6 +389,26 @@ export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo,
             className="shrink-0 rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             @
+          </button>
+        )}
+
+        {recording ? (
+          <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-red-50 px-2 py-1 dark:bg-red-950/40">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+            <span className="text-xs font-medium tabular-nums text-red-600 dark:text-red-400">{formatDuration(recordSeconds)}</span>
+            <button onClick={() => stopRecording(false)} aria-label="Cancel recording" title="Cancel" className="px-1 text-slate-400 hover:text-slate-600">✕</button>
+            <button onClick={() => stopRecording(true)} aria-label="Stop and keep recording" title="Stop" className="rounded-full bg-red-500 p-1.5 text-white hover:bg-red-600">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2" /></svg>
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={startRecording}
+            aria-label="Record a voice message"
+            title="Record a voice message"
+            className="shrink-0 rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            🎙️
           </button>
         )}
 
