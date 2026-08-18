@@ -11,6 +11,7 @@ export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo,
   const [members, setMembers] = useState([]);
   const [mentionQuery, setMentionQuery] = useState(null);
   const [taggedUsers, setTaggedUsers] = useState([]);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const fileInput = useRef(null);
   const lastTyped = useRef(0);
   const box = useRef(null);
@@ -113,30 +114,48 @@ export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo,
       )}
 
       <div className="flex items-end gap-2">
-        <button
-          onClick={() => fileInput.current?.click()}
-          aria-label="Attach a file"
-          className="shrink-0 rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-        >
-          📎
-        </button>
-        <input
-          ref={fileInput}
-          type="file"
-          hidden
-          onChange={(e) => setFile(e.target.files?.[0] || null)}
-        />
-
-        {isChannel && onCreatePoll && (
+        <div className="relative shrink-0">
           <button
-            onClick={onCreatePoll}
-            aria-label="Create a poll"
-            title="Create a poll"
-            className="shrink-0 rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+            onClick={() => setAttachMenuOpen((v) => !v)}
+            aria-label="Attach"
+            className="rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
-            📊
+            📎
           </button>
-        )}
+          <input
+            ref={fileInput}
+            type="file"
+            hidden
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+          />
+          {attachMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setAttachMenuOpen(false)} />
+              <div className="absolute bottom-full left-0 z-20 mb-2 w-48 overflow-hidden rounded-2xl bg-white py-1.5 shadow-xl ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
+                <button
+                  onClick={() => { setAttachMenuOpen(false); fileInput.current.accept = ''; fileInput.current?.click(); }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  <span className="w-4 text-center">📄</span><span>Document</span>
+                </button>
+                <button
+                  onClick={() => { setAttachMenuOpen(false); fileInput.current.accept = 'image/*,video/*'; fileInput.current?.click(); }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  <span className="w-4 text-center">🖼️</span><span>Photos &amp; videos</span>
+                </button>
+                {isChannel && onCreatePoll && (
+                  <button
+                    onClick={() => { setAttachMenuOpen(false); onCreatePoll(); }}
+                    className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
+                  >
+                    <span className="w-4 text-center">📊</span><span>Poll</span>
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
 
         <textarea
           ref={box}

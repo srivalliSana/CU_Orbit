@@ -3,6 +3,7 @@ import { clockLabel } from '../lib/format';
 import { linkify } from '../lib/linkify';
 import { deleteMessage, editMessage, getReads, hideMessage, reactToMessage, setMessagePinned, starMessage, unstarMessage, votePoll } from '../api/chat';
 import EmojiPicker from './EmojiPicker';
+import PollVotesModal from './PollVotesModal';
 import { saveFile } from '../lib/saveFile';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -44,6 +45,7 @@ export default function MessageBubble({
   const [starred, setStarred] = useState(!!m.is_starred);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [deleteMenuOpen, setDeleteMenuOpen] = useState(false);
+  const [viewingVotes, setViewingVotes] = useState(false);
 
   const reactionCounts = useMemo(() => {
     const counts = new Map();
@@ -289,7 +291,19 @@ export default function MessageBubble({
                 {m.poll.total_votes} vote{m.poll.total_votes === 1 ? '' : 's'}
                 {m.poll.multiple_choice ? ' · Select one or more' : ' · Select one'}
               </p>
+              {m.poll.total_votes > 0 && (
+                <button
+                  onClick={() => setViewingVotes(true)}
+                  className={`mt-1 block w-full text-center text-[11px] font-semibold ${own ? 'text-blue-100 hover:text-white' : 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400'}`}
+                >
+                  View votes
+                </button>
+              )}
             </div>
+          )}
+
+          {viewingVotes && (
+            <PollVotesModal poll={m.poll} onClose={() => setViewingVotes(false)} />
           )}
 
           {media && m.type === 'image' && (

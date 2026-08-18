@@ -1952,6 +1952,7 @@ app.get('/api/containers/:id/media', auth.requireAuth, async (req, res) => {
 async function pollSummary(poll, userId) {
     const votes = await PollVote.findAll({ where: { poll_id: poll.id } });
     const counts = (poll.options || []).map((_, i) => votes.filter((v) => v.option_index === i).length);
+    const totalMembers = await ChannelMember.count({ where: { channelId: poll.channel_id } });
     return {
         id: poll.id,
         channel_id: poll.channel_id,
@@ -1962,6 +1963,10 @@ async function pollSummary(poll, userId) {
         total_votes: votes.length,
         counts,
         my_votes: votes.filter((v) => v.user_id === userId).map((v) => v.option_index),
+        // A member can pick several options in a multiple-choice poll, so
+        // "voted" is counted by distinct person, not by ballot.
+        voted_members: new Set(votes.map((v) => v.user_id)).size,
+        total_members: totalMembers,
     };
 }
 

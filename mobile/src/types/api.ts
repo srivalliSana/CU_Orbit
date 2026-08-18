@@ -92,6 +92,8 @@ export interface Message {
     total_votes: number;
     counts: number[];
     my_votes: number[];
+    voted_members: number;
+    total_members: number;
   } | null;
   enriched_mentions: EnrichedMention[];
 }

@@ -57,6 +57,7 @@ export default function Composer({
   const [members, setMembers] = useState<ChannelMemberRow[]>([]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [taggedUsers, setTaggedUsers] = useState<{ user_id: string; display_name: string }[]>([]);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const lastTyped = useRef(0);
 
   // Only channels have a fixed member list worth tagging from — a DM is
@@ -239,17 +240,41 @@ export default function Composer({
         </View>
       )}
       <View style={styles.container}>
-        <Pressable onPress={pickDocument} style={styles.iconButton}>
-          <Text style={styles.icon}>📎</Text>
-        </Pressable>
-        <Pressable onPress={openCamera} style={styles.iconButton}>
-          <Text style={styles.icon}>📷</Text>
-        </Pressable>
-        {kind === "channel" && onCreatePoll ? (
-          <Pressable onPress={onCreatePoll} style={styles.iconButton}>
-            <Text style={styles.icon}>📊</Text>
+        <View>
+          <Pressable onPress={() => setAttachMenuOpen((v) => !v)} style={styles.iconButton}>
+            <Text style={styles.icon}>📎</Text>
           </Pressable>
-        ) : null}
+          {attachMenuOpen ? (
+            <>
+              <Pressable style={styles.menuBackdrop} onPress={() => setAttachMenuOpen(false)} />
+              <View style={styles.attachMenu}>
+                <Pressable
+                  style={styles.attachMenuRow}
+                  onPress={() => { setAttachMenuOpen(false); pickDocument(); }}
+                >
+                  <Text style={styles.attachMenuIcon}>📄</Text>
+                  <Text style={styles.attachMenuText}>Document</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.attachMenuRow}
+                  onPress={() => { setAttachMenuOpen(false); openCamera(); }}
+                >
+                  <Text style={styles.attachMenuIcon}>📷</Text>
+                  <Text style={styles.attachMenuText}>Camera</Text>
+                </Pressable>
+                {kind === "channel" && onCreatePoll ? (
+                  <Pressable
+                    style={styles.attachMenuRow}
+                    onPress={() => { setAttachMenuOpen(false); onCreatePoll(); }}
+                  >
+                    <Text style={styles.attachMenuIcon}>📊</Text>
+                    <Text style={styles.attachMenuText}>Poll</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </>
+          ) : null}
+        </View>
 
         <TextInput
           value={text}
@@ -340,6 +365,48 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   },
   icon: {
     fontSize: 20,
+  },
+  menuBackdrop: {
+    position: "absolute",
+    top: -1000,
+    left: -1000,
+    right: -1000,
+    bottom: -1000,
+    zIndex: 10,
+  },
+  attachMenu: {
+    position: "absolute",
+    bottom: "100%",
+    left: 0,
+    marginBottom: 8,
+    minWidth: 180,
+    borderRadius: 16,
+    paddingVertical: 6,
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    zIndex: 20,
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  attachMenuRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  attachMenuIcon: {
+    fontSize: 16,
+    width: 20,
+    textAlign: "center",
+  },
+  attachMenuText: {
+    fontSize: 14,
+    color: colors.text,
   },
   input: {
     flex: 1,

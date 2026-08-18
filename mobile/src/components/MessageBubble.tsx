@@ -54,6 +54,7 @@ export default function MessageBubble({
   const [pickerVisible, setPickerVisible] = useState(false);
   const [editVisible, setEditVisible] = useState(false);
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [votesVisible, setVotesVisible] = useState(false);
 
   const reactionCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -197,7 +198,37 @@ export default function MessageBubble({
               {message.poll.total_votes} vote{message.poll.total_votes === 1 ? "" : "s"}
               {message.poll.multiple_choice ? " · Select one or more" : " · Select one"}
             </Text>
+            {message.poll.total_votes > 0 ? (
+              <Pressable onPress={() => setVotesVisible(true)}>
+                <Text style={styles.pollViewVotes}>View votes</Text>
+              </Pressable>
+            ) : null}
           </View>
+        ) : null}
+
+        {message.poll ? (
+          <Modal visible={votesVisible} transparent animationType="fade" onRequestClose={() => setVotesVisible(false)}>
+            <Pressable style={styles.votesBackdrop} onPress={() => setVotesVisible(false)}>
+              <Pressable style={styles.votesCard} onPress={(e) => e.stopPropagation()}>
+                <Text style={styles.votesQuestion}>{message.poll.question}</Text>
+                <Text style={styles.votesSubtitle}>
+                  {message.poll.voted_members} of {message.poll.total_members} member{message.poll.total_members === 1 ? "" : "s"} voted
+                </Text>
+                {message.poll.options.map((opt, i) => {
+                  const count = message.poll!.counts[i] ?? 0;
+                  const mine = (message.poll!.my_votes ?? []).includes(i);
+                  return (
+                    <View key={i} style={styles.votesRow}>
+                      <Text style={styles.votesOptionText} numberOfLines={1}>{opt}</Text>
+                      <Text style={styles.votesCount}>
+                        {count} vote{count === 1 ? "" : "s"}{mine ? " ⭐" : ""}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </Pressable>
+            </Pressable>
+          </Modal>
         ) : null}
 
         {message.type === "image" && attachmentUrl ? (
@@ -419,6 +450,59 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   },
   pollMeta: {
     fontSize: 11,
+    color: colors.textMuted,
+  },
+  pollViewVotes: {
+    marginTop: 4,
+    textAlign: "center",
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  votesBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  votesCard: {
+    width: "100%",
+    maxWidth: 340,
+    borderRadius: 16,
+    padding: 18,
+    backgroundColor: colors.surface,
+  },
+  votesQuestion: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  votesSubtitle: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
+    marginBottom: 12,
+  },
+  votesRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    backgroundColor: colors.background,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 6,
+  },
+  votesOptionText: {
+    fontSize: 13,
+    color: colors.text,
+    flexShrink: 1,
+  },
+  votesCount: {
+    fontSize: 12,
+    fontWeight: "600",
     color: colors.textMuted,
   },
   fileRow: {
