@@ -273,6 +273,21 @@ const PollVote = sequelize.define('PollVote', {
     indexes: [{ unique: true, fields: ['poll_id', 'user_id', 'option_index'] }],
 });
 
+/**
+ * "Delete for me" — hides a message from one person's view only, unlike
+ * DELETE /api/messages/:id ("delete for everyone") which soft-deletes the
+ * row for the whole conversation. No permission check beyond being able to
+ * read the container at all: hiding something from your own view is never
+ * restricted by author/moderator rules.
+ */
+const HiddenMessage = sequelize.define('HiddenMessage', {
+    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    user_id: { type: DataTypes.STRING, allowNull: false },
+    message_id: { type: DataTypes.UUID, allowNull: false },
+}, {
+    indexes: [{ unique: true, fields: ['user_id', 'message_id'] }],
+});
+
 /** "Starred messages" — a private per-user bookmark, not visible to anyone else. */
 const StarredMessage = sequelize.define('StarredMessage', {
     id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
@@ -1502,6 +1517,10 @@ app.get('/api/messages/:containerId', auth.requireAuth, async (req, res) => {
         const before = req.query.before ? Number(req.query.before) : null;
         const where = { [Op.or]: [{ channelId: containerId }, { dm_id: containerId }], deleted_at: null };
         if (before) where.timestamp = { [Op.lt]: before };
+        // "Delete for me" — hidden only from the requester's own view, so this
+        // has to be per-request, not baked into the shared `deleted_at` filter.
+        const hidden = await HiddenMessage.findAll({ where: { user_id: req.user.id }, attributes: ['message_id'] });
+        if (hidden.length) where.id = { [Op.notIn]: hidden.map((h) => h.message_id) };
         const messages = (await Message.findAll({
             where,
             order: [['timestamp', 'DESC']],
@@ -1764,11 +1783,19 @@ app.put('/api/messages/:id', auth.requireAuth, async (req, res) => {
 
         // Pinning is a container-wide flag ("important, everyone should see
         // this"), not per-user — anyone with access to the conversation may
-        // set it, same bar as reading it at all.
+        // set it, same bar as reading it at all. Only one message may be
+        // pinned per conversation at a time — pinning a new one replaces
+        // whichever was pinned before, unlike starring which has no limit.
         if (pinned !== undefined) {
             const containerId = msg.channelId || msg.dm_id;
             if (!(await canAccessContainer(req.user.id, containerId, req.user))) {
                 return res.status(403).json({ error: 'forbidden', message: 'Not a participant in this conversation' });
+            }
+            if (pinned) {
+                await Message.update(
+                    { is_pinned: false },
+                    { where: { [Op.or]: [{ channelId: containerId }, { dm_id: containerId }], is_pinned: true, id: { [Op.ne]: msg.id } } }
+                );
             }
             msg.is_pinned = !!pinned;
         }
@@ -2063,6 +2090,20 @@ app.delete('/api/messages/:id', auth.requireAuth, async (req, res) => {
         console.error('[DELETE-MESSAGE-ERROR]', e);
         res.status(500).json(e);
     }
+});
+
+/** "Delete for me" — see HiddenMessage above. */
+app.post('/api/messages/:id/hide', auth.requireAuth, async (req, res) => {
+    try {
+        const msg = await Message.findByPk(req.params.id);
+        if (!msg) return res.status(404).json({ error: 'not_found' });
+        const containerId = msg.channelId || msg.dm_id;
+        if (!(await canAccessContainer(req.user.id, containerId, req.user))) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
+        await HiddenMessage.findOrCreate({ where: { user_id: req.user.id, message_id: msg.id } });
+        res.json({ success: true, id: req.params.id, container_id: containerId });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
 app.get('/api/mentions/:userId', auth.requireAuth, async (req, res) => {

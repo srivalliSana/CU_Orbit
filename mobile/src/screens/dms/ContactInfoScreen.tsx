@@ -29,19 +29,19 @@ export default function ContactInfoScreen({ route, navigation }: Props) {
       <View style={styles.navBlock}>
         <Pressable
           style={styles.navRow}
-          onPress={() => navigation.navigate("MessageList", { containerId, mode: "media", title: "Shared media" })}
+          onPress={() => navigation.navigate("MessageList", { containerId, mode: "media", title: "Shared media", chatTitle: name, chatKind: "dm" })}
         >
           <Text style={styles.navRowText}>🖼️ Shared media</Text>
         </Pressable>
         <Pressable
           style={styles.navRow}
-          onPress={() => navigation.navigate("MessageList", { containerId, mode: "pinned", title: "Pinned messages" })}
+          onPress={() => navigation.navigate("MessageList", { containerId, mode: "pinned", title: "Pinned messages", chatTitle: name, chatKind: "dm" })}
         >
           <Text style={styles.navRowText}>📌 Pinned messages</Text>
         </Pressable>
         <Pressable
           style={styles.navRow}
-          onPress={() => navigation.navigate("MessageList", { containerId, mode: "starred", title: "Starred messages" })}
+          onPress={() => navigation.navigate("MessageList", { containerId, mode: "starred", title: "Starred messages", chatTitle: name, chatKind: "dm" })}
         >
           <Text style={styles.navRowText}>⭐ Starred messages</Text>
         </Pressable>

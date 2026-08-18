@@ -30,7 +30,7 @@ const MEDIA_CATEGORIES = [
  * what the server will actually allow, showing its rejection reason rather
  * than guessing who's allowed to do what.
  */
-export default function ChannelInfoPanel({ channelId, currentUser, onClose, onChanged }) {
+export default function ChannelInfoPanel({ channelId, currentUser, onClose, onChanged, onJumpToMessage }) {
   const [channel, setChannel] = useState(null);
   const [members, setMembers] = useState([]);
   const [error, setError] = useState(null);
@@ -223,7 +223,11 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
           {listItems && listItems.length === 0 && <p className="text-sm text-slate-400">Nothing here yet.</p>}
           <ul className="space-y-2">
             {(listItems || []).map((it) => (
-              <li key={it.id} className="rounded-lg bg-slate-50 p-2.5 text-sm dark:bg-slate-800">
+              <li
+                key={it.id}
+                onClick={view !== 'media' ? () => onJumpToMessage?.(it.id) : undefined}
+                className={`rounded-lg bg-slate-50 p-2.5 text-sm dark:bg-slate-800 ${view !== 'media' ? 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700' : ''}`}
+              >
                 <p className="text-xs font-semibold text-slate-500">{it.sender_name}</p>
                 {view === 'media' && mediaCategory === 'link' ? (
                   (it.links || []).map((url, i) => (

@@ -2,7 +2,7 @@ import type { NavigatorScreenParams } from "@react-navigation/native";
 
 export type HomeStackParamList = {
   List: undefined;
-  Chat: { containerId: string; title: string; kind: "channel" | "dm" };
+  Chat: { containerId: string; title: string; kind: "channel" | "dm"; scrollToMessageId?: string };
   Threads: undefined;
   Mentions: undefined;
   CreateChannel: undefined;
@@ -10,7 +10,13 @@ export type HomeStackParamList = {
   ChannelInfo: { channelId: string };
   JoinChannel: { code: string };
   ContactInfo: { userId: string; name: string; containerId: string };
-  MessageList: { containerId: string; mode: "pinned" | "starred" | "media"; title: string };
+  MessageList: {
+    containerId: string;
+    mode: "pinned" | "starred" | "media";
+    title: string;
+    chatTitle: string;
+    chatKind: "channel" | "dm";
+  };
 };
 
 export type ActivityStackParamList = {

@@ -23,7 +23,7 @@ const MEDIA_CATEGORIES: { key: string; label: string }[] = [
 export default function MessageListScreen({ route, navigation }: Props) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { containerId, mode, title } = route.params;
+  const { containerId, mode, title, chatTitle, chatKind } = route.params;
   const [category, setCategory] = useState("image");
   const [items, setItems] = useState<(StarredMessage & { links?: string[] })[] | null>(null);
 
@@ -64,20 +64,37 @@ export default function MessageListScreen({ route, navigation }: Props) {
           keyExtractor={(it) => it.id}
           contentContainerStyle={styles.list}
           ListEmptyComponent={<Text style={styles.empty}>Nothing here yet.</Text>}
-          renderItem={({ item }) => (
-            <View style={styles.row}>
-              <Text style={styles.sender}>{item.sender_name}</Text>
-              {mode === "media" && category === "link" ? (
-                (item.links ?? []).map((url, i) => (
-                  <Pressable key={i} onPress={() => Linking.openURL(url)}>
-                    <Text style={styles.link} numberOfLines={1}>{url}</Text>
-                  </Pressable>
-                ))
-              ) : (
-                <Text style={styles.text} numberOfLines={2}>{item.text || "Attachment"}</Text>
-              )}
-            </View>
-          )}
+          renderItem={({ item }) => {
+            const jumpable = mode === "pinned" || mode === "starred";
+            const content = (
+              <>
+                <Text style={styles.sender}>{item.sender_name}</Text>
+                {mode === "media" && category === "link" ? (
+                  (item.links ?? []).map((url, i) => (
+                    <Pressable key={i} onPress={() => Linking.openURL(url)}>
+                      <Text style={styles.link} numberOfLines={1}>{url}</Text>
+                    </Pressable>
+                  ))
+                ) : (
+                  <Text style={styles.text} numberOfLines={2}>{item.text || "Attachment"}</Text>
+                )}
+              </>
+            );
+            if (!jumpable) return <View style={styles.row}>{content}</View>;
+            return (
+              <Pressable
+                style={styles.row}
+                onPress={() => navigation.navigate("Chat", {
+                  containerId,
+                  title: chatTitle,
+                  kind: chatKind,
+                  scrollToMessageId: item.id,
+                })}
+              >
+                {content}
+              </Pressable>
+            );
+          }}
         />
       )}
     </View>

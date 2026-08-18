@@ -35,6 +35,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [profileUserId, setProfileUserId] = useState(null);   // clicked-on message sender
+  const [scrollToMessageId, setScrollToMessageId] = useState(null);   // set from a pinned/starred/media list click
   const [joinBanner, setJoinBanner] = useState(null);   // result of an invite-link join attempt
   const seen = useRef(null);   // last-seen unread snapshot, for notifications
   const queryClient = useQueryClient();
@@ -199,6 +200,8 @@ export default function App() {
             onOpenChannelInfo={(id) => { setContact(null); setChannelInfoId(id); }}
             onOpenProfile={(userId) => setProfileUserId(userId)}
             onBack={() => setActive(null)}
+            scrollToMessageId={scrollToMessageId}
+            onScrolledToMessage={() => setScrollToMessageId(null)}
           />
         )
         : <EmptyState user={user} onNewGroup={() => setNewGroup(true)} />}
@@ -208,6 +211,7 @@ export default function App() {
           target={contact}
           onClose={() => setContact(null)}
           onOpenChat={(chat) => { setContact(null); setActive(chat); refreshChats(); }}
+          onJumpToMessage={(id) => { setContact(null); setScrollToMessageId(id); }}
         />
       )}
 
@@ -217,6 +221,7 @@ export default function App() {
           currentUser={user}
           onClose={() => setChannelInfoId(null)}
           onChanged={refreshChats}
+          onJumpToMessage={(id) => { setChannelInfoId(null); setScrollToMessageId(id); }}
         />
       )}
 

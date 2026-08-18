@@ -122,17 +122,15 @@ export default function ReactionPicker({
             </Pressable>
           ) : null}
 
-          {canDelete ? (
-            <Pressable
-              style={styles.actionButton}
-              onPress={() => {
-                onDelete?.();
-                onClose();
-              }}
-            >
-              <Text style={styles.deleteText}>Delete message</Text>
-            </Pressable>
-          ) : null}
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => {
+              onDelete?.();
+              onClose();
+            }}
+          >
+            <Text style={styles.deleteText}>Delete message</Text>
+          </Pressable>
         </Pressable>
       </Pressable>
     </Modal>

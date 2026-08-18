@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Button, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -25,8 +25,8 @@ type Props = NativeStackScreenProps<HomeStackParamList, "Chat">;
 export default function ChatScreen({ route, navigation }: Props) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { containerId, title, kind } = route.params;
-  const { data: messages, isLoading, error, refetch, send, react, remove, edit, pin, star, vote } = useMessages(containerId);
+  const { containerId, title, kind, scrollToMessageId } = route.params;
+  const { data: messages, isLoading, error, refetch, send, react, remove, hide, edit, pin, star, vote } = useMessages(containerId);
   const { typingName, notifyTyping } = useTyping(containerId);
   const selfId = useAuthStore((s) => s.user?.id);
   const selfRole = useAuthStore((s) => s.user?.role);
@@ -36,6 +36,26 @@ export default function ChatScreen({ route, navigation }: Props) {
   const [forwarding, setForwarding] = useState<Message | null>(null);
   const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const [creatingPoll, setCreatingPoll] = useState(false);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const listRef = useRef<FlatList<Message>>(null);
+  const pinnedMessage = messages?.find((m) => m.is_pinned);
+
+  const jumpToMessage = (id: string) => {
+    const index = messages?.findIndex((m) => m.id === id) ?? -1;
+    if (index === -1 || !listRef.current) return;
+    listRef.current.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+    setHighlightId(id);
+    setTimeout(() => setHighlightId((cur) => (cur === id ? null : cur)), 1800);
+  };
+
+  // Arrived here from the Pinned/Starred list (a different screen) —
+  // messages needs to have loaded before an index lookup means anything.
+  useEffect(() => {
+    if (!scrollToMessageId || !messages?.length) return;
+    jumpToMessage(scrollToMessageId);
+    navigation.setParams({ scrollToMessageId: undefined });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollToMessageId, messages?.length]);
 
   useChannelSocket(containerId);
 
@@ -118,17 +138,39 @@ export default function ChatScreen({ route, navigation }: Props) {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={90}
     >
+      {pinnedMessage ? (
+        <Pressable style={styles.pinnedBar} onPress={() => jumpToMessage(pinnedMessage.id)}>
+          <Text style={styles.pinnedIcon}>📌</Text>
+          <Text style={styles.pinnedText} numberOfLines={1}>
+            Pinned: {pinnedMessage.text || (pinnedMessage.type === "poll" ? pinnedMessage.poll?.question : "Attachment")}
+          </Text>
+        </Pressable>
+      ) : null}
+
       <FlatList
+        ref={listRef}
         data={messages}
         keyExtractor={(m) => m.id}
+        onScrollToIndexFailed={(info) => {
+          // The target isn't rendered yet (variable-height rows) — approximate
+          // an offset, then let the exact scrollToIndex retry land.
+          setTimeout(() => {
+            listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+            setTimeout(() => {
+              if (scrollToMessageId) jumpToMessage(scrollToMessageId);
+            }, 100);
+          }, 50);
+        }}
         renderItem={({ item }) => (
           <MessageBubble
             message={item}
             isOwn={item.sender_id === selfId}
             canModerate={canModerate}
             isSuperAdmin={isSuperAdmin}
+            highlighted={highlightId === item.id}
             onReact={(emoji) => react.mutate({ messageId: item.id, emoji })}
-            onDelete={() => remove.mutate(item.id)}
+            onDeleteForMe={() => hide.mutate(item.id)}
+            onDeleteForEveryone={() => remove.mutate(item.id)}
             onEdit={(text) => edit.mutate({ messageId: item.id, body: text })}
             onPin={(pinned) => pin.mutate({ messageId: item.id, pinned })}
             onReply={() => setReplyTo(item)}
@@ -205,6 +247,18 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   list: {
     paddingVertical: 12,
   },
+  pinnedBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  pinnedIcon: { fontSize: 12 },
+  pinnedText: { flex: 1, fontSize: 12, color: colors.textMuted },
   typing: {
     paddingHorizontal: 16,
     paddingBottom: 4,

@@ -321,19 +321,19 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
           <View style={styles.settingsBlock}>
             <Pressable
               style={styles.navRow}
-              onPress={() => navigation.navigate("MessageList", { containerId: channelId, mode: "media", title: "Shared media" })}
+              onPress={() => navigation.navigate("MessageList", { containerId: channelId, mode: "media", title: "Shared media", chatTitle: `# ${channel?.name ?? ""}`, chatKind: "channel" })}
             >
               <Text style={styles.navRowText}>🖼️ Shared media</Text>
             </Pressable>
             <Pressable
               style={styles.navRow}
-              onPress={() => navigation.navigate("MessageList", { containerId: channelId, mode: "pinned", title: "Pinned messages" })}
+              onPress={() => navigation.navigate("MessageList", { containerId: channelId, mode: "pinned", title: "Pinned messages", chatTitle: `# ${channel?.name ?? ""}`, chatKind: "channel" })}
             >
               <Text style={styles.navRowText}>📌 Pinned messages</Text>
             </Pressable>
             <Pressable
               style={styles.navRow}
-              onPress={() => navigation.navigate("MessageList", { containerId: channelId, mode: "starred", title: "Starred messages" })}
+              onPress={() => navigation.navigate("MessageList", { containerId: channelId, mode: "starred", title: "Starred messages", chatTitle: `# ${channel?.name ?? ""}`, chatKind: "channel" })}
             >
               <Text style={styles.navRowText}>⭐ Starred messages</Text>
             </Pressable>

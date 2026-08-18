@@ -3,15 +3,17 @@ import Avatar from './Avatar';
 import { getHome, sendMessage } from '../api/chat';
 
 /**
- * "Forward this message to anyone" — picks a channel or DM from the same
- * list ChatList already shows, then re-sends the message's text/attachment
- * into that container with a "forwarded" label. No new message type: it's
- * just a normal send with forwardedFromName set.
+ * "Forward this message to anyone" — picks one or more channels/DMs from
+ * the same list ChatList shows, then a separate Send step actually
+ * re-sends the message's text/attachment into each with a "forwarded"
+ * label. Selecting a target no longer sends immediately — that was too
+ * easy to trigger by accident with no way back.
  */
 export default function ForwardModal({ message, onClose, onForwarded }) {
   const [rows, setRows] = useState(null);
   const [query, setQuery] = useState('');
-  const [busyId, setBusyId] = useState(null);
+  const [selected, setSelected] = useState(() => new Set());
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -32,11 +34,20 @@ export default function ForwardModal({ message, onClose, onForwarded }) {
 
   const media = message.attachments && message.attachments[0];
 
-  const forwardTo = async (target) => {
-    setBusyId(target.id);
+  const toggle = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const send = async () => {
+    setSending(true);
     setError(null);
     try {
-      await sendMessage({
+      const targets = rows.filter((r) => selected.has(r.id));
+      await Promise.all(targets.map((target) => sendMessage({
         containerId: target.id,
         body: message.text,
         type: message.type === 'text' ? 'text' : message.type,
@@ -44,11 +55,11 @@ export default function ForwardModal({ message, onClose, onForwarded }) {
         mediaName: media?.name,
         mediaMimeType: media?.mimeType,
         forwardedFromName: message.sender_name,
-      });
-      onForwarded?.(target);
+      })));
+      onForwarded?.(targets);
     } catch (e) {
       setError(e.message || 'Could not forward that message.');
-      setBusyId(null);
+      setSending(false);
     }
   };
 
@@ -81,15 +92,32 @@ export default function ForwardModal({ message, onClose, onForwarded }) {
           {filtered.map((r) => (
             <button
               key={r.id}
-              disabled={busyId === r.id}
-              onClick={() => forwardTo(r)}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-slate-50 disabled:opacity-40 dark:hover:bg-slate-800"
+              onClick={() => toggle(r.id)}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800 ${
+                selected.has(r.id) ? 'bg-blue-50 dark:bg-slate-800' : ''
+              }`}
             >
               <Avatar name={r.title} kind={r.kind === 'channel' ? 'channel' : undefined} size={32} />
-              <span className="truncate text-sm text-slate-700 dark:text-slate-200">{r.title}</span>
-              {busyId === r.id && <span className="ml-auto text-xs text-slate-400">Sending…</span>}
+              <span className="min-w-0 flex-1 truncate text-sm text-slate-700 dark:text-slate-200">{r.title}</span>
+              <span
+                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-xs text-white ${
+                  selected.has(r.id) ? 'border-blue-600 bg-blue-600' : 'border-slate-300 dark:border-slate-600'
+                }`}
+              >
+                {selected.has(r.id) ? '✓' : ''}
+              </span>
             </button>
           ))}
+        </div>
+
+        <div className="border-t border-slate-200 p-3 dark:border-slate-800">
+          <button
+            onClick={send}
+            disabled={selected.size === 0 || sending}
+            className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {sending ? 'Sending…' : selected.size > 0 ? `Send to ${selected.size}` : 'Select where to send'}
+          </button>
         </div>
       </div>
     </div>

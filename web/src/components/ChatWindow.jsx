@@ -14,7 +14,7 @@ import { join, leave, on, sendTyping } from '../api/socket';
 const POLL_MS = 20000;
 const TYPING_TTL_MS = 4000;
 
-export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenChannelInfo, onOpenProfile, onBack }) {
+export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenChannelInfo, onOpenProfile, onBack, scrollToMessageId, onScrolledToMessage }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [typing, setTyping] = useState([]);
@@ -23,8 +23,28 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
   const [replyTo, setReplyTo] = useState(null);
   const [forwarding, setForwarding] = useState(null);
   const [creatingPoll, setCreatingPoll] = useState(false);
+  const [highlightId, setHighlightId] = useState(null);
   const scroller = useRef(null);
   const atBottom = useRef(true);
+  const pinned = messages.find((m) => m.is_pinned);
+
+  const jumpToMessage = (id) => {
+    const el = document.getElementById(`msg-${id}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightId(id);
+    setTimeout(() => setHighlightId((cur) => (cur === id ? null : cur)), 1800);
+  };
+
+  // Arriving here from the Pinned/Starred/Shared-media list, which lives
+  // outside this component (channel/DM info panel) — scroll once the
+  // message the caller wants is actually in the DOM.
+  useEffect(() => {
+    if (!scrollToMessageId || loading) return;
+    jumpToMessage(scrollToMessageId);
+    onScrolledToMessage?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollToMessageId, loading]);
 
   // "ADMIN: delete messages in own channels (from anyone)" / "SUPERADMIN: any
   // channel, any message" — a workspace admin always qualifies; a channel
@@ -211,6 +231,18 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
         </button>
       </header>
 
+      {pinned && (
+        <button
+          onClick={() => jumpToMessage(pinned.id)}
+          className="flex w-full items-center gap-2 border-b border-slate-200 bg-amber-50 px-4 py-2 text-left text-xs text-slate-600 hover:bg-amber-100 dark:border-slate-800 dark:bg-amber-950/30 dark:text-slate-300 dark:hover:bg-amber-950/50"
+        >
+          <span className="shrink-0">📌</span>
+          <span className="truncate">
+            <span className="font-semibold">Pinned:</span> {pinned.text || (pinned.type === 'poll' ? pinned.poll?.question : 'Attachment')}
+          </span>
+        </button>
+      )}
+
       <div ref={scroller} onScroll={onScroll} className="flex-1 overflow-y-auto px-4 py-4">
         {loading && <p className="py-8 text-center text-sm text-slate-400">Loading messages…</p>}
         {!loading && messages.length === 0 && (
@@ -228,18 +260,20 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
                   </span>
                 </div>
               )}
-              <MessageBubble
-                message={m}
-                own={m.sender_id === user?.id}
-                showSender={chat.kind === 'channel'}
-                isGroup={chat.kind === 'channel'}
-                canModerate={canModerate}
-                isSuperAdmin={user?.role === 'admin'}
-                onChanged={refreshMessages}
-                onReply={setReplyTo}
-                onForward={setForwarding}
-                onOpenProfile={onOpenProfile}
-              />
+              <div id={`msg-${m.id}`} className={highlightId === m.id ? 'rounded-2xl ring-2 ring-blue-400 transition-shadow' : ''}>
+                <MessageBubble
+                  message={m}
+                  own={m.sender_id === user?.id}
+                  showSender={chat.kind === 'channel'}
+                  isGroup={chat.kind === 'channel'}
+                  canModerate={canModerate}
+                  isSuperAdmin={user?.role === 'admin'}
+                  onChanged={refreshMessages}
+                  onReply={setReplyTo}
+                  onForward={setForwarding}
+                  onOpenProfile={onOpenProfile}
+                />
+              </div>
             </React.Fragment>
           );
         })}

@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { clockLabel } from '../lib/format';
 import { linkify } from '../lib/linkify';
-import { deleteMessage, editMessage, getReads, reactToMessage, setMessagePinned, starMessage, unstarMessage, votePoll } from '../api/chat';
+import { deleteMessage, editMessage, getReads, hideMessage, reactToMessage, setMessagePinned, starMessage, unstarMessage, votePoll } from '../api/chat';
 import EmojiPicker from './EmojiPicker';
+import { saveFile } from '../lib/saveFile';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -42,6 +43,7 @@ export default function MessageBubble({
   const [lightbox, setLightbox] = useState(false);
   const [starred, setStarred] = useState(!!m.is_starred);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [deleteMenuOpen, setDeleteMenuOpen] = useState(false);
 
   const reactionCounts = useMemo(() => {
     const counts = new Map();
@@ -83,8 +85,14 @@ export default function MessageBubble({
     try { await (next ? starMessage : unstarMessage)(m.id); } catch { setStarred(!next); }
   };
 
-  const remove = async () => {
-    setActionsOpen(false);
+  const deleteForMe = async () => {
+    setDeleteMenuOpen(false);
+    setBusy(true);
+    try { await hideMessage(m.id); onChanged?.(); } finally { setBusy(false); }
+  };
+
+  const deleteForEveryone = async () => {
+    setDeleteMenuOpen(false);
     setBusy(true);
     try { await deleteMessage(m.id); onChanged?.(); } finally { setBusy(false); }
   };
@@ -177,11 +185,32 @@ export default function MessageBubble({
             {canEdit && (
               <MenuItem icon="✏️" label="Edit" onClick={() => { setActionsOpen(false); setEditText(m.text); setEditing(true); }} />
             )}
-            {canDelete && (
-              <MenuItem icon="🗑️" label="Delete" danger onClick={remove} disabled={busy} />
-            )}
+            <MenuItem icon="🗑️" label="Delete" danger onClick={() => { setActionsOpen(false); setDeleteMenuOpen(true); }} disabled={busy} />
           </div>
           </>
+        )}
+
+        {deleteMenuOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setDeleteMenuOpen(false)}>
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-xs overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-slate-800"
+            >
+              <p className="px-4 pt-4 text-sm text-slate-500 dark:text-slate-400">Delete this message?</p>
+              <div className="mt-2">
+                <MenuItem icon="🗑️" label="Delete for me" onClick={deleteForMe} disabled={busy} />
+                {canDelete && (
+                  <MenuItem icon="🗑️" label="Delete for everyone" danger onClick={deleteForEveryone} disabled={busy} />
+                )}
+              </div>
+              <button
+                onClick={() => setDeleteMenuOpen(false)}
+                className="w-full border-t border-slate-100 px-4 py-2.5 text-center text-sm text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-700"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         )}
 
         {emojiPickerOpen && (
@@ -277,9 +306,9 @@ export default function MessageBubble({
             <div className="mb-1" onClick={(e) => e.stopPropagation()}>
               {/* controls includes the browser's own fullscreen button */}
               <video controls src={media.url} className="w-full rounded-lg bg-black" style={{ maxHeight: 320 }} />
-              <a href={media.url} download={fileName} className="mt-1 inline-block text-xs underline underline-offset-2">
+              <button onClick={() => saveFile(media.url, fileName)} className="mt-1 text-xs underline underline-offset-2">
                 Save video
-              </a>
+              </button>
             </div>
           )}
 
@@ -297,11 +326,11 @@ export default function MessageBubble({
                   Open
                 </a>
                 {/* The file is stored on disk under a timestamp-prefixed name to
-                    avoid collisions — the download attribute is what makes the
-                    saved copy use the sender's real filename instead of that. */}
-                <a href={media.url} download={fileName} className="underline underline-offset-2">
+                    avoid collisions — saveFile() is what makes the saved copy
+                    use the sender's real filename instead of that. */}
+                <button onClick={() => saveFile(media.url, fileName)} className="underline underline-offset-2">
                   Save as
-                </a>
+                </button>
               </div>
             </div>
           )}
@@ -375,16 +404,14 @@ export default function MessageBubble({
           onClick={() => setLightbox(false)}
         >
           <img src={media.url} alt={m.text || 'Shared image'} className="max-h-full max-w-full object-contain" />
-          <a
-            href={media.url}
-            download={fileName}
-            onClick={(e) => e.stopPropagation()}
+          <button
+            onClick={(e) => { e.stopPropagation(); saveFile(media.url, fileName); }}
             aria-label="Save image"
             title="Save image"
             className="absolute right-16 top-4 text-2xl text-white/80 hover:text-white"
           >
             ⬇️
-          </a>
+          </button>
           <button
             onClick={() => setLightbox(false)}
             aria-label="Close"

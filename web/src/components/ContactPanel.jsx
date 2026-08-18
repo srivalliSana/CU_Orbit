@@ -20,7 +20,7 @@ const MEDIA_CATEGORIES = [
  * header — that's what backs the shared-media grid, and also means "Send
  * message" is redundant (you're already looking at that conversation).
  */
-export default function ContactPanel({ target, onClose, onOpenChat }) {
+export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMessage }) {
   const [person, setPerson] = useState(null);
   const [error, setError] = useState(null);
   const [opening, setOpening] = useState(false);
@@ -103,7 +103,11 @@ export default function ContactPanel({ target, onClose, onOpenChat }) {
           {listItems && listItems.length === 0 && <p className="text-sm text-slate-400">Nothing here yet.</p>}
           <ul className="space-y-2">
             {(listItems || []).map((it) => (
-              <li key={it.id} className="rounded-lg bg-slate-50 p-2.5 text-sm dark:bg-slate-800">
+              <li
+                key={it.id}
+                onClick={view !== 'media' ? () => onJumpToMessage?.(it.id) : undefined}
+                className={`rounded-lg bg-slate-50 p-2.5 text-sm dark:bg-slate-800 ${view !== 'media' ? 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700' : ''}`}
+              >
                 <p className="text-xs font-semibold text-slate-500">{it.sender_name}</p>
                 {view === 'media' && mediaCategory === 'link' ? (
                   (it.links || []).map((url, i) => (

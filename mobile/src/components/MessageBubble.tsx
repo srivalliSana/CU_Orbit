@@ -22,7 +22,8 @@ export default function MessageBubble({
   canModerate,
   isSuperAdmin,
   onReact,
-  onDelete,
+  onDeleteForMe,
+  onDeleteForEveryone,
   onEdit,
   onPin,
   onReply,
@@ -30,13 +31,16 @@ export default function MessageBubble({
   onStar,
   onOpenProfile,
   onVote,
+  highlighted,
 }: {
   message: Message;
   isOwn: boolean;
   canModerate?: boolean;
   isSuperAdmin?: boolean;
+  highlighted?: boolean;
   onReact: (emoji: string) => void;
-  onDelete: () => void;
+  onDeleteForMe: () => void;
+  onDeleteForEveryone: () => void;
   onEdit: (text: string) => void;
   onPin: (pinned: boolean) => void;
   onReply?: () => void;
@@ -75,6 +79,15 @@ export default function MessageBubble({
   // edit override is admin-only, unlike delete which channel admins share.
   const canEdit = (isOwn || !!isSuperAdmin) && message.type === "text";
   const canDelete = isOwn || !!canModerate;
+
+  const confirmDelete = () => {
+    const buttons: Parameters<typeof Alert.alert>[2] = [
+      { text: "Delete for me", onPress: onDeleteForMe },
+    ];
+    if (canDelete) buttons.push({ text: "Delete for everyone", style: "destructive", onPress: onDeleteForEveryone });
+    buttons.push({ text: "Cancel", style: "cancel" });
+    Alert.alert("Delete this message?", undefined, buttons);
+  };
 
   const downloadToCache = async () => {
     if (!attachmentUrl) throw new Error("No attachment URL");
@@ -139,7 +152,7 @@ export default function MessageBubble({
       {message.is_pinned ? <Text style={styles.pinnedLabel}>📌 Pinned</Text> : null}
       <Pressable
         onLongPress={() => setPickerVisible(true)}
-        style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}
+        style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther, highlighted && styles.bubbleHighlighted]}
       >
         {!isOwn ? (
           <Pressable onPress={() => onOpenProfile?.(message.sender_id)} hitSlop={4}>
@@ -233,7 +246,7 @@ export default function MessageBubble({
         isStarred={!!message.is_starred}
         onSelect={onReact}
         onEdit={() => setEditVisible(true)}
-        onDelete={onDelete}
+        onDelete={confirmDelete}
         onPin={() => onPin(!message.is_pinned)}
         onReply={onReply}
         onForward={onForward}
@@ -312,6 +325,10 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   },
   bubbleOther: {
     backgroundColor: colors.bubbleOther,
+  },
+  bubbleHighlighted: {
+    borderWidth: 2,
+    borderColor: colors.primary,
   },
   senderName: {
     fontSize: 12,

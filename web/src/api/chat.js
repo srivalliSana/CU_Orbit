@@ -40,6 +40,9 @@ export const reactToMessage = (messageId, emoji) =>
 export const deleteMessage = (messageId) =>
   api(`/api/messages/${messageId}`, { method: 'DELETE' });
 
+export const hideMessage = (messageId) =>
+  api(`/api/messages/${messageId}/hide`, { method: 'POST' });
+
 export const editMessage = (messageId, body) =>
   api(`/api/messages/${messageId}`, { method: 'PUT', body: JSON.stringify({ body }) });
 

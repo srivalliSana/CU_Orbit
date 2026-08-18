@@ -14,9 +14,9 @@ interface Row {
 }
 
 /**
- * "Forward this message to anyone" — same channel/DM list HomeScreen shows,
- * re-sending the message's text/attachment into whichever container is
- * picked with a "forwarded" label. No new message type, just a normal send.
+ * "Forward this message to anyone" — same channel/DM list HomeScreen shows.
+ * Picking a target only selects it (checkmark); nothing sends until the
+ * Send button is pressed, so a stray tap can't fire off a message.
  */
 export default function ForwardModal({
   message,
@@ -33,11 +33,13 @@ export default function ForwardModal({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [query, setQuery] = useState("");
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
     setRows(null);
+    setSelected(new Set());
     getHome()
       .then((data) => {
         const channels: Row[] = data.channels.map((c) => ({ id: c.id, kind: "channel", title: `# ${c.name}` }));
@@ -53,12 +55,21 @@ export default function ForwardModal({
     return q ? rows.filter((r) => r.title.toLowerCase().includes(q)) : rows;
   }, [rows, query]);
 
-  const forwardTo = async (target: Row) => {
-    if (!message) return;
-    setBusyId(target.id);
+  const toggle = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const send = async () => {
+    if (!message || !rows) return;
+    setSending(true);
     try {
       const media = message.attachments?.[0];
-      await sendMessage({
+      const targets = rows.filter((r) => selected.has(r.id));
+      await Promise.all(targets.map((target) => sendMessage({
         containerId: target.id,
         body: message.text,
         type: message.type === "text" ? "text" : message.type,
@@ -66,10 +77,10 @@ export default function ForwardModal({
         mediaName: media?.name,
         mediaMimeType: media?.mimeType,
         forwardedFromName: message.sender_name,
-      });
+      })));
       onForwarded();
     } finally {
-      setBusyId(null);
+      setSending(false);
     }
   };
 
@@ -96,13 +107,26 @@ export default function ForwardModal({
             rows === null ? <Text style={styles.empty}>Loading…</Text> : <Text style={styles.empty}>No matches.</Text>
           }
           renderItem={({ item }) => (
-            <Pressable disabled={busyId === item.id} onPress={() => forwardTo(item)} style={styles.row}>
+            <Pressable onPress={() => toggle(item.id)} style={[styles.row, selected.has(item.id) && styles.rowSelected]}>
               <Avatar name={item.title} size={36} />
               <Text style={styles.rowText}>{item.title}</Text>
-              {busyId === item.id ? <Text style={styles.sending}>Sending…</Text> : null}
+              <View style={[styles.checkbox, selected.has(item.id) && styles.checkboxChecked]}>
+                {selected.has(item.id) ? <Text style={styles.checkmark}>✓</Text> : null}
+              </View>
             </Pressable>
           )}
         />
+        <View style={styles.footer}>
+          <Pressable
+            disabled={selected.size === 0 || sending}
+            onPress={send}
+            style={[styles.sendButton, (selected.size === 0 || sending) && styles.sendButtonDisabled]}
+          >
+            <Text style={styles.sendButtonText}>
+              {sending ? "Sending…" : selected.size > 0 ? `Send to ${selected.size}` : "Select where to send"}
+            </Text>
+          </Pressable>
+        </View>
       </View>
     </Modal>
   );
@@ -138,6 +162,42 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
+  rowSelected: {
+    backgroundColor: colors.surface,
+  },
   rowText: { flex: 1, fontSize: 15, color: colors.text },
   sending: { fontSize: 12, color: colors.textMuted },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxChecked: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+  checkmark: { color: colors.primaryText, fontSize: 12, fontWeight: "700" },
+  footer: {
+    padding: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  sendButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  sendButtonDisabled: {
+    opacity: 0.5,
+  },
+  sendButtonText: {
+    color: colors.primaryText,
+    fontWeight: "600",
+    fontSize: 15,
+  },
 });

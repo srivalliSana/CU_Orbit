@@ -5,6 +5,7 @@ import {
   deleteMessage,
   editMessage,
   getMessages,
+  hideMessage,
   reactToMessage,
   sendMessage,
   setMessagePinned,
@@ -59,6 +60,13 @@ export function useMessages(containerId: string) {
     },
   });
 
+  const hide = useMutation({
+    mutationFn: (messageId: string) => hideMessage(messageId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["messages", containerId] });
+    },
+  });
+
   const edit = useMutation({
     mutationFn: (params: { messageId: string; body: string }) =>
       editMessage(params.messageId, params.body),
@@ -90,5 +98,5 @@ export function useMessages(containerId: string) {
     },
   });
 
-  return { ...query, send, react, remove, edit, pin, star, vote };
+  return { ...query, send, react, remove, hide, edit, pin, star, vote };
 }

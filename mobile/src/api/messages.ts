@@ -47,6 +47,9 @@ export const reactToMessage = (messageId: string, emoji: string) =>
 export const deleteMessage = (messageId: string) =>
   client.delete(`/messages/${messageId}`).then((res) => res.data);
 
+export const hideMessage = (messageId: string) =>
+  client.post(`/messages/${messageId}/hide`, {}).then((res) => res.data);
+
 export const editMessage = (messageId: string, body: string) =>
   client.put<Message>(`/messages/${messageId}`, { body }).then((res) => res.data);
 
