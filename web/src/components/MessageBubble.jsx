@@ -6,6 +6,22 @@ import EmojiPicker from './EmojiPicker';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
+/** One row in the message actions dropdown — icon, label, optional danger styling. */
+function MenuItem({ icon, label, onClick, disabled, danger }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm disabled:opacity-40 ${
+        danger ? 'text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40' : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700'
+      }`}
+    >
+      <span className="w-4 text-center">{icon}</span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
 /** Read receipt: one tick sent, two delivered, two blue read. */
 function Ticks({ status }) {
   if (status === 'read') return <span className="text-sky-300" aria-label="Read">✓✓</span>;
@@ -19,7 +35,7 @@ export default function MessageBubble({
 }) {
   const m = message;
   const [reads, setReads] = useState(null);   // null = not requested
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(m.text || '');
   const [busy, setBusy] = useState(false);
@@ -46,12 +62,17 @@ export default function MessageBubble({
   };
 
   const react = async (emoji) => {
-    setMenuOpen(false);
+    setActionsOpen(false);
     try { await reactToMessage(m.id, emoji); onChanged?.(); } catch { /* best-effort */ }
   };
 
+  const copyText = () => {
+    setActionsOpen(false);
+    navigator.clipboard?.writeText(m.text || '');
+  };
+
   const togglePin = async () => {
-    setMenuOpen(false);
+    setActionsOpen(false);
     setBusy(true);
     try { await setMessagePinned(m.id, !m.is_pinned); onChanged?.(); } finally { setBusy(false); }
   };
@@ -63,7 +84,7 @@ export default function MessageBubble({
   };
 
   const remove = async () => {
-    setMenuOpen(false);
+    setActionsOpen(false);
     setBusy(true);
     try { await deleteMessage(m.id); onChanged?.(); } finally { setBusy(false); }
   };
@@ -113,88 +134,56 @@ export default function MessageBubble({
         )}
 
         {!m.pending && (
-          <div
-            className={`absolute -top-3 z-10 hidden items-center gap-0.5 rounded-full bg-white p-0.5 text-xs shadow ring-1 ring-slate-200 group-hover:flex dark:bg-slate-800 dark:ring-slate-700 ${
-              own ? 'right-2' : 'left-2'
-            }`}
+          <button
+            onClick={() => setActionsOpen((v) => !v)}
+            aria-label="Message actions"
+            title="Message actions"
+            className={`absolute -top-3 z-10 hidden h-6 w-6 items-center justify-center rounded-full bg-white text-slate-500 shadow ring-1 ring-slate-200 group-hover:flex hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-700 ${
+              actionsOpen ? 'flex' : ''
+            } ${own ? 'right-2' : 'left-2'}`}
           >
-            <button
-              onClick={() => setMenuOpen((v) => !v)}
-              className="rounded-full px-1.5 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-700"
-              title="React"
-            >
-              😀
-            </button>
-            <button
-              onClick={() => onReply?.(m)}
-              className="rounded-full px-1.5 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-700"
-              title="Reply"
-            >
-              ↩️
-            </button>
-            <button
-              onClick={() => onForward?.(m)}
-              className="rounded-full px-1.5 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-700"
-              title="Forward"
-            >
-              ➡️
-            </button>
-            <button
-              onClick={toggleStar}
-              className="rounded-full px-1.5 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-700"
-              title={starred ? 'Unstar' : 'Star'}
-            >
-              {starred ? '⭐' : '☆'}
-            </button>
-            <button
-              onClick={togglePin}
-              disabled={busy}
-              className="rounded-full px-1.5 py-0.5 hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-700"
-              title={m.is_pinned ? 'Unpin' : 'Pin'}
-            >
-              📌
-            </button>
-            {canEdit && (
-              <button
-                onClick={() => { setEditText(m.text); setEditing(true); }}
-                className="rounded-full px-1.5 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-700"
-                title="Edit"
-              >
-                ✏️
-              </button>
-            )}
-            {canDelete && (
-              <button
-                onClick={remove}
-                disabled={busy}
-                className="rounded-full px-1.5 py-0.5 hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-700"
-                title="Delete"
-              >
-                🗑️
-              </button>
-            )}
-          </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
         )}
 
-        {menuOpen && (
+        {actionsOpen && (
+          <>
+          <div className="fixed inset-0 z-10" onClick={() => setActionsOpen(false)} />
           <div
-            className={`absolute -top-11 z-20 flex items-center gap-1 rounded-full bg-white p-1.5 shadow ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700 ${
+            className={`absolute -top-2 z-20 w-44 -translate-y-full overflow-hidden rounded-2xl bg-white py-1.5 shadow-xl ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700 ${
               own ? 'right-2' : 'left-2'
             }`}
           >
-            {QUICK_EMOJIS.map((e) => (
-              <button key={e} onClick={() => react(e)} className="text-lg hover:scale-110">
-                {e}
+            <div className="flex items-center justify-between px-2 pb-1.5">
+              {QUICK_EMOJIS.map((e) => (
+                <button key={e} onClick={() => react(e)} className="rounded-full p-1 text-lg hover:scale-110">
+                  {e}
+                </button>
+              ))}
+              <button
+                onClick={() => { setActionsOpen(false); setEmojiPickerOpen(true); }}
+                title="More emojis"
+                className="rounded-full p-1 text-base font-semibold text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700"
+              >
+                +
               </button>
-            ))}
-            <button
-              onClick={() => { setMenuOpen(false); setEmojiPickerOpen(true); }}
-              title="More emojis"
-              className="rounded-full px-1.5 text-lg font-semibold text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700"
-            >
-              +
-            </button>
+            </div>
+            <div className="border-t border-slate-100 dark:border-slate-700" />
+            <MenuItem icon="↩️" label="Reply" onClick={() => { setActionsOpen(false); onReply?.(m); }} />
+            {m.text && <MenuItem icon="📋" label="Copy" onClick={copyText} />}
+            <MenuItem icon="➡️" label="Forward" onClick={() => { setActionsOpen(false); onForward?.(m); }} />
+            <MenuItem icon="📌" label={m.is_pinned ? 'Unpin' : 'Pin'} onClick={togglePin} disabled={busy} />
+            <MenuItem icon={starred ? '⭐' : '☆'} label={starred ? 'Unstar' : 'Star'} onClick={toggleStar} />
+            {canEdit && (
+              <MenuItem icon="✏️" label="Edit" onClick={() => { setActionsOpen(false); setEditText(m.text); setEditing(true); }} />
+            )}
+            {canDelete && (
+              <MenuItem icon="🗑️" label="Delete" danger onClick={remove} disabled={busy} />
+            )}
           </div>
+          </>
         )}
 
         {emojiPickerOpen && (
