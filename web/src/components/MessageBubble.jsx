@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { clockLabel } from '../lib/format';
-import { renderMarkdown } from '../lib/markdown';
+import { renderMessageText } from '../lib/markdown';
 import { deleteMessage, editMessage, getReads, hideMessage, reactToMessage, setMessagePinned, starMessage, unstarMessage, votePoll } from '../api/chat';
 import Avatar from './Avatar';
 import EmojiPicker from './EmojiPicker';
@@ -34,11 +34,13 @@ function Ticks({ status }) {
 
 export default function MessageBubble({
   message, own, showSender, isGroup, canModerate, isSuperAdmin, onChanged,
-  onReply, onForward, onOpenProfile,
+  onReply, onForward, onOpenProfile, currentUserId, onOpenDm,
 }) {
   const m = message;
   const [reads, setReads] = useState(null);   // null = not requested
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [actionsFlip, setActionsFlip] = useState('up');
+  const actionsTriggerRef = useRef(null);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(m.text || '');
   const [busy, setBusy] = useState(false);
@@ -146,7 +148,16 @@ export default function MessageBubble({
 
         {!m.pending && (
           <button
-            onClick={() => setActionsOpen((v) => !v)}
+            ref={actionsTriggerRef}
+            onClick={() => {
+              // Open upward by default, but flip down when there isn't
+              // ~320px of room above the trigger (the dropdown's rough
+              // height) — otherwise it gets clipped by the scroll container
+              // for any message near the top of the chat.
+              const rect = actionsTriggerRef.current?.getBoundingClientRect();
+              setActionsFlip(rect && rect.top < 320 ? 'down' : 'up');
+              setActionsOpen((v) => !v);
+            }}
             aria-label="Message actions"
             title="Message actions"
             className={`absolute -top-3 right-2 z-10 hidden h-6 w-6 items-center justify-center rounded-full bg-white text-slate-500 shadow ring-1 ring-slate-200 group-hover:flex hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-700 ${
@@ -163,7 +174,9 @@ export default function MessageBubble({
           <>
           <div className="fixed inset-0 z-10" onClick={() => setActionsOpen(false)} />
           <div
-            className="absolute -top-2 right-2 z-20 w-44 -translate-y-full overflow-hidden rounded-2xl bg-white py-1.5 shadow-xl ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700"
+            className={`absolute right-2 z-20 w-44 overflow-hidden rounded-2xl bg-white py-1.5 shadow-xl ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700 ${
+              actionsFlip === 'up' ? '-top-2 -translate-y-full' : 'top-6'
+            }`}
           >
             <div className="flex items-center justify-between px-2 pb-1.5">
               {QUICK_EMOJIS.map((e) => (
@@ -386,7 +399,15 @@ export default function MessageBubble({
           ) : (
             m.text && m.type !== 'poll' ? (
               <div className="whitespace-pre-wrap break-words text-sm">
-                {renderMarkdown(m.text, own ? 'underline underline-offset-2 text-blue-100' : 'underline underline-offset-2 text-blue-600 dark:text-blue-400')}
+                {renderMessageText(m.text, {
+                  linkClassName: own ? 'underline underline-offset-2 text-blue-100' : 'underline underline-offset-2 text-blue-600 dark:text-blue-400',
+                  mentions: m.enriched_mentions,
+                  onMentionClick: (mention) => {
+                    if (!mention.user_id || !currentUserId || mention.user_id === currentUserId) return;
+                    const dmId = [currentUserId, mention.user_id].sort().join('_');
+                    onOpenDm?.({ id: dmId, kind: 'dm', title: mention.display_name });
+                  },
+                })}
               </div>
             ) : null
           )}

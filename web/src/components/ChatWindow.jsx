@@ -14,7 +14,7 @@ import { join, leave, on, sendTyping } from '../api/socket';
 const POLL_MS = 20000;
 const TYPING_TTL_MS = 4000;
 
-export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenChannelInfo, onOpenProfile, onBack, scrollToMessageId, onScrolledToMessage }) {
+export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenChannelInfo, onOpenProfile, onOpenDm, onBack, scrollToMessageId, onScrolledToMessage }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [typing, setTyping] = useState([]);
@@ -272,6 +272,8 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
                   onReply={setReplyTo}
                   onForward={setForwarding}
                   onOpenProfile={onOpenProfile}
+                  currentUserId={user?.id}
+                  onOpenDm={onOpenDm}
                 />
               </div>
             </React.Fragment>

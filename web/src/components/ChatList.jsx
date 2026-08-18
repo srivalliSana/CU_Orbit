@@ -6,7 +6,7 @@ import { isFacultyEmail } from '../lib/permissions';
 
 /** Left pane: search, then channels and direct messages. */
 
-export default function ChatList({ user, chats, workspaces, workspaceId, onSwitchWorkspace, activeId, onSelect, onNewGroup, onOpenContact, onOpenMentions, onOpenProfile, onOpenAdmin, width }) {
+export default function ChatList({ user, chats, workspaces, workspaceId, onSwitchWorkspace, activeId, onSelect, onNewGroup, onOpenContact, onOpenMentions, mentionsUnread, onOpenProfile, onOpenAdmin, width }) {
   // Mirrors isFacultyEmail() on the server. The server is the authority for
   // channel creation; this only avoids showing an action that would 403.
   const canCreate = user?.role === 'admin' || isFacultyEmail(user?.campus_email || user?.email);
@@ -95,13 +95,18 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
         <button
           onClick={onOpenMentions}
           title="Mentions"
-          aria-label="Mentions"
-          className="shrink-0 rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800"
+          aria-label={mentionsUnread > 0 ? `Mentions, ${mentionsUnread} unread` : 'Mentions'}
+          className="relative shrink-0 rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
           </svg>
+          {mentionsUnread > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white">
+              {mentionsUnread > 9 ? '9+' : mentionsUnread}
+            </span>
+          )}
         </button>
         {canCreate && <button
           onClick={onNewGroup}

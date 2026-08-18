@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { checkSession, signOut } from './api/auth';
 import { getHome } from './api/chat';
+import { getMentions } from './api/mentions';
 import { getWorkspaces } from './api/workspaces';
 import ChatList from './components/ChatList';
 import ChatWindow from './components/ChatWindow';
@@ -31,6 +32,7 @@ export default function App() {
   const [contact, setContact] = useState(null);   // { id?, email } shown in the side panel
   const [channelInfoId, setChannelInfoId] = useState(null);   // channel id shown in the side panel
   const [mentionsOpen, setMentionsOpen] = useState(false);
+  const [mentionsUnread, setMentionsUnread] = useState(0);
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
@@ -83,6 +85,19 @@ export default function App() {
     setUser(u);
     setStatus('ready');
   };
+
+  const refreshMentionsUnread = useCallback(() => {
+    getMentions().then((rows) => setMentionsUnread(rows.filter((r) => !r.is_read).length)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (status === 'ready') refreshMentionsUnread();
+  }, [status, refreshMentionsUnread]);
+
+  // The panel marks items read as they're clicked, not all at once on open —
+  // re-count against the server once it closes rather than trying to track
+  // every individual read locally.
+  const closeMentions = () => { setMentionsOpen(false); refreshMentionsUnread(); };
 
   const { data: workspaces } = useQuery({
     queryKey: ['workspaces'],
@@ -186,6 +201,7 @@ export default function App() {
       // Being @mentioned deserves its own alert — a plain unread bump doesn't
       // say "you specifically were called out" the way this does.
       on('mentioned', ({ container_id, sender_name, text }) => {
+        setMentionsUnread((n) => n + 1);
         if (container_id === active?.id) return;
         const row = [...(chatsData?.channels || []), ...(chatsData?.dms || [])].find((r) => r.id === container_id);
         const isChannel = row ? 'name' in row : container_id?.includes('_') === false;
@@ -237,6 +253,7 @@ export default function App() {
         onNewGroup={() => setNewGroup(true)}
         onOpenContact={(c) => { setChannelInfoId(null); setContact(c); }}
         onOpenMentions={() => setMentionsOpen(true)}
+        mentionsUnread={mentionsUnread}
         onOpenProfile={() => setProfileOpen(true)}
         onOpenAdmin={user?.role === 'admin' ? () => setAdminOpen(true) : undefined}
         width={sidebarWidth}
@@ -258,6 +275,7 @@ export default function App() {
             onOpenContact={(c) => { setChannelInfoId(null); setContact(c); }}
             onOpenChannelInfo={(id) => { setContact(null); setChannelInfoId(id); }}
             onOpenProfile={(userId) => setProfileUserId(userId)}
+            onOpenDm={(dmChat) => { setContact(null); setActive(dmChat); }}
             onBack={() => setActive(null)}
             scrollToMessageId={scrollToMessageId}
             onScrolledToMessage={() => setScrollToMessageId(null)}
@@ -286,7 +304,7 @@ export default function App() {
 
       {mentionsOpen && (
         <MentionsPanel
-          onClose={() => setMentionsOpen(false)}
+          onClose={closeMentions}
           onOpenChat={(chat) => setActive(chat)}
         />
       )}

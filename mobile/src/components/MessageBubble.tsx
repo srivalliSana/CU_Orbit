@@ -10,7 +10,7 @@ import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import ReactionPicker from "./ReactionPicker";
 import EditMessageModal from "./EditMessageModal";
 import Avatar from "./Avatar";
-import { renderMarkdown } from "../lib/markdown";
+import { renderMessageText } from "../lib/markdown";
 import { resolveMediaUrl } from "../constants/config";
 import { clockLabel } from "../lib/format";
 import { useThemeColors } from "../state/themeStore";
@@ -34,6 +34,8 @@ export default function MessageBubble({
   onOpenProfile,
   onVote,
   highlighted,
+  currentUserId,
+  onOpenDm,
 }: {
   message: Message;
   isOwn: boolean;
@@ -50,6 +52,8 @@ export default function MessageBubble({
   onStar?: (starred: boolean) => void;
   onOpenProfile?: (userId: string) => void;
   onVote?: (optionIndex: number) => void;
+  currentUserId?: string;
+  onOpenDm?: (chat: { id: string; kind: "dm"; title: string }) => void;
 }) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -284,7 +288,19 @@ export default function MessageBubble({
         ) : null}
 
         {message.text && message.type !== "poll" ? (
-          <Text style={styles.text}>{renderMarkdown(message.text, styles.link)}</Text>
+          <Text style={styles.text}>
+            {renderMessageText(
+              message.text,
+              styles.link,
+              styles.mentionChip,
+              message.enriched_mentions,
+              (mention) => {
+                if (!mention.user_id || !currentUserId || mention.user_id === currentUserId) return;
+                const dmId = [currentUserId, mention.user_id].sort().join("_");
+                onOpenDm?.({ id: dmId, kind: "dm", title: mention.display_name });
+              }
+            )}
+          </Text>
         ) : null}
         <View style={styles.metaRow}>
           {message.edited_at ? <Text style={styles.edited}>edited</Text> : null}
@@ -456,6 +472,11 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   link: {
     color: colors.primary,
     textDecorationLine: "underline",
+  },
+  mentionChip: {
+    color: colors.primary,
+    fontWeight: "700",
+    backgroundColor: `${colors.primary}22`,
   },
   image: {
     width: 220,

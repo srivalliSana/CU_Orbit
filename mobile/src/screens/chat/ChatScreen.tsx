@@ -178,6 +178,8 @@ export default function ChatScreen({ route, navigation }: Props) {
             onStar={(starred) => star.mutate({ messageId: item.id, starred })}
             onOpenProfile={(userId) => setProfileUserId(userId)}
             onVote={item.poll ? (optionIndex) => vote.mutate({ pollId: item.poll!.id, optionIndex }) : undefined}
+            currentUserId={selfId}
+            onOpenDm={(chat) => navigation.push("Chat", { containerId: chat.id, title: chat.title, kind: "dm" })}
           />
         )}
         contentContainerStyle={styles.list}

@@ -50,3 +50,72 @@ function parseInline(text: string, linkStyle: object, keyBase: string): (string 
 export function renderMarkdown(text: string, linkStyle: object) {
   return parseInline(text, linkStyle, "m");
 }
+
+export interface MentionRef {
+  user_id: string;
+  display_name: string;
+}
+
+const BROADCAST_TAGS = ["@all", "@everyone", "@channel", "@here"];
+
+/**
+ * Same as renderMarkdown, but first pulls out @mention spans (matched
+ * against the message's own enriched_mentions, plus @all/@everyone/@channel/
+ * @here) and renders them as tappable chips — mirrors web/src/lib/markdown.jsx's renderMessageText.
+ */
+export function renderMessageText(
+  text: string,
+  linkStyle: object,
+  chipStyle: object,
+  mentions: MentionRef[],
+  onMentionPress?: (mention: MentionRef) => void
+) {
+  if (!text) return text;
+
+  const spans: { start: number; end: number; kind: "broadcast" | "user"; label: string; mention?: MentionRef }[] = [];
+  const lower = text.toLowerCase();
+  for (const tag of BROADCAST_TAGS) {
+    let idx = lower.indexOf(tag);
+    while (idx !== -1) {
+      spans.push({ start: idx, end: idx + tag.length, kind: "broadcast", label: text.slice(idx, idx + tag.length) });
+      idx = lower.indexOf(tag, idx + tag.length);
+    }
+  }
+  for (const mention of mentions || []) {
+    if (!mention.display_name) continue;
+    const needle = `@${mention.display_name}`;
+    let idx = text.indexOf(needle);
+    while (idx !== -1) {
+      spans.push({ start: idx, end: idx + needle.length, kind: "user", label: needle, mention });
+      idx = text.indexOf(needle, idx + needle.length);
+    }
+  }
+  if (spans.length === 0) return renderMarkdown(text, linkStyle);
+
+  spans.sort((a, b) => a.start - b.start);
+  const clean: typeof spans = [];
+  let cursor = 0;
+  for (const s of spans) {
+    if (s.start < cursor) continue;
+    clean.push(s);
+    cursor = s.end;
+  }
+
+  const pieces: (string | ReactElement)[] = [];
+  let pos = 0;
+  clean.forEach((s, i) => {
+    if (s.start > pos) pieces.push(...parseInline(text.slice(pos, s.start), linkStyle, `t${i}`));
+    pieces.push(
+      <Text
+        key={`m${i}`}
+        style={chipStyle}
+        onPress={s.kind === "user" ? () => onMentionPress?.(s.mention!) : undefined}
+      >
+        {s.label}
+      </Text>
+    );
+    pos = s.end;
+  });
+  if (pos < text.length) pieces.push(...parseInline(text.slice(pos), linkStyle, "tend"));
+  return pieces;
+}

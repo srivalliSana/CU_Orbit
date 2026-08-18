@@ -39,10 +39,11 @@ export default function MentionsScreen() {
           style={[styles.row, !item.is_read && styles.rowUnread]}
           onPress={() => {
             if (!item.is_read) markRead.mutate(item.id);
+            const isDm = item.channel_id.includes("_");
             navigation.navigate("Chat", {
               containerId: item.channel_id,
-              title: item.channel_name,
-              kind: item.channel_id.includes("_") ? "dm" : "channel",
+              title: isDm ? item.sender_name : item.channel_name,
+              kind: isDm ? "dm" : "channel",
             });
           }}
         >
