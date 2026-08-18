@@ -2136,8 +2136,8 @@ app.get('/api/mentions/:userId', auth.requireAuth, async (req, res) => {
             const msg = await Message.findByPk(m.message_id);
             if (!msg) return null;
             let sourceName = 'Channel';
-            if (m.source_channel_id.includes('_')) sourceName = 'Direct Message';
-            else {
+            if (m.source_channel_id && m.source_channel_id.includes('_')) sourceName = 'Direct Message';
+            else if (m.source_channel_id && m.source_channel_id !== 'STATUS') {
                 const ch = await Channel.findByPk(m.source_channel_id);
                 if (ch) sourceName = `#${ch.name}`;
             }
@@ -2147,7 +2147,10 @@ app.get('/api/mentions/:userId', auth.requireAuth, async (req, res) => {
             };
         }));
         res.json(results.filter(r => r !== null));
-    } catch (e) { res.status(500).json(e); }
+    } catch (e) {
+        console.error('[mentions] failed:', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
 });
 
 app.post('/api/mentions/read-all', auth.requireAuth, async (req, res) => {
