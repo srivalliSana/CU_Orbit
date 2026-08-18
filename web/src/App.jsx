@@ -183,6 +183,25 @@ export default function App() {
           dms: (prevData.dms || []).map((d) => (d.other_user_id === userId ? { ...d, presence } : d)),
         }));
       }),
+      // Being @mentioned deserves its own alert — a plain unread bump doesn't
+      // say "you specifically were called out" the way this does.
+      on('mentioned', ({ container_id, sender_name, text }) => {
+        if (container_id === active?.id) return;
+        const row = [...(chatsData?.channels || []), ...(chatsData?.dms || [])].find((r) => r.id === container_id);
+        const isChannel = row ? 'name' in row : container_id?.includes('_') === false;
+        notifyMessage({
+          title: `${sender_name} mentioned you`,
+          body: text || 'New mention',
+          tag: `mention-${container_id}`,
+          onClick: () => setActive(
+            row
+              ? (isChannel
+                ? { id: row.id, kind: 'channel', title: `# ${row.name}`, topic: row.topic }
+                : { id: row.id, kind: 'dm', title: row.other_user_name, presence: row.presence })
+              : { id: container_id, kind: isChannel ? 'channel' : 'dm', title: sender_name }
+          ),
+        });
+      }),
     ];
     return () => { offs.forEach((off) => off()); };
     // eslint-disable-next-line react-hooks/exhaustive-deps

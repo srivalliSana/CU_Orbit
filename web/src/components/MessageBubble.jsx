@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { clockLabel } from '../lib/format';
-import { linkify } from '../lib/linkify';
+import { renderMarkdown } from '../lib/markdown';
 import { deleteMessage, editMessage, getReads, hideMessage, reactToMessage, setMessagePinned, starMessage, unstarMessage, votePoll } from '../api/chat';
 import Avatar from './Avatar';
 import EmojiPicker from './EmojiPicker';
@@ -385,9 +385,9 @@ export default function MessageBubble({
             </div>
           ) : (
             m.text && m.type !== 'poll' ? (
-              <p className="whitespace-pre-wrap break-words text-sm">
-                {linkify(m.text, own ? 'underline underline-offset-2 text-blue-100' : 'underline underline-offset-2 text-blue-600 dark:text-blue-400')}
-              </p>
+              <div className="whitespace-pre-wrap break-words text-sm">
+                {renderMarkdown(m.text, own ? 'underline underline-offset-2 text-blue-100' : 'underline underline-offset-2 text-blue-600 dark:text-blue-400')}
+              </div>
             ) : null
           )}
 

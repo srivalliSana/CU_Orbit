@@ -451,13 +451,16 @@ sequelize.authenticate()
         console.warn(connectionIssue ? '⚠️ MySQL Offline:' : '⚠️ Startup error:', err.message);
     });
 
-// --- NOTIFICATION ROUTER SIMULATION ---
+// There's no push-notification service in this app (no APNs/FCM) — a mention
+// alert can only reach someone through their own live socket connection, the
+// same channel presence/unread-changed already uses.
 async function routeMentionNotification(user, message) {
-    console.log(`\n--- 🔔 MENTION NOTIFICATION ---`);
-    console.log(`TO: ${user.name} (${user.phone})`);
-    console.log(`BODY: @${message.senderName} mentioned you in a message!`);
-    console.log(`MESSAGE: "${message.body}"`);
-    console.log(`-------------------------------\n`);
+    realtime.toUser(user.id, 'mentioned', {
+        message_id: message.id,
+        container_id: message.channelId || message.dm_id,
+        sender_name: message.senderName,
+        text: message.body,
+    });
 }
 
 // --- LANDING PAGE & APK DOWNLOAD ---
@@ -2631,7 +2634,7 @@ app.post('/api/channels/:id/join-requests/:reqId/approve', auth.requireAuth, asy
         const [member, created] = await ChannelMember.findOrCreate({ where: { channelId: req.params.id, userId: request.userId }, defaults: { channelId: req.params.id, userId: request.userId, role: 'member' } });
         if (created) {
             if (channel) await channel.increment('member_count');
-            await Message.create({ channelId: req.params.id, senderId: request.userId, senderName: request.userName || 'Someone', body: `JOIN_LINK:${request.userId}`, type: 'system', timestamp: Date.now() });
+            await Message.create({ channelId: req.params.id, senderId: request.userId, senderName: request.userName || 'Someone', body: `${request.userName || 'Someone'} joined via invite link`, type: 'system', timestamp: Date.now() });
         }
         request.status = 'approved';
         await request.save();
@@ -2686,7 +2689,7 @@ app.post('/api/channels/join-by-link', auth.requireAuth, async (req, res) => {
         if (created) {
             await channel.increment('member_count');
             const user = await User.findByPk(userId);
-            await Message.create({ channelId: channel.id, senderId: userId, senderName: user?.name || 'Someone', body: `JOIN_LINK:${userId}`, type: 'system', timestamp: Date.now() });
+            await Message.create({ channelId: channel.id, senderId: userId, senderName: user?.name || 'Someone', body: `${user?.name || 'Someone'} joined via invite link`, type: 'system', timestamp: Date.now() });
         }
         res.json({ success: true, channel });
     } catch (e) { res.status(500).json(e); }

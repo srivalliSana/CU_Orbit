@@ -1,9 +1,26 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getChannelMembers } from '../api/channels';
 import Avatar from './Avatar';
+import EmojiPicker from './EmojiPicker';
 
 // Matches an in-progress "@word" run at the end of the typed text.
 const MENTION_TRIGGER = /(?:^|\s)@(\w*)$/;
+
+/** One button in the formatting toolbar. */
+function ToolButton({ label, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onMouseDown={(e) => e.preventDefault()}   // keep focus (and selection) in the textarea
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="rounded-md px-2 py-1 text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
+    >
+      {children}
+    </button>
+  );
+}
 
 export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo, onCancelReply, onCreatePoll }) {
   const [text, setText] = useState('');
@@ -12,6 +29,8 @@ export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo,
   const [mentionQuery, setMentionQuery] = useState(null);
   const [taggedUsers, setTaggedUsers] = useState([]);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [formattingOpen, setFormattingOpen] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const fileInput = useRef(null);
   const lastTyped = useRef(0);
   const box = useRef(null);
@@ -80,6 +99,88 @@ export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo,
     box.current?.focus();
   };
 
+  // Wraps the current selection (or, with nothing selected, just inserts the
+  // pair at the cursor) with a marker on each side — the shared primitive
+  // behind every inline formatting button (bold/italic/underline/strike/code).
+  const wrapSelection = (before, after = before) => {
+    const el = box.current;
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const selected = text.slice(start, end);
+    const next = text.slice(0, start) + before + selected + after + text.slice(end);
+    setText(next);
+    grow(el);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.selectionStart = start + before.length;
+      el.selectionEnd = start + before.length + selected.length;
+    });
+  };
+
+  // Applies mapper() to every line touching the current selection — the
+  // primitive behind the list/indent buttons, which act on whole lines
+  // rather than an arbitrary text span.
+  const mapLines = (mapper) => {
+    const el = box.current;
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+    let lineEnd = text.indexOf('\n', end);
+    if (lineEnd === -1) lineEnd = text.length;
+    const before = text.slice(0, lineStart);
+    const block = text.slice(lineStart, lineEnd);
+    const after = text.slice(lineEnd);
+    const nextBlock = block.split('\n').map(mapper).join('\n');
+    const next = before + nextBlock + after;
+    setText(next);
+    grow(el);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.selectionStart = lineStart;
+      el.selectionEnd = lineStart + nextBlock.length;
+    });
+  };
+
+  const toggleBulletList = () => mapLines((line) => (line.startsWith('- ') ? line.slice(2) : `- ${line}`));
+  const toggleNumberedList = () => {
+    let n = 1;
+    mapLines((line) => (/^\d+\.\s/.test(line) ? line.replace(/^\d+\.\s/, '') : `${n++}. ${line}`));
+  };
+  const decreaseIndent = () => mapLines((line) => line.replace(/^(\s{1,2}|- |\d+\.\s)/, ''));
+
+  const insertLink = () => {
+    const el = box.current;
+    const selected = el ? text.slice(el.selectionStart, el.selectionEnd) : '';
+    const url = window.prompt('Link URL');
+    if (!url) return;
+    if (selected) {
+      wrapSelection('[', `](${url})`);
+    } else {
+      insertAtCursor(`[link](${url})`);
+    }
+  };
+
+  const insertAtCursor = (str) => {
+    const el = box.current;
+    if (!el) { setText((t) => t + str); return; }
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const next = text.slice(0, start) + str + text.slice(end);
+    setText(next);
+    grow(el);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.selectionStart = el.selectionEnd = start + str.length;
+    });
+  };
+
+  const insertMention = () => {
+    insertAtCursor('@');
+    setMentionQuery('');
+  };
+
   return (
     <div className="relative border-t border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
       {suggestions.length > 0 && (
@@ -110,6 +211,23 @@ export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo,
           <span className="truncate text-slate-600 dark:text-slate-300">📎 {file.name}</span>
           <button onClick={() => { setFile(null); if (fileInput.current) fileInput.current.value = ''; }}
                   className="ml-auto text-slate-400 hover:text-slate-600" aria-label="Remove attachment">✕</button>
+        </div>
+      )}
+
+      {formattingOpen && (
+        <div className="mb-2 flex items-center gap-0.5 rounded-xl border border-slate-200 bg-slate-50 px-1 py-1 dark:border-slate-700 dark:bg-slate-800">
+          <ToolButton label="Bold" onClick={() => wrapSelection('**')}><span className="font-bold">B</span></ToolButton>
+          <ToolButton label="Italic" onClick={() => wrapSelection('_')}><span className="italic">I</span></ToolButton>
+          <ToolButton label="Underline" onClick={() => wrapSelection('<u>', '</u>')}><span className="underline">U</span></ToolButton>
+          <ToolButton label="Strikethrough" onClick={() => wrapSelection('~~')}><span className="line-through">S</span></ToolButton>
+          <span className="mx-1 h-4 w-px bg-slate-300 dark:bg-slate-600" />
+          <ToolButton label="Insert link" onClick={insertLink}>🔗</ToolButton>
+          <ToolButton label="Numbered list" onClick={toggleNumberedList}>1.</ToolButton>
+          <ToolButton label="Bulleted list" onClick={toggleBulletList}>•</ToolButton>
+          <ToolButton label="Decrease indent" onClick={decreaseIndent}>⇤</ToolButton>
+          <span className="mx-1 h-4 w-px bg-slate-300 dark:bg-slate-600" />
+          <ToolButton label="Inline code" onClick={() => wrapSelection('`')}><span className="font-mono">{'</>'}</span></ToolButton>
+          <ToolButton label="Code block" onClick={() => wrapSelection('```\n', '\n```')}><span className="font-mono">{'{ }'}</span></ToolButton>
         </div>
       )}
 
@@ -157,6 +275,16 @@ export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo,
           )}
         </div>
 
+        <button
+          onClick={() => setFormattingOpen((v) => !v)}
+          aria-label="Formatting"
+          title="Formatting"
+          aria-pressed={formattingOpen}
+          className={`shrink-0 rounded-full p-2 text-sm font-semibold ${formattingOpen ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+        >
+          Aa
+        </button>
+
         <textarea
           ref={box}
           rows={1}
@@ -167,6 +295,34 @@ export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo,
           aria-label="Message"
           className="max-h-40 flex-1 resize-none rounded-2xl bg-slate-100 px-4 py-2.5 text-sm outline-none ring-blue-500/40 placeholder:text-slate-400 focus:ring-2 dark:bg-slate-800 dark:text-slate-100"
         />
+
+        <div className="relative shrink-0">
+          <button
+            onClick={() => setEmojiOpen(true)}
+            aria-label="Emoji"
+            title="Emoji"
+            className="rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            😊
+          </button>
+          {emojiOpen && (
+            <EmojiPicker
+              onPick={(e) => { insertAtCursor(e); setEmojiOpen(false); }}
+              onClose={() => setEmojiOpen(false)}
+            />
+          )}
+        </div>
+
+        {isChannel && (
+          <button
+            onClick={insertMention}
+            aria-label="Mention someone"
+            title="Mention someone"
+            className="shrink-0 rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            @
+          </button>
+        )}
 
         <button
           onClick={submit}

@@ -9,7 +9,7 @@ import { VideoView, useVideoPlayer } from "expo-video";
 import ReactionPicker from "./ReactionPicker";
 import EditMessageModal from "./EditMessageModal";
 import Avatar from "./Avatar";
-import { linkify } from "../lib/linkify";
+import { renderMarkdown } from "../lib/markdown";
 import { resolveMediaUrl } from "../constants/config";
 import { clockLabel } from "../lib/format";
 import { useThemeColors } from "../state/themeStore";
@@ -281,7 +281,7 @@ export default function MessageBubble({
         ) : null}
 
         {message.text && message.type !== "poll" ? (
-          <Text style={styles.text}>{linkify(message.text, styles.link)}</Text>
+          <Text style={styles.text}>{renderMarkdown(message.text, styles.link)}</Text>
         ) : null}
         <View style={styles.metaRow}>
           {message.edited_at ? <Text style={styles.edited}>edited</Text> : null}
