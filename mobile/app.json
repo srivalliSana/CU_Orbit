@@ -74,7 +74,15 @@
       ],
       "expo-asset",
       "expo-font",
-      "expo-video"
+      "expo-video",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "reactNativeArchitectures": ["armeabi-v7a", "arm64-v8a"]
+          }
+        }
+      ]
     ],
     "extra": {
       "eas": {
