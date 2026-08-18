@@ -2719,8 +2719,17 @@ app.post('/api/upload', auth.requireAuth, upload.single('file'), async (req, res
 
 // SPA FALLBACK — must stay last, after every route above, so it only catches
 // paths no real route claimed. API 404s are left to Express.
+//
+// A direct hit or hard-refresh on a client-side route (e.g. /app/settings)
+// isn't a real file, and express.static's index:false means it never
+// auto-resolves to public/app/index.html on its own — without the /app
+// check below this fell through to the LEGACY_INDEX branch instead, silently
+// serving the old pre-React portal in place of the real app.
 app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
+    if (req.path.startsWith('/app')) {
+        return res.sendFile(fs.existsSync(APP_INDEX) ? APP_INDEX : LEGACY_INDEX);
+    }
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
