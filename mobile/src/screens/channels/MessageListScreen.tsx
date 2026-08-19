@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { getPinnedMessages, getSharedMedia, getStarredMessages, type StarredMessage } from "../../api/messages";
+import { openFile, saveFile } from "../../lib/fileActions";
+import { resolveMediaUrl } from "../../constants/config";
 import { useThemeColors } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
 
@@ -65,7 +67,33 @@ export default function MessageListScreen({ route, navigation }: Props) {
           contentContainerStyle={styles.list}
           ListEmptyComponent={<Text style={styles.empty}>Nothing here yet.</Text>}
           renderItem={({ item }) => {
-            const jumpable = mode === "pinned" || mode === "starred";
+            const jumpToChat = () => navigation.navigate("Chat", {
+              containerId,
+              title: chatTitle,
+              kind: chatKind,
+              scrollToMessageId: item.id,
+            });
+
+            // A document doesn't get tapped to jump straight into a
+            // download the way it used to — it offers a choice, same as
+            // long-pressing a file bubble in the chat itself.
+            const isDocument = mode === "media" && category === "document";
+            const attachment = item.attachments?.[0];
+            const onPress = isDocument
+              ? () => {
+                  const url = attachment ? resolveMediaUrl(attachment.url) : null;
+                  const fileName = attachment?.name || "file";
+                  Alert.alert(fileName, undefined, [
+                    { text: "Locate in chat", onPress: jumpToChat },
+                    ...(url ? [
+                      { text: "Open", onPress: () => openFile(url, fileName, attachment?.mimeType) },
+                      { text: "Save to device", onPress: () => saveFile(url, fileName) },
+                    ] : []),
+                    { text: "Cancel", style: "cancel" as const },
+                  ]);
+                }
+              : jumpToChat;
+
             const content = (
               <>
                 <Text style={styles.sender}>{item.sender_name}</Text>
@@ -80,17 +108,8 @@ export default function MessageListScreen({ route, navigation }: Props) {
                 )}
               </>
             );
-            if (!jumpable) return <View style={styles.row}>{content}</View>;
             return (
-              <Pressable
-                style={styles.row}
-                onPress={() => navigation.navigate("Chat", {
-                  containerId,
-                  title: chatTitle,
-                  kind: chatKind,
-                  scrollToMessageId: item.id,
-                })}
-              >
+              <Pressable style={styles.row} onPress={onPress}>
                 {content}
               </Pressable>
             );

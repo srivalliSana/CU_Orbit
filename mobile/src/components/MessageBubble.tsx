@@ -1,9 +1,5 @@
 import { useMemo, useState } from "react";
-import { Alert, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { File, Paths } from "expo-file-system";
-import * as FileSystemLegacy from "expo-file-system/legacy";
-import * as IntentLauncher from "expo-intent-launcher";
-import * as Sharing from "expo-sharing";
+import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 
@@ -11,12 +7,11 @@ import ReactionPicker from "./ReactionPicker";
 import EditMessageModal from "./EditMessageModal";
 import Avatar from "./Avatar";
 import { renderMessageText } from "../lib/markdown";
+import { openFile, saveFile } from "../lib/fileActions";
 import { resolveMediaUrl } from "../constants/config";
 import { clockLabel } from "../lib/format";
 import { useThemeColors } from "../state/themeStore";
 import type { Message } from "../types/api";
-
-const FLAG_GRANT_READ_URI_PERMISSION = 1;
 
 export default function MessageBubble({
   message,
@@ -96,54 +91,14 @@ export default function MessageBubble({
     Alert.alert("Delete this message?", undefined, buttons);
   };
 
-  const downloadToCache = async () => {
-    if (!attachmentUrl) throw new Error("No attachment URL");
-    const destination = new File(Paths.cache, fileName);
-    return File.downloadFileAsync(attachmentUrl, destination, { idempotent: true });
+  const handleOpen = () => {
+    if (!attachmentUrl) return;
+    openFile(attachmentUrl, fileName, mimeType);
   };
 
-  // Real "open with the app registered for this file type, or ask which
-  // app" behaviour (ACTION_VIEW) — not the share sheet, which is a
-  // different Android intent (ACTION_SEND, for sending content to another
-  // app) that was being used here before and confused the two.
-  // getContentUriAsync wraps the download in the FileProvider content:// URI
-  // ACTION_VIEW requires; Expo's build already registers that provider, no
-  // manual native config needed.
-  const handleOpen = async () => {
-    if (Platform.OS !== "android") {
-      // iOS has no equivalent chooser API in Expo; fall back to sharing.
-      try {
-        const file = await downloadToCache();
-        await Sharing.shareAsync(file.uri, { dialogTitle: `Open ${fileName}` });
-      } catch (e) {
-        Alert.alert("Couldn't open file", e instanceof Error ? e.message : "Please try again.");
-      }
-      return;
-    }
-    try {
-      const file = await downloadToCache();
-      const contentUri = await FileSystemLegacy.getContentUriAsync(file.uri);
-      await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
-        data: contentUri,
-        type: mimeType,
-        flags: FLAG_GRANT_READ_URI_PERMISSION,
-      });
-    } catch (e) {
-      Alert.alert("Couldn't open file", e instanceof Error ? e.message : "Please try again.");
-    }
-  };
-
-  // Saving to a user-chosen location has no dedicated API in this Expo SDK
-  // without a new native dependency — the share sheet is the practical
-  // stand-in; most Android share sheets include a "Save to device"/Files
-  // target among the apps offered.
-  const handleSave = async () => {
-    try {
-      const file = await downloadToCache();
-      await Sharing.shareAsync(file.uri, { dialogTitle: `Save ${fileName}` });
-    } catch (e) {
-      Alert.alert("Couldn't save file", e instanceof Error ? e.message : "Please try again.");
-    }
+  const handleSave = () => {
+    if (!attachmentUrl) return;
+    saveFile(attachmentUrl, fileName);
   };
 
   const onFileLongPress = () => {
