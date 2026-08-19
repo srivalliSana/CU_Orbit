@@ -24,3 +24,10 @@ export const getDeletedMessages = () => api('/api/admin/deleted-messages');
 export const getMessageHistory = (id) => api(`/api/admin/messages/${id}/history`);
 
 export const deleteChannel = (id) => api(`/api/channels/${id}`, { method: 'DELETE' });
+
+export const setChannelActive = (id, active) =>
+  api(`/api/channels/${id}/active`, { method: 'PUT', body: JSON.stringify({ active }) });
+
+export const getSystemHealth = () => api('/api/admin/system-health');
+
+export const getSecurityEvents = () => api('/api/admin/security-events');

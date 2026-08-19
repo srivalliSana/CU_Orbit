@@ -13,7 +13,7 @@ import {
   updateChannel,
 } from '../api/channels';
 import { getPinnedMessages, getSharedMedia, getStarredMessages, listUsers } from '../api/chat';
-import { deleteChannel } from '../api/admin';
+import { setChannelActive } from '../api/admin';
 
 const MEDIA_CATEGORIES = [
   { key: 'image', label: 'Photos' },
@@ -47,7 +47,7 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
   const [view, setView] = useState('main');   // main | media | pinned | starred
   const [mediaCategory, setMediaCategory] = useState('image');
   const [listItems, setListItems] = useState(null);
-  const [deleting, setDeleting] = useState(false);
+  const [togglingActive, setTogglingActive] = useState(false);
 
   const load = () => {
     setError(null);
@@ -86,16 +86,18 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
     fetcher.then(setListItems).catch(() => setListItems([]));
   }, [view, mediaCategory, channelId]);
 
-  const confirmDeleteChannel = async () => {
-    if (!window.confirm(`Delete #${channel.name}? This removes it for every member and cannot be undone.`)) return;
-    setDeleting(true);
+  const toggleChannelActive = async () => {
+    const active = channel.is_active === false;   // currently inactive → reactivating
+    if (!active && !window.confirm(`Deactivate #${channel.name}? No one will be able to see or message in it until you reactivate it.`)) return;
+    setTogglingActive(true);
     try {
-      await deleteChannel(channelId);
+      const { channel: updated } = await setChannelActive(channelId, active);
+      setChannel(updated);
       onChanged?.();
-      onClose?.();
     } catch (e) {
-      setError(e.message || 'Could not delete this channel.');
-      setDeleting(false);
+      setError(e.message || 'Could not update this channel.');
+    } finally {
+      setTogglingActive(false);
     }
   };
 
@@ -467,12 +469,23 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
 
             {isSuperAdmin && (
               <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
+                {channel.is_active === false && (
+                  <p className="mb-2 rounded-lg bg-amber-50 px-2.5 py-2 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                    This channel is deactivated — hidden from members, and no one can message here until you reactivate it.
+                  </p>
+                )}
                 <button
-                  onClick={confirmDeleteChannel}
-                  disabled={deleting}
-                  className="block w-full rounded-lg px-2 py-2 text-left text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-40 dark:hover:bg-red-950/40"
+                  onClick={toggleChannelActive}
+                  disabled={togglingActive}
+                  className={`block w-full rounded-lg px-2 py-2 text-left text-sm font-medium disabled:opacity-40 ${
+                    channel.is_active === false
+                      ? 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                      : 'text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40'
+                  }`}
                 >
-                  {deleting ? 'Deleting…' : '🗑️ Delete channel'}
+                  {togglingActive
+                    ? 'Updating…'
+                    : channel.is_active === false ? '✅ Reactivate channel' : '🚫 Deactivate channel'}
                 </button>
               </div>
             )}

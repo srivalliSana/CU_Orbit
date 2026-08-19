@@ -138,6 +138,13 @@ const User = sequelize.define('User', {
     // A deactivated user's session is rejected on every request (see auth
     // middleware), but their row and message history are kept intact.
     is_active: { type: DataTypes.BOOLEAN, defaultValue: true },
+    // Set when this row represents an installed app's bot identity rather
+    // than a person — see the Apps platform models below. Reusing User (not
+    // a parallel "Bot" table) means a bot shows up in member lists, is
+    // @-mentionable, and posts messages through the exact same paths a
+    // person's messages do, for free.
+    is_bot: { type: DataTypes.BOOLEAN, defaultValue: false },
+    app_id: { type: DataTypes.UUID, allowNull: true },
 });
 
 const Workspace = sequelize.define('Workspace', {
@@ -162,7 +169,10 @@ const Channel = sequelize.define('Channel', {
     created_by: { type: DataTypes.STRING, allowNull: true },
     restricted_messaging: { type: DataTypes.BOOLEAN, defaultValue: false },
     info_edit_restricted: { type: DataTypes.BOOLEAN, defaultValue: false },
-    approval_required: { type: DataTypes.BOOLEAN, defaultValue: false }
+    approval_required: { type: DataTypes.BOOLEAN, defaultValue: false },
+    // Superadmin "deactivate" instead of delete — the channel and its history
+    // stay intact, just hidden and read/write-locked, until reactivated.
+    is_active: { type: DataTypes.BOOLEAN, defaultValue: true },
 });
 
 const ChannelMember = sequelize.define('ChannelMember', {
@@ -342,6 +352,86 @@ const Release = sequelize.define('Release', {
     build_number: { type: DataTypes.INTEGER, allowNull: false },
     filename: { type: DataTypes.STRING, allowNull: false },
     release_date: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+});
+
+// --- Apps platform (Slack-style installable apps: OAuth + slash commands) ---
+
+/** A registered application — the client_id/secret pair an app's own backend
+ *  uses to request installation via OAuth. Distinct from "installed", which
+ *  is what AppInstallation tracks. */
+const App = sequelize.define('App', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    name: { type: DataTypes.STRING, allowNull: false },
+    description: { type: DataTypes.TEXT, defaultValue: '' },
+    icon_url: { type: DataTypes.STRING, defaultValue: '' },
+    owner_user_id: { type: DataTypes.STRING, allowNull: false },
+    client_id: { type: DataTypes.STRING, unique: true, allowNull: false },
+    // Never store the raw secret — only its hash. Shown once, at creation.
+    client_secret_hash: { type: DataTypes.STRING, allowNull: false },
+    redirect_uris: { type: DataTypes.JSON, defaultValue: [] },   // exact-match only
+    scopes: { type: DataTypes.JSON, defaultValue: [] },          // requested, not granted
+    is_first_party: { type: DataTypes.BOOLEAN, defaultValue: false },
+    status: { type: DataTypes.ENUM('pending', 'approved', 'suspended'), defaultValue: 'approved' },
+});
+
+/** Short-lived, single-use OAuth authorization code — traded for a token pair at /oauth/token. */
+const AppAuthorizationCode = sequelize.define('AppAuthorizationCode', {
+    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    code: { type: DataTypes.STRING, unique: true, allowNull: false },
+    app_id: { type: DataTypes.UUID, allowNull: false },
+    user_id: { type: DataTypes.STRING, allowNull: false },   // the admin who consented
+    redirect_uri: { type: DataTypes.STRING, allowNull: false },
+    scopes: { type: DataTypes.JSON, defaultValue: [] },       // granted, may be <= App.scopes
+    code_challenge: { type: DataTypes.STRING, allowNull: true },
+    code_challenge_method: { type: DataTypes.STRING, allowNull: true },
+    expires_at: { type: DataTypes.DATE, allowNull: false },
+    // Set on redemption instead of deleting the row — keeps an audit trail
+    // and makes "already used" a normal, expected check rather than a 404.
+    used_at: { type: DataTypes.DATE, allowNull: true },
+});
+
+/** One issued access/refresh token pair for one installed app. Tokens are
+ *  stored hashed — this is a long-lived bearer credential an external
+ *  server holds and replays on every call, so a DB leak must not hand out
+ *  usable tokens directly. */
+const AppToken = sequelize.define('AppToken', {
+    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    app_id: { type: DataTypes.UUID, allowNull: false },
+    installation_id: { type: DataTypes.UUID, allowNull: false },
+    access_token_hash: { type: DataTypes.STRING, unique: true, allowNull: false },
+    refresh_token_hash: { type: DataTypes.STRING, unique: true, allowNull: true },
+    scopes: { type: DataTypes.JSON, defaultValue: [] },
+    expires_at: { type: DataTypes.DATE, allowNull: false },
+    refresh_expires_at: { type: DataTypes.DATE, allowNull: true },
+    revoked_at: { type: DataTypes.DATE, allowNull: true },
+});
+
+/** "App X is installed" — OAuth-level install grants API scopes workspace-
+ *  wide; a bot only appears/posts in channels an admin separately adds it
+ *  to (a bot-flagged ChannelMember row), so installing an app can never by
+ *  itself make its bot start posting anywhere. */
+const AppInstallation = sequelize.define('AppInstallation', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    app_id: { type: DataTypes.UUID, allowNull: false },
+    installed_by: { type: DataTypes.STRING, allowNull: false },
+    workspace_id: { type: DataTypes.STRING, allowNull: true },
+    granted_scopes: { type: DataTypes.JSON, defaultValue: [] },
+    bot_user_id: { type: DataTypes.STRING, allowNull: true },
+    status: { type: DataTypes.ENUM('active', 'revoked'), defaultValue: 'active' },
+    revoked_at: { type: DataTypes.DATE, allowNull: true },
+}, {
+    indexes: [{ fields: ['app_id'] }, { fields: ['workspace_id'] }],
+});
+
+/** A slash command an app has registered. Command names are global across
+ *  all apps — first to register "/foo" owns it, same as Slack. */
+const SlashCommand = sequelize.define('SlashCommand', {
+    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    app_id: { type: DataTypes.UUID, allowNull: false },
+    command: { type: DataTypes.STRING, unique: true, allowNull: false },   // stored without leading '/'
+    description: { type: DataTypes.STRING, defaultValue: '' },
+    usage_hint: { type: DataTypes.STRING, defaultValue: '' },
+    webhook_url: { type: DataTypes.STRING, allowNull: false },
 });
 
 const Status = sequelize.define('Status', {
@@ -1064,15 +1154,75 @@ app.get('/api/unread', auth.requireAuth, async (req, res) => {
  */
 const isGroupAdmin = (user) => user?.role === 'admin';
 
+// --- Apps platform auth helpers ---
+//
+// client_id/client_secret and access/refresh tokens are all generated
+// high-entropy random strings, not human-chosen passwords, so a plain
+// SHA-256 hash at rest is the right tool here (matches how GitHub/Stripe
+// hash API keys) — a slow password-hash (bcrypt/scrypt) exists to defend
+// low-entropy human secrets against brute-forcing, which doesn't apply to
+// a 256-bit random token.
+const sha256Hex = (s) => crypto.createHash('sha256').update(s).digest('hex');
+const randomToken = (bytes = 32) => crypto.randomBytes(bytes).toString('base64url');
+
+/**
+ * Express middleware — populates req.app_ (never req.user, so "human vs.
+ * app" is unmistakable downstream) or rejects with 401. Deliberately not
+ * layered onto auth.requireAuth: an app token is a fundamentally different
+ * credential (workspace/installation-scoped, not a person's session), and
+ * every existing /api/* handler already assumes req.user.id is a real
+ * signed-in person across dozens of permission checks — mixing the two
+ * credential types into those same handlers risks a scope check being
+ * accidentally satisfied by a role check, or vice versa. App-token routes
+ * live under the separate /api/app/* namespace instead.
+ */
+async function requireAppToken(req, res, next) {
+    const h = req.get('authorization') || '';
+    const token = h.startsWith('Bearer ') ? h.slice(7).trim() : null;
+    if (!token) return res.status(401).json({ error: 'unauthorized', message: 'Missing bearer token' });
+    try {
+        const hash = sha256Hex(token);
+        const row = await AppToken.findOne({ where: { access_token_hash: hash } });
+        if (!row || row.revoked_at || row.expires_at < new Date()) {
+            return res.status(401).json({ error: 'unauthorized', message: 'Invalid or expired app token' });
+        }
+        const installation = await AppInstallation.findByPk(row.installation_id);
+        if (!installation || installation.status !== 'active') {
+            return res.status(401).json({ error: 'unauthorized', message: 'App installation is not active' });
+        }
+        const app = await App.findByPk(row.app_id);
+        if (!app) return res.status(401).json({ error: 'unauthorized' });
+        req.app_ = { id: app.id, name: app.name, installationId: installation.id, scopes: row.scopes || [], botUserId: installation.bot_user_id };
+        next();
+    } catch (e) {
+        console.error('[APP-TOKEN]', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+}
+
+/** Route guard for a specific OAuth scope. Use after requireAppToken. */
+function requireScope(...scopes) {
+    return (req, res, next) => {
+        if (!req.app_) return res.status(401).json({ error: 'unauthorized' });
+        if (!scopes.every((s) => req.app_.scopes.includes(s))) {
+            return res.status(403).json({ error: 'forbidden', message: `Requires scope: ${scopes.join(', ')}` });
+        }
+        next();
+    };
+}
+
 /**
  * Campus-specific proxy for "can create/manage channels": CUTM's email
  * convention is that student addresses start with a roll number (digits)
- * and staff addresses start with a name (letters), both on the
- * cutm.ac.in / cutmap.ac.in domains. Used instead of the CampusOne role
- * claim for this one permission because that classification is what the
- * institution actually goes by here.
+ * and staff addresses start with a name (letters). Also doubles as the
+ * full list of domains allowed to sign in / join channels at all (see
+ * isCampusEmail below) — cutm.ac.in/cutmap.ac.in plus the affiliated-group
+ * domains (Gram Tarang, GT Tech, FTL, Centurion University's main domain).
  */
-const FACULTY_EMAIL_DOMAINS = ['cutm.ac.in', 'cutmap.ac.in'];
+const FACULTY_EMAIL_DOMAINS = [
+    'cutm.ac.in', 'cutmap.ac.in',
+    'ftl.org.in', 'gramtarang.org.in', 'gramtarang.org', 'thegttech.com', 'centurionuniv.edu.in',
+];
 function isFacultyEmail(email) {
     if (!email) return false;
     const [local, domain] = String(email).toLowerCase().split('@');
@@ -1094,6 +1244,8 @@ function isCampusEmail(email) {
  * overseeing the workspace — no one else, even with the exact id. */
 async function canViewChannel(userId, channelId, user) {
     if (isGroupAdmin(user)) return true;
+    const channel = await Channel.findByPk(channelId, { attributes: ['is_active'] });
+    if (channel && channel.is_active === false) return false;
     return !!(await ChannelMember.findOne({ where: { channelId, userId } }));
 }
 
@@ -1129,6 +1281,8 @@ async function canAccessContainer(userId, containerId, user = null) {
     // A DM room is addressed by its two participants and is never accessible to
     // anyone else, admins included.
     if (containerId.includes('_')) return containerId.split('_').includes(userId);
+    const channel = await Channel.findByPk(containerId, { attributes: ['is_active'] });
+    if (channel && channel.is_active === false && !isGroupAdmin(user)) return false;
     if (isGroupAdmin(user)) return true;
     return !!(await ChannelMember.findOne({ where: { channelId: containerId, userId } }));
 }
@@ -1387,10 +1541,12 @@ app.get('/api/home/:userId/:workspaceId', auth.requireAuth, async (req, res) => 
         // Faculty and students see the groups they belong to. Admins see every
         // group in the workspace, so they can oversee and join without waiting
         // to be added. Direct messages are never included for anyone but their
-        // participants, regardless of role.
+        // participants, regardless of role. A deactivated channel disappears
+        // entirely for regular members — admins still see it (greyed out on
+        // the client), since they're the only ones who can reactivate it.
         const channels = isGroupAdmin(req.user)
             ? await Channel.findAll({ where: { workspace_id: workspaceId } })
-            : await Channel.findAll({ where: { workspace_id: workspaceId, id: { [Op.in]: channelIds } } });
+            : await Channel.findAll({ where: { workspace_id: workspaceId, id: { [Op.in]: channelIds }, is_active: true } });
 
         const memberOf = new Set(channelIds);
         const channelsData = await Promise.all(channels.map(async (ch) => {
@@ -1656,6 +1812,12 @@ app.post('/api/messages', auth.requireAuth, async (req, res) => {
         }
         if (channelId && !channelId.includes('_')) {
              const ch = await Channel.findByPk(channelId);
+             // Deactivated channels are read/write-locked for everyone, no
+             // admin bypass — "no one can message there until he makes it
+             // active again" is the whole point of deactivate-over-delete.
+             if (ch && ch.is_active === false) {
+                 return res.status(403).json({ error: 'channel_deactivated', message: 'This channel has been deactivated' });
+             }
              if (ch && ch.restricted_messaging) {
                  const member = await ChannelMember.findOne({ where: { channelId, userId: senderId } });
                  if (member && member.role !== 'admin') {
@@ -2299,7 +2461,7 @@ app.post('/api/admin/users/promote-by-email', auth.requireAuth, async (req, res)
     try {
         const email = String(req.body.email || '').toLowerCase().trim();
         if (!email || !isCampusEmail(email)) {
-            return res.status(400).json({ error: 'bad_request', message: 'Enter a valid cutm.ac.in / cutmap.ac.in address' });
+            return res.status(400).json({ error: 'bad_request', message: 'Enter a valid campus email address' });
         }
         const user = await findOrCreateOrbitUser(email, null);
         user.role = 'admin';
@@ -2481,6 +2643,27 @@ app.delete('/api/channels/:id', auth.requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
+/**
+ * "Deactivate/reactivate a channel" — the superadmin-facing alternative to
+ * deleting one outright. History and membership stay intact; while inactive
+ * the channel disappears from every non-admin's list (canViewChannel/
+ * canAccessContainer) and message sends are rejected for everyone, no admin
+ * bypass, until reactivated here.
+ */
+app.put('/api/channels/:id/active', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden', message: 'Only workspace admins can deactivate a channel.' });
+    try {
+        const { active } = req.body;
+        if (typeof active !== 'boolean') return res.status(400).json({ error: 'bad_request', message: 'active must be boolean' });
+        const channel = await Channel.findByPk(req.params.id);
+        if (!channel) return res.status(404).json({ error: 'not_found' });
+        channel.is_active = active;
+        await channel.save();
+        await logAudit(req.user, active ? 'channel.reactivated' : 'channel.deactivated', 'channel', channel.id, channel.name);
+        res.json({ success: true, channel });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
 app.get('/api/channels/:id/members', auth.requireAuth, async (req, res) => {
     try {
         if (!(await canViewChannel(req.user.id, req.params.id, req.user))) {
@@ -2530,7 +2713,8 @@ app.post('/api/channels/:id/members', auth.requireAuth, async (req, res) => {
         const [member, created] = await ChannelMember.findOrCreate({ where: { channelId: req.params.id, userId: userId }, defaults: { channelId: req.params.id, userId: userId, role: role || 'member' } });
         if (created) {
             if (channel) await channel.increment('member_count');
-            await Message.create({ channelId: req.params.id, senderId: adder.id, senderName: adder.name, body: `ADD_MEMBER:${userId}`, type: 'system', timestamp: Date.now() });
+            const added = await User.findByPk(userId, { attributes: ['name'] });
+            await Message.create({ channelId: req.params.id, senderId: adder.id, senderName: adder.name, body: `${adder.name} added ${added?.name || 'a member'}`, type: 'system', timestamp: Date.now() });
         } else if (role !== undefined && role !== member.role) {
             // Not a fresh add — this is a promote/demote of someone already
             // in the channel, which findOrCreate's `defaults` silently
@@ -2580,7 +2764,7 @@ app.post('/api/channels/:id/invite-email', auth.requireAuth, async (req, res) =>
         const email = String(req.body.email || '').toLowerCase().trim();
         if (!email) return res.status(400).json({ error: 'bad_request', message: 'email required' });
         if (!isCampusEmail(email)) {
-            return res.status(403).json({ error: 'forbidden', message: 'Only cutm.ac.in / cutmap.ac.in addresses can be invited' });
+            return res.status(403).json({ error: 'forbidden', message: 'Only campus email addresses can be invited' });
         }
         if (!mailer) {
             console.error('[invite-email] SMTP is not configured — cannot send invites');
@@ -2668,7 +2852,7 @@ app.post('/api/channels/join-by-link', auth.requireAuth, async (req, res) => {
         // just by knowing their id.
         const userId = req.user.id;
         if (!isCampusEmail(req.user.email)) {
-            return res.status(403).json({ error: 'forbidden', message: 'Only cutm.ac.in / cutmap.ac.in accounts can join channels' });
+            return res.status(403).json({ error: 'forbidden', message: 'Only campus accounts can join channels' });
         }
         const { inviteCode } = req.body;
         const channel = await Channel.findOne({ where: { invite_code: inviteCode } });

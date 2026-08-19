@@ -39,3 +39,28 @@ export const getAuditLog = () => client.get<AuditLogEntry[]>("/admin/audit-log")
 export const getDeletedMessages = () => client.get<DeletedMessage[]>("/admin/deleted-messages").then((res) => res.data);
 
 export const deleteChannel = (id: string) => client.delete(`/channels/${id}`);
+
+export const setChannelActive = (id: string, active: boolean) =>
+  client.put<{ success: boolean; channel: { id: string; is_active: boolean } }>(`/channels/${id}/active`, { active }).then((res) => res.data);
+
+export interface SystemHealth {
+  cpu: { load1: number; load5: number; load15: number; cores: number; usagePercent: number };
+  memory: { totalBytes: number; usedBytes: number; freeBytes: number; usagePercent: number };
+  disk: { totalBytes: number; usedBytes: number; freeBytes: number; usagePercent: number } | null;
+  processUptimeSeconds: number;
+  systemUptimeSeconds: number;
+  timestamp: number;
+}
+
+export interface SecurityEvent {
+  id: number;
+  type: string;
+  ip: string;
+  location: string | null;
+  detail: string | null;
+  createdAt: string;
+}
+
+export const getSystemHealth = () => client.get<SystemHealth>("/admin/system-health").then((res) => res.data);
+
+export const getSecurityEvents = () => client.get<SecurityEvent[]>("/admin/security-events").then((res) => res.data);

@@ -28,6 +28,7 @@ export interface ChannelDetail {
   restricted_messaging: boolean;
   info_edit_restricted: boolean;
   approval_required: boolean;
+  is_active: boolean;
 }
 
 export interface ChannelMemberRow {

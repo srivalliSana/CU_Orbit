@@ -26,7 +26,7 @@ import {
   updateChannel,
 } from "../../api/channels";
 import { listUsers } from "../../api/users";
-import { deleteChannel } from "../../api/admin";
+import { setChannelActive } from "../../api/admin";
 import { apiErrorMessage } from "../../api/client";
 import { useAuthStore } from "../../state/authStore";
 import Avatar from "../../components/Avatar";
@@ -171,30 +171,33 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
 
   const candidates = (usersQuery.data ?? []).filter((u) => !members.some((m) => m.id === u.id));
 
-  const confirmDeleteChannel = () => {
+  const toggleChannelActive = () => {
     if (!channel) return;
-    Alert.alert(
-      `Delete #${channel.name}?`,
-      "This removes it for every member and cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              await deleteChannel(channelId);
-              queryClient.invalidateQueries({ queryKey: ["home"] });
-              navigation.goBack();
-            } catch (e) {
-              setError(apiErrorMessage(e, "Could not delete this channel."));
-              setDeleting(false);
-            }
-          },
-        },
-      ]
-    );
+    const active = channel.is_active === false;   // currently inactive → reactivating
+    const apply = async () => {
+      setDeleting(true);
+      try {
+        await setChannelActive(channelId, active);
+        queryClient.invalidateQueries({ queryKey: ["home"] });
+        reload();
+      } catch (e) {
+        setError(apiErrorMessage(e, "Could not update this channel."));
+      } finally {
+        setDeleting(false);
+      }
+    };
+    if (!active) {
+      Alert.alert(
+        `Deactivate #${channel.name}?`,
+        "No one will be able to see or message in it until you reactivate it.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Deactivate", style: "destructive", onPress: apply },
+        ]
+      );
+    } else {
+      apply();
+    }
   };
 
   if (channelQuery.isLoading || membersQuery.isLoading) {
@@ -341,8 +344,15 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
 
           {isSuperAdmin && channel ? (
             <View style={styles.settingsBlock}>
-              <Pressable style={styles.navRow} onPress={confirmDeleteChannel} disabled={deleting}>
-                <Text style={styles.deleteChannelText}>{deleting ? "Deleting…" : "🗑️ Delete channel"}</Text>
+              {channel.is_active === false ? (
+                <Text style={styles.deactivatedNotice}>
+                  This channel is deactivated — hidden from members, and no one can message here until you reactivate it.
+                </Text>
+              ) : null}
+              <Pressable style={styles.navRow} onPress={toggleChannelActive} disabled={deleting}>
+                <Text style={[styles.deleteChannelText, channel.is_active === false && styles.reactivateText]}>
+                  {deleting ? "Updating…" : channel.is_active === false ? "✅ Reactivate channel" : "🚫 Deactivate channel"}
+                </Text>
               </Pressable>
             </View>
           ) : null}
@@ -541,6 +551,18 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     fontSize: 14,
     fontWeight: "600",
     color: colors.danger,
+  },
+  reactivateText: {
+    color: colors.success,
+  },
+  deactivatedNotice: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: `${colors.warning}22`,
+    color: colors.warning,
+    fontSize: 12,
   },
   membersHeaderRow: {
     flexDirection: "row",

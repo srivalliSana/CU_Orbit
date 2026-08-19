@@ -52,7 +52,13 @@ export function useAuthSession() {
         // with every Google account on the device.
         prompt: AuthSession.Prompt.SelectAccount,
       });
-      const result = await request.promptAsync(GOOGLE_DISCOVERY);
+      // Without this, Custom Tabs on Android shares cookies with the
+      // device's regular Chrome session — Google then silently reuses
+      // whichever account is already signed in there instead of the
+      // account-chooser prompt=select_account above is supposed to force.
+      // An ephemeral session has no ambient cookies, so the chooser
+      // actually shows every Google account on the device.
+      const result = await request.promptAsync(GOOGLE_DISCOVERY, { preferEphemeralSession: true });
       if (result.type !== "success") {
         if (result.type !== "cancel" && result.type !== "dismiss") {
           setError("Google sign-in was interrupted. Please try again.");
