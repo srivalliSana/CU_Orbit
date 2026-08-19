@@ -31,3 +31,5 @@ export const setChannelActive = (id, active) =>
 export const getSystemHealth = () => api('/api/admin/system-health');
 
 export const getSecurityEvents = () => api('/api/admin/security-events');
+
+export const getActivitySummary = () => api('/api/admin/activity-summary');

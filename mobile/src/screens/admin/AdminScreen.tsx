@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import Avatar from "../../components/Avatar";
 import {
-  bulkAddUsers, changeUserRole, getAdminUsers, getAuditLog, getDeletedMessages, promoteByEmail, removeUser, setUserActive,
-  type AuditLogEntry, type DeletedMessage,
+  bulkAddUsers, changeUserRole, getActivitySummary, getAdminUsers, getAuditLog, getDeletedMessages,
+  getSecurityEvents, getSystemHealth, promoteByEmail, removeUser, setUserActive,
+  type ActivitySummary, type AuditLogEntry, type DeletedMessage, type SecurityEvent, type SystemHealth,
 } from "../../api/admin";
 import { apiErrorMessage } from "../../api/client";
 import { timeLabel } from "../../lib/format";
@@ -15,6 +16,8 @@ import type { User } from "../../types/api";
 const ROLES = ["student", "faculty", "admin", "examcell", "coordinator"] as const;
 const TABS = [
   { id: "members", label: "Members" },
+  { id: "activity", label: "Activity" },
+  { id: "security", label: "Security" },
   { id: "audit", label: "Audit log" },
   { id: "deleted", label: "Deleted" },
 ] as const;
@@ -33,7 +36,11 @@ export default function AdminScreen() {
           </Pressable>
         ))}
       </View>
-      {tab === "members" ? <MembersTab /> : tab === "audit" ? <AuditTab /> : <DeletedTab />}
+      {tab === "members" ? <MembersTab />
+        : tab === "activity" ? <ActivityTab />
+        : tab === "security" ? <SecurityTab />
+        : tab === "audit" ? <AuditTab />
+        : <DeletedTab />}
     </View>
   );
 }
@@ -230,6 +237,136 @@ function DeletedTab() {
   );
 }
 
+const formatGB = (bytes: number) => `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+const formatUptime = (seconds: number) => {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+};
+
+function HealthBar({ label, percent, detail }: { label: string; percent: number; detail?: string }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const barColor = percent >= 90 ? colors.danger : percent >= 70 ? colors.warning : colors.success;
+  return (
+    <View style={styles.healthCard}>
+      <View style={styles.healthCardHeader}>
+        <Text style={styles.healthLabel}>{label}</Text>
+        <Text style={styles.healthPercent}>{percent}%</Text>
+      </View>
+      <View style={styles.healthTrack}>
+        <View style={[styles.healthFill, { width: `${Math.min(100, percent)}%`, backgroundColor: barColor }]} />
+      </View>
+      {detail ? <Text style={styles.healthDetail}>{detail}</Text> : null}
+    </View>
+  );
+}
+
+function StatTile({ label, value }: { label: string; value: string | number }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  return (
+    <View style={styles.statTile}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+/** Server health (CPU/memory/disk/uptime) + a live activity snapshot — polls every 8s while open. */
+function ActivityTab() {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [health, setHealth] = useState<SystemHealth | null>(null);
+  const [summary, setSummary] = useState<ActivitySummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      Promise.all([getSystemHealth(), getActivitySummary()])
+        .then(([h, s]) => { if (!cancelled) { setHealth(h); setSummary(s); } })
+        .catch((e) => { if (!cancelled) setError(apiErrorMessage(e)); });
+    };
+    load();
+    const interval = setInterval(load, 8000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  if (error) return <Text style={styles.error}>{error}</Text>;
+  if (!health || !summary) return <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />;
+
+  return (
+    <ScrollView>
+      <Text style={styles.sectionLabel}>SERVER HEALTH</Text>
+      <View style={styles.healthGrid}>
+        <HealthBar label="CPU" percent={health.cpu.usagePercent} detail={`load ${health.cpu.load1.toFixed(2)} / ${health.cpu.cores} cores`} />
+        <HealthBar label="Memory" percent={health.memory.usagePercent} detail={`${formatGB(health.memory.usedBytes)} / ${formatGB(health.memory.totalBytes)}`} />
+        {health.disk ? (
+          <HealthBar label="Disk" percent={health.disk.usagePercent} detail={`${formatGB(health.disk.usedBytes)} / ${formatGB(health.disk.totalBytes)}`} />
+        ) : (
+          <View style={styles.healthCard}><Text style={styles.healthDetail}>Disk usage unavailable</Text></View>
+        )}
+        <View style={styles.healthCard}>
+          <Text style={styles.healthLabel}>Server uptime</Text>
+          <Text style={styles.uptimeValue}>{formatUptime(health.systemUptimeSeconds)}</Text>
+          <Text style={styles.healthDetail}>process up {formatUptime(health.processUptimeSeconds)}</Text>
+        </View>
+      </View>
+
+      <Text style={styles.sectionLabel}>RIGHT NOW</Text>
+      <View style={styles.healthGrid}>
+        <StatTile label="Online now" value={summary.onlineUsers} />
+        <StatTile label="Total members" value={summary.totalUsers} />
+        <StatTile label="Messages (24h)" value={summary.messagesToday} />
+        <StatTile label="Active channels" value={`${summary.activeChannels}/${summary.totalChannels}`} />
+      </View>
+    </ScrollView>
+  );
+}
+
+const SECURITY_EVENT_LABELS: Record<string, string> = {
+  invalid_google_token: "Invalid Google token",
+  non_campus_login_attempt: "Non-campus login attempt",
+  invalid_otp: "Wrong OTP code",
+  otp_lockout: "OTP lockout (too many wrong tries)",
+  invalid_release_token: "Invalid release-registration token",
+};
+
+/** Security monitor — failed logins, invalid tokens, lockouts, each with an offline geo-IP location. */
+function SecurityTab() {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [events, setEvents] = useState<SecurityEvent[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { getSecurityEvents().then(setEvents).catch((e) => setError(apiErrorMessage(e))); }, []);
+
+  if (error) return <Text style={styles.error}>{error}</Text>;
+  if (!events) return <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />;
+  if (events.length === 0) return <Text style={styles.empty}>No suspicious activity logged.</Text>;
+
+  return (
+    <FlatList
+      data={events}
+      keyExtractor={(e) => String(e.id)}
+      renderItem={({ item }) => (
+        <View style={styles.logRow}>
+          <View style={styles.memberMetaRow}>
+            <Text style={styles.securityAction}>{SECURITY_EVENT_LABELS[item.type] || item.type}</Text>
+            <Text style={styles.logTime}>{timeLabel(new Date(item.createdAt).getTime())}</Text>
+          </View>
+          <Text style={styles.logDetail}>
+            {item.ip || "unknown IP"}{item.location ? ` — ${item.location}` : ""}{item.detail ? ` — ${item.detail}` : ""}
+          </Text>
+        </View>
+      )}
+    />
+  );
+}
+
 const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   container: {
     flex: 1,
@@ -365,6 +502,87 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   },
   logDetail: {
     fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  securityAction: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.danger,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    color: colors.textMuted,
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  healthGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 16,
+  },
+  healthCard: {
+    flexBasis: "47%",
+    flexGrow: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    padding: 10,
+  },
+  healthCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  healthLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.textMuted,
+  },
+  healthPercent: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  healthTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.surface,
+    overflow: "hidden",
+  },
+  healthFill: {
+    height: "100%",
+  },
+  healthDetail: {
+    fontSize: 10,
+    color: colors.textMuted,
+    marginTop: 4,
+  },
+  uptimeValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.text,
+    marginTop: 2,
+  },
+  statTile: {
+    flexBasis: "47%",
+    flexGrow: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    padding: 10,
+    alignItems: "center",
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  statLabel: {
+    fontSize: 11,
     color: colors.textMuted,
     marginTop: 2,
   },

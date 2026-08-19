@@ -64,3 +64,13 @@ export interface SecurityEvent {
 export const getSystemHealth = () => client.get<SystemHealth>("/admin/system-health").then((res) => res.data);
 
 export const getSecurityEvents = () => client.get<SecurityEvent[]>("/admin/security-events").then((res) => res.data);
+
+export interface ActivitySummary {
+  onlineUsers: number;
+  totalUsers: number;
+  messagesToday: number;
+  activeChannels: number;
+  totalChannels: number;
+}
+
+export const getActivitySummary = () => client.get<ActivitySummary>("/admin/activity-summary").then((res) => res.data);

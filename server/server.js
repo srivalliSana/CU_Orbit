@@ -9,11 +9,16 @@ const crypto = require('crypto');
 require('dotenv').config();
 const { OAuth2Client } = require('google-auth-library');
 const nodemailer = require('nodemailer');
+const geoip = require('geoip-lite');   // offline MaxMind-lite lookup — no outbound network call
 const auth = require('./lib/auth');
 const campus = require('./lib/campus');
 const realtime = require('./lib/realtime');
 
 const app = express();
+// nginx runs on the same box in front of this process — without this,
+// req.ip is always nginx's own loopback address, not the real client IP,
+// which would make IP-based security logging and geo-lookup meaningless.
+app.set('trust proxy', 'loopback');
 app.use(express.json());
 app.use(cors());
 
@@ -261,6 +266,23 @@ const AuditLog = sequelize.define('AuditLog', {
     target_type: { type: DataTypes.STRING, allowNull: true },
     target_id: { type: DataTypes.STRING, allowNull: true },
     detail: { type: DataTypes.STRING, allowNull: true },
+});
+
+/**
+ * "Security monitor / attacks & suspicious activity" — a lightweight event
+ * log distinct from AuditLog: AuditLog is "what an admin did," this is
+ * "what an unauthenticated or misbehaving caller tried." Best-effort only
+ * (see logSecurityEvent) — a logging failure must never break the request
+ * that triggered it.
+ */
+const SecurityEvent = sequelize.define('SecurityEvent', {
+    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    type: { type: DataTypes.STRING, allowNull: false },   // e.g. 'invalid_login', 'invalid_token', 'rate_limited'
+    ip: { type: DataTypes.STRING, allowNull: true },
+    location: { type: DataTypes.STRING, allowNull: true },   // "City, Country" from offline geo-IP lookup
+    detail: { type: DataTypes.STRING, allowNull: true },
+}, {
+    indexes: [{ fields: ['createdAt'] }],
 });
 
 /** "Polls in channels" — options are a plain array of strings, indexed by position. */
@@ -716,7 +738,8 @@ app.post('/api/system/register-release', async (req, res) => {
     const a = Buffer.from(String(supplied).padEnd(64).slice(0, 64));
     const b = Buffer.from(String(expected).padEnd(64).slice(0, 64));
     if (!crypto.timingSafeEqual(a, b)) {
-        console.warn('[release] rejected registration with bad token from', req.ip);
+        console.warn('[release] rejected registration with bad token from', clientIp(req));
+        logSecurityEvent('invalid_release_token', req);
         return res.status(401).json({ error: 'unauthorized' });
     }
 
@@ -835,6 +858,27 @@ async function logAudit(actor, action, targetType, targetId, detail) {
             action, target_type: targetType, target_id: targetId, detail,
         });
     } catch (e) { console.error('[audit-log]', e.message); }
+}
+
+/** Real client IP — trust-proxy above already strips nginx's own address off req.ip. */
+function clientIp(req) {
+    return (req.ip || '').replace(/^::ffff:/, '');   // normalize IPv4-mapped-IPv6
+}
+
+function geoLabel(ip) {
+    try {
+        const hit = ip && geoip.lookup(ip);
+        if (!hit) return null;
+        return [hit.city, hit.country].filter(Boolean).join(', ') || null;
+    } catch { return null; }
+}
+
+/** Best-effort — a logging failure must never break the request that triggered it. */
+async function logSecurityEvent(type, req, detail) {
+    try {
+        const ip = clientIp(req);
+        await SecurityEvent.create({ type, ip, location: geoLabel(ip), detail: detail || null });
+    } catch (e) { console.error('[security-event]', e.message); }
 }
 
 /**
@@ -1351,6 +1395,7 @@ app.post('/api/auth/google', async (req, res) => {
             const ticket = await googleClient.verifyIdToken({ idToken, audience });
             payload = ticket.getPayload();
         } catch (e) {
+            logSecurityEvent('invalid_google_token', req, e.message);
             return res.status(401).json({ error: 'invalid_token', message: e.message });
         }
 
@@ -1360,6 +1405,7 @@ app.post('/api/auth/google', async (req, res) => {
         }
         const email = payload.email.toLowerCase();
         if (!isCampusEmail(email)) {
+            logSecurityEvent('non_campus_login_attempt', req, email);
             return res.status(403).json({ error: 'forbidden', message: 'Sign in with your CUTM campus Google account' });
         }
 
@@ -1381,6 +1427,7 @@ app.post('/api/auth/otp/request', async (req, res) => {
         const email = String(req.body.email || '').toLowerCase().trim();
         if (!email) return res.status(400).json({ error: 'bad_request', message: 'email required' });
         if (!isCampusEmail(email)) {
+            logSecurityEvent('non_campus_login_attempt', req, email);
             return res.status(403).json({ error: 'forbidden', message: 'Use your CUTM campus email address' });
         }
         if (!mailer) {
@@ -1433,6 +1480,7 @@ app.post('/api/auth/otp/verify', async (req, res) => {
         }
         if (record.attempts >= OTP_MAX_ATTEMPTS) {
             await record.destroy();
+            logSecurityEvent('otp_lockout', req, email);
             return res.status(429).json({ error: 'too_many_attempts', message: 'Too many wrong tries — request a new code' });
         }
 
@@ -1443,6 +1491,7 @@ app.post('/api/auth/otp/verify', async (req, res) => {
         if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
             record.attempts += 1;
             await record.save();
+            logSecurityEvent('invalid_otp', req, email);
             return res.status(401).json({ error: 'invalid_code', message: 'Wrong code' });
         }
 
@@ -2601,6 +2650,73 @@ app.get('/api/admin/audit-log', auth.requireAuth, async (req, res) => {
         const entries = await AuditLog.findAll({ order: [['createdAt', 'DESC']], limit: 200 });
         res.json(entries);
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** "Security monitor" — recent suspicious-activity events, most recent first. */
+app.get('/api/admin/security-events', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const entries = await SecurityEvent.findAll({ order: [['createdAt', 'DESC']], limit: 200 });
+        res.json(entries);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/**
+ * "Server health" — CPU/memory/disk/uptime, read live from the OS each
+ * call rather than cached, since a superadmin opening this tab wants the
+ * current picture, not a stale one from the last poll.
+ */
+app.get('/api/admin/system-health', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const cores = os.cpus().length || 1;
+        const [load1, load5, load15] = os.loadavg();
+        const totalMem = os.totalmem();
+        const freeMem = os.freemem();
+
+        let disk = null;
+        try {
+            // fs.statfsSync needs Node 18.15+ — the production box already
+            // requires Node 18 for global fetch elsewhere, but guard anyway
+            // so an older Node just hides the disk card instead of 500ing.
+            const stat = fs.statfsSync('/');
+            const totalBytes = stat.blocks * stat.bsize;
+            const freeBytes = stat.bfree * stat.bsize;
+            const usedBytes = totalBytes - freeBytes;
+            disk = { totalBytes, usedBytes, freeBytes, usagePercent: totalBytes ? Math.round((usedBytes / totalBytes) * 100) : 0 };
+        } catch (e) { /* statfs unsupported on this platform/Node version — omit the card */ }
+
+        res.json({
+            cpu: { load1, load5, load15, cores, usagePercent: Math.min(100, Math.round((load1 / cores) * 100)) },
+            memory: { totalBytes: totalMem, usedBytes: totalMem - freeMem, freeBytes: freeMem, usagePercent: Math.round(((totalMem - freeMem) / totalMem) * 100) },
+            disk,
+            processUptimeSeconds: Math.round(process.uptime()),
+            systemUptimeSeconds: Math.round(os.uptime()),
+            timestamp: Date.now(),
+        });
+    } catch (e) {
+        console.error('[system-health]', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
+/** "Activity monitor" — a live snapshot, not a log: who's online right now and today's volume. */
+app.get('/api/admin/activity-summary', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const [onlineUsers, totalUsers, messagesToday, activeChannels, totalChannels] = await Promise.all([
+            User.count({ where: { presence: 'online' } }),
+            User.count(),
+            Message.count({ where: { timestamp: { [Op.gte]: since24h.getTime() } } }),
+            Channel.count({ where: { is_active: true } }),
+            Channel.count(),
+        ]);
+        res.json({ onlineUsers, totalUsers, messagesToday, activeChannels, totalChannels });
+    } catch (e) {
+        console.error('[activity-summary]', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
 });
 
 /** "View deleted messages" */
