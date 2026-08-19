@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Avatar from './Avatar';
 import { getPerson, getPinnedMessages, getSharedMedia, getStarredMessages, startDm } from '../api/chat';
 import { lastSeenLabel } from '../lib/format';
+import { saveFile } from '../lib/saveFile';
 
 const MEDIA_CATEGORIES = [
   { key: 'image', label: 'Photos' },
@@ -105,13 +106,13 @@ export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMess
             {(listItems || []).map((it) => (
               <li
                 key={it.id}
-                onClick={view !== 'media' ? () => onJumpToMessage?.(it.id) : undefined}
-                className={`rounded-lg bg-slate-50 p-2.5 text-sm dark:bg-slate-800 ${view !== 'media' ? 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700' : ''}`}
+                onClick={() => onJumpToMessage?.(it.id)}
+                className="cursor-pointer rounded-lg bg-slate-50 p-2.5 text-sm hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700"
               >
                 <p className="text-xs font-semibold text-slate-500">{it.sender_name}</p>
                 {view === 'media' && mediaCategory === 'link' ? (
                   (it.links || []).map((url, i) => (
-                    <a key={i} href={url} target="_blank" rel="noreferrer" className="block truncate text-blue-600 underline underline-offset-2 dark:text-blue-400">
+                    <a key={i} href={url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="block truncate text-blue-600 underline underline-offset-2 dark:text-blue-400">
                       {url}
                     </a>
                   ))
@@ -119,9 +120,28 @@ export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMess
                   mediaCategory === 'image' ? (
                     <img src={it.attachments[0].url} alt="" className="mt-1 max-h-32 rounded object-cover" />
                   ) : (
-                    <a href={it.attachments[0].url} download className="text-blue-600 underline underline-offset-2 dark:text-blue-400">
-                      {it.attachments[0].name || 'Open'}
-                    </a>
+                    // Tapping the row itself locates the message in chat — Open/Save
+                    // are explicit actions, not what a plain click does.
+                    <div className="mt-1 flex items-center justify-between gap-2">
+                      <span className="truncate text-slate-700 dark:text-slate-200">{it.attachments[0].name || 'Attachment'}</span>
+                      <span className="flex shrink-0 gap-2 text-xs">
+                        <a
+                          href={it.attachments[0].url}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-blue-600 underline underline-offset-2 dark:text-blue-400"
+                        >
+                          Open
+                        </a>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); saveFile(it.attachments[0].url, it.attachments[0].name); }}
+                          className="text-blue-600 underline underline-offset-2 dark:text-blue-400"
+                        >
+                          Save
+                        </button>
+                      </span>
+                    </div>
                   )
                 ) : (
                   <p className="truncate text-slate-700 dark:text-slate-200">{it.text || 'Attachment'}</p>
