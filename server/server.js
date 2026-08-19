@@ -1834,6 +1834,155 @@ app.get('/api/search', auth.requireAuth, async (req, res) => {
     }
 });
 
+/**
+ * Creates a message, resolves mentions, and broadcasts it — the body shared
+ * by the human send path (POST /api/messages) and the app/bot send path
+ * (POST /api/app/messages, slash-command responses). Callers own their own
+ * membership/permission checks first; this only does the create-and-notify
+ * work common to both.
+ */
+async function createMessage({ senderId, senderName, senderAvatarUrl, body, channelId, type, mediaUrl, mediaName, mediaMimeType, replyToId, forwardedFromName, enrichedMentions }) {
+    // Snapshotted server-side (not trusted from the client) so a reply
+    // preview can't be spoofed to show text the quoted message never had.
+    let reply_to = null;
+    if (replyToId) {
+        const original = await Message.findByPk(replyToId);
+        if (original) reply_to = { id: original.id, sender_name: original.senderName, text: original.body };
+    }
+    const msg = await Message.create({
+        senderId, senderName, body, channelId, type: type || 'text',
+        senderAvatarUrl, dm_id: (channelId && channelId.includes('_')) ? channelId : null,
+        attachments: mediaUrl ? [{ type: type, url: mediaUrl, name: mediaName, mimeType: mediaMimeType }] : [],
+        reply_to,
+        forwarded_from: forwardedFromName ? { sender_name: forwardedFromName } : null,
+    });
+    // Mentions are keyed on User.id. This block previously ran entirely on
+    // phone numbers — comparing normalized UUIDs, and looking up members by
+    // phone with a UUID — so no mention resolved once identity moved.
+    // Who should see a badge update: channel members, or the DM partner.
+    const recipientIds = channelId && channelId.includes('_')
+        ? channelId.split('_')
+        : (await ChannelMember.findAll({ where: { channelId } })).map((m) => m.userId);
+
+    const mentionedIds = new Set();
+    if (enrichedMentions && Array.isArray(enrichedMentions)) {
+        for (const mData of enrichedMentions) {
+            const id = mData.user_id || mData.userId;
+            if (id && id !== senderId) mentionedIds.add(id);
+        }
+    }
+    // "@mention entire channel (@channel)" / "@mention all online members
+    // (@here)" — @here has no separate presence-filtered meaning here
+    // (nothing tracks "online in this channel" today), so it broadcasts
+    // the same as @channel/@all/@everyone rather than silently doing less
+    // than the name promises.
+    const BROADCAST_MENTIONS = ['@all', '@everyone', '@channel', '@here'];
+    if (body && BROADCAST_MENTIONS.some((tag) => body.toLowerCase().includes(tag))) {
+        const members = await ChannelMember.findAll({ where: { channelId: channelId } });
+        for (const member of members) {
+            if (member.userId !== senderId) mentionedIds.add(member.userId);
+        }
+    }
+    if (mentionedIds.size === 0 && body && body.includes('@')) {
+        const members = await ChannelMember.findAll({ where: { channelId } });
+        const ids = members.map((m) => m.userId).filter((id) => id !== senderId);
+        const users = ids.length ? await User.findAll({ where: { id: { [Op.in]: ids } } }) : [];
+        const text = body.toLowerCase();
+        for (const user of users) {
+            if (user.name && text.includes(`@${user.name.toLowerCase()}`)) mentionedIds.add(user.id);
+            else if (user.handle && text.includes(`@${user.handle.toLowerCase()}`)) mentionedIds.add(user.id);
+        }
+    }
+    for (const uid of mentionedIds) {
+        await Mention.findOrCreate({
+            where: { message_id: msg.id, mentioned_user_id: uid },
+            defaults: { source_channel_id: channelId, is_read: false }
+        });
+        const user = await User.findByPk(uid);
+        if (user) routeMentionNotification(user, msg);
+    }
+    // Push to everyone in the conversation. Recipients also get a badge
+    // signal on their own channel, so a closed conversation still counts.
+    const container = channelId;
+    realtime.toContainer(container, 'message', {
+        id: msg.id,
+        container_id: container,
+        sender_id: msg.senderId,
+        sender_name: msg.senderName,
+        sender_avatar_url: msg.senderAvatarUrl,
+        text: msg.body,
+        type: msg.type,
+        attachments: msg.attachments,
+        sent_at: Number(msg.timestamp),
+        status: msg.status,
+        reply_to: msg.reply_to,
+        forwarded_from: msg.forwarded_from,
+    });
+    for (const uid of recipientIds) {
+        if (uid !== senderId) realtime.toUser(uid, 'unread-changed', { container_id: container });
+    }
+    return msg;
+}
+
+/**
+ * Fires a matched slash command's webhook and posts the app's response (or a
+ * timeout notice) into the channel as the app's bot. Synchronous-only for
+ * Phase 1 — no response_url/async ack yet, matching Slack's oldest, simplest
+ * command contract.
+ *
+ * Signing key: App.client_secret_hash is SHA-256(plaintext secret) — the app
+ * independently derives the same value from the secret it was given at
+ * registration, so it doubles as a shared HMAC key without CU Orbit ever
+ * persisting the plaintext secret.
+ */
+async function dispatchSlashCommand(slash, { text, user, channelId }) {
+    const start = Date.now();
+    let responseText = null;
+    try {
+        const app = await App.findByPk(slash.app_id);
+        if (!app) throw new Error('app not found');
+        const raw = JSON.stringify({
+            command: `/${slash.command}`, text, user_id: user.id, user_name: user.name, channel_id: channelId,
+        });
+        const signature = crypto.createHmac('sha256', app.client_secret_hash).update(raw).digest('hex');
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3000);
+        let resp;
+        try {
+            resp = await fetch(slash.webhook_url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CU-Orbit-Signature': signature },
+                body: raw,
+                redirect: 'manual',
+                signal: controller.signal,
+            });
+        } finally {
+            clearTimeout(timeout);
+        }
+        // Treat any redirect as a failure rather than following it — closes a
+        // validated-https-then-redirects-to-internal-http bypass.
+        if (resp.type === 'opaqueredirect' || (resp.status >= 300 && resp.status < 400)) {
+            throw new Error('webhook returned a redirect');
+        }
+        if (!resp.ok) throw new Error(`webhook responded ${resp.status}`);
+        const capped = (await resp.text()).slice(0, 65536);
+        const parsed = JSON.parse(capped);
+        responseText = typeof parsed.text === 'string' ? parsed.text : '';
+    } catch (e) {
+        console.error('[SLASH-COMMAND]', slash.command, 'failed after', Date.now() - start, 'ms:', e.message);
+        responseText = `\`/${slash.command}\` didn't respond in time.`;
+    }
+
+    const installation = await AppInstallation.findOne({ where: { app_id: slash.app_id, status: 'active' } });
+    const botUser = installation?.bot_user_id ? await User.findByPk(installation.bot_user_id) : null;
+    if (!botUser) return { error: 'app_unavailable', message: 'This app is not installed.' };
+
+    return createMessage({
+        senderId: botUser.id, senderName: botUser.name, senderAvatarUrl: botUser.avatarUrl,
+        body: responseText, channelId, type: 'text',
+    });
+}
+
 app.post('/api/messages', auth.requireAuth, async (req, res) => {
     try {
         const { body, channelId, type, mediaUrl, mediaName, mediaMimeType, mentions, enrichedMentions, replyToId, forwardedFromName } = req.body;
@@ -1874,86 +2023,25 @@ app.post('/api/messages', auth.requireAuth, async (req, res) => {
                  }
              }
         }
-        // Snapshotted server-side (not trusted from the client) so a reply
-        // preview can't be spoofed to show text the quoted message never had.
-        let reply_to = null;
-        if (replyToId) {
-            const original = await Message.findByPk(replyToId);
-            if (original) reply_to = { id: original.id, sender_name: original.senderName, text: original.body };
-        }
-        const msg = await Message.create({
-            senderId, senderName, body, channelId, type: type || 'text',
-            senderAvatarUrl, dm_id: (channelId && channelId.includes('_')) ? channelId : null,
-            attachments: mediaUrl ? [{ type: type, url: mediaUrl, name: mediaName, mimeType: mediaMimeType }] : [],
-            reply_to,
-            forwarded_from: forwardedFromName ? { sender_name: forwardedFromName } : null,
-        });
-        // Mentions are keyed on User.id. This block previously ran entirely on
-        // phone numbers — comparing normalized UUIDs, and looking up members by
-        // phone with a UUID — so no mention resolved once identity moved.
-        // Who should see a badge update: channel members, or the DM partner.
-        const recipientIds = channelId && channelId.includes('_')
-            ? channelId.split('_')
-            : (await ChannelMember.findAll({ where: { channelId } })).map((m) => m.userId);
 
-        const mentionedIds = new Set();
-        if (enrichedMentions && Array.isArray(enrichedMentions)) {
-            for (const mData of enrichedMentions) {
-                const id = mData.user_id || mData.userId;
-                if (id && id !== senderId) mentionedIds.add(id);
+        // Slash command interception: a channel message starting with "/foo"
+        // that matches a registered SlashCommand doesn't get posted as literal
+        // text — it's dispatched to the owning app's webhook instead. No
+        // match falls through and posts normally (matches Slack's own
+        // behavior for a typo'd command, rather than a silent dead end).
+        if (channelId && !channelId.includes('_') && body && body.trim().startsWith('/')) {
+            const trimmed = body.trim();
+            const firstSpace = trimmed.indexOf(' ');
+            const cmdName = (firstSpace === -1 ? trimmed.slice(1) : trimmed.slice(1, firstSpace)).toLowerCase();
+            const cmdText = firstSpace === -1 ? '' : trimmed.slice(firstSpace + 1).trim();
+            const slash = cmdName ? await SlashCommand.findOne({ where: { command: cmdName } }) : null;
+            if (slash) {
+                const result = await dispatchSlashCommand(slash, { text: cmdText, user: sender, channelId });
+                return res.json(result);
             }
-        }
-        // "@mention entire channel (@channel)" / "@mention all online members
-        // (@here)" — @here has no separate presence-filtered meaning here
-        // (nothing tracks "online in this channel" today), so it broadcasts
-        // the same as @channel/@all/@everyone rather than silently doing less
-        // than the name promises.
-        const BROADCAST_MENTIONS = ['@all', '@everyone', '@channel', '@here'];
-        if (body && BROADCAST_MENTIONS.some((tag) => body.toLowerCase().includes(tag))) {
-            const members = await ChannelMember.findAll({ where: { channelId: channelId } });
-            for (const member of members) {
-                if (member.userId !== senderId) mentionedIds.add(member.userId);
-            }
-        }
-        if (mentionedIds.size === 0 && body && body.includes('@')) {
-            const members = await ChannelMember.findAll({ where: { channelId } });
-            const ids = members.map((m) => m.userId).filter((id) => id !== senderId);
-            const users = ids.length ? await User.findAll({ where: { id: { [Op.in]: ids } } }) : [];
-            const text = body.toLowerCase();
-            for (const user of users) {
-                if (user.name && text.includes(`@${user.name.toLowerCase()}`)) mentionedIds.add(user.id);
-                else if (user.handle && text.includes(`@${user.handle.toLowerCase()}`)) mentionedIds.add(user.id);
-            }
-        }
-        for (const uid of mentionedIds) {
-            await Mention.findOrCreate({
-                where: { message_id: msg.id, mentioned_user_id: uid },
-                defaults: { source_channel_id: channelId, is_read: false }
-            });
-            const user = await User.findByPk(uid);
-            if (user) routeMentionNotification(user, msg);
-        }
-        // Push to everyone in the conversation. Recipients also get a badge
-        // signal on their own channel, so a closed conversation still counts.
-        const container = channelId;
-        realtime.toContainer(container, 'message', {
-            id: msg.id,
-            container_id: container,
-            sender_id: msg.senderId,
-            sender_name: msg.senderName,
-            sender_avatar_url: msg.senderAvatarUrl,
-            text: msg.body,
-            type: msg.type,
-            attachments: msg.attachments,
-            sent_at: Number(msg.timestamp),
-            status: msg.status,
-            reply_to: msg.reply_to,
-            forwarded_from: msg.forwarded_from,
-        });
-        for (const uid of recipientIds) {
-            if (uid !== senderId) realtime.toUser(uid, 'unread-changed', { container_id: container });
         }
 
+        const msg = await createMessage({ senderId, senderName, senderAvatarUrl, body, channelId, type, mediaUrl, mediaName, mediaMimeType, replyToId, forwardedFromName, enrichedMentions });
         res.json(msg);
     } catch (e) {
         console.error('[MSG-ERROR]', e);
@@ -2778,6 +2866,171 @@ app.put('/api/channels/:id/active', auth.requireAuth, async (req, res) => {
         await logAudit(req.user, active ? 'channel.reactivated' : 'channel.deactivated', 'channel', channel.id, channel.name);
         res.json({ success: true, channel });
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+// --- Apps platform: OAuth authorization server (Phase 1) ---
+//
+// CU Orbit acting as its own OAuth 2.0 provider so a third-party app's
+// backend can request installation. No admin UI yet in Phase 1 — Apps and
+// SlashCommands are registered directly (a throwaway script inserting rows),
+// and consent is a plain admin-gated POST. See the "Apps platform" plan for
+// the full design and later phases.
+
+/** Consent-screen data: app name/icon/requested scopes, validated before any
+ *  consent UI renders. Not behind requireAuth — the consent page itself calls
+ *  this before the user is necessarily known to have a valid CU Orbit session
+ *  loaded client-side yet; the actual grant (below) is auth-gated. */
+app.get('/api/oauth/authorize-info', async (req, res) => {
+    try {
+        const { client_id, redirect_uri, scope } = req.query;
+        if (!client_id || !redirect_uri) return res.status(400).json({ error: 'bad_request', message: 'client_id and redirect_uri required' });
+        const app_ = await App.findOne({ where: { client_id } });
+        if (!app_ || app_.status !== 'approved') return res.status(404).json({ error: 'not_found', message: 'Unknown or unapproved app' });
+        // Exact match only — no prefix matching, which would be an open-redirect vector.
+        if (!(app_.redirect_uris || []).includes(redirect_uri)) {
+            return res.status(400).json({ error: 'bad_request', message: 'redirect_uri does not match a registered URI for this app' });
+        }
+        const requestedScopes = (scope || '').split(' ').filter(Boolean);
+        if (!requestedScopes.every((s) => (app_.scopes || []).includes(s))) {
+            return res.status(400).json({ error: 'bad_request', message: 'Requested scope exceeds what this app is registered for' });
+        }
+        res.json({ name: app_.name, description: app_.description, icon_url: app_.icon_url, scopes: requestedScopes.length ? requestedScopes : app_.scopes });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** Admin grants consent: creates a short-lived, single-use authorization code. */
+app.post('/api/oauth/authorize', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden', message: 'Only workspace admins can install apps.' });
+    try {
+        const { client_id, redirect_uri, scope, state, code_challenge, code_challenge_method } = req.body;
+        if (!client_id || !redirect_uri) return res.status(400).json({ error: 'bad_request', message: 'client_id and redirect_uri required' });
+        const app_ = await App.findOne({ where: { client_id } });
+        if (!app_ || app_.status !== 'approved') return res.status(404).json({ error: 'not_found', message: 'Unknown or unapproved app' });
+        if (!(app_.redirect_uris || []).includes(redirect_uri)) {
+            return res.status(400).json({ error: 'bad_request', message: 'redirect_uri does not match a registered URI for this app' });
+        }
+        const grantedScopes = (scope || '').split(' ').filter(Boolean);
+        if (!grantedScopes.every((s) => (app_.scopes || []).includes(s))) {
+            return res.status(400).json({ error: 'bad_request', message: 'Requested scope exceeds what this app is registered for' });
+        }
+        const code = randomToken();
+        await AppAuthorizationCode.create({
+            code, app_id: app_.id, user_id: req.user.id, redirect_uri,
+            scopes: grantedScopes.length ? grantedScopes : app_.scopes,
+            code_challenge: code_challenge || null, code_challenge_method: code_challenge_method || null,
+            expires_at: new Date(Date.now() + 10 * 60 * 1000),
+        });
+        // state is generated and validated by the app, not CU Orbit — our only
+        // job is to not lose it.
+        const url = new URL(redirect_uri);
+        url.searchParams.set('code', code);
+        if (state) url.searchParams.set('state', state);
+        await logAudit(req.user, 'app.authorized', 'app', app_.id, app_.name);
+        res.json({ redirect_url: url.toString() });
+    } catch (e) { console.error('[oauth-authorize]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+/** Token endpoint: authorization_code and refresh_token grants. Not behind
+ *  requireAuth — the caller is the app's own backend, authenticated via
+ *  client_id/client_secret in the body, not a browser session. */
+app.post('/oauth/token', async (req, res) => {
+    try {
+        const { grant_type, client_id, client_secret } = req.body;
+        if (!client_id || !client_secret) return res.status(401).json({ error: 'invalid_client' });
+        const app_ = await App.findOne({ where: { client_id } });
+        if (!app_ || sha256Hex(client_secret) !== app_.client_secret_hash) {
+            return res.status(401).json({ error: 'invalid_client' });
+        }
+
+        if (grant_type === 'authorization_code') {
+            const { code, redirect_uri, code_verifier } = req.body;
+            const row = code && await AppAuthorizationCode.findOne({ where: { code, app_id: app_.id } });
+            if (!row || row.used_at || row.expires_at < new Date() || row.redirect_uri !== redirect_uri) {
+                return res.status(400).json({ error: 'invalid_grant' });
+            }
+            if (row.code_challenge) {
+                if (!code_verifier) return res.status(400).json({ error: 'invalid_grant', message: 'code_verifier required' });
+                const ok = row.code_challenge_method === 'plain'
+                    ? code_verifier === row.code_challenge
+                    : crypto.createHash('sha256').update(code_verifier).digest('base64url') === row.code_challenge;
+                if (!ok) return res.status(400).json({ error: 'invalid_grant', message: 'PKCE verification failed' });
+            }
+            row.used_at = new Date();
+            await row.save();
+
+            // Workspace-wide install: find or create it, and the bot identity
+            // that goes with it. A bot only appears/posts in channels an admin
+            // separately adds it to — installing here never by itself makes it
+            // start posting anywhere.
+            let installation = await AppInstallation.findOne({ where: { app_id: app_.id, status: 'active' } });
+            if (!installation) {
+                const base = String(app_.name).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'app';
+                const bot = await User.create({
+                    name: app_.name, handle: `${base}_${crypto.randomBytes(2).toString('hex')}`,
+                    avatarUrl: app_.icon_url || '', is_bot: true, app_id: app_.id, role: 'student',
+                });
+                installation = await AppInstallation.create({
+                    app_id: app_.id, installed_by: row.user_id, granted_scopes: row.scopes, bot_user_id: bot.id,
+                });
+            }
+
+            const access_token = randomToken();
+            const refresh_token = randomToken();
+            await AppToken.create({
+                app_id: app_.id, installation_id: installation.id,
+                access_token_hash: sha256Hex(access_token), refresh_token_hash: sha256Hex(refresh_token),
+                scopes: row.scopes, expires_at: new Date(Date.now() + 60 * 60 * 1000),
+                refresh_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            });
+            return res.json({ access_token, refresh_token, token_type: 'Bearer', expires_in: 3600, scope: row.scopes.join(' ') });
+        }
+
+        if (grant_type === 'refresh_token') {
+            const { refresh_token } = req.body;
+            if (!refresh_token) return res.status(400).json({ error: 'invalid_request' });
+            const row = await AppToken.findOne({ where: { refresh_token_hash: sha256Hex(refresh_token), app_id: app_.id } });
+            if (!row || row.revoked_at || !row.refresh_expires_at || row.refresh_expires_at < new Date()) {
+                return res.status(400).json({ error: 'invalid_grant' });
+            }
+            row.revoked_at = new Date();
+            await row.save();
+            const access_token = randomToken();
+            const next_refresh_token = randomToken();
+            await AppToken.create({
+                app_id: app_.id, installation_id: row.installation_id,
+                access_token_hash: sha256Hex(access_token), refresh_token_hash: sha256Hex(next_refresh_token),
+                scopes: row.scopes, expires_at: new Date(Date.now() + 60 * 60 * 1000),
+                refresh_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            });
+            return res.json({ access_token, refresh_token: next_refresh_token, token_type: 'Bearer', expires_in: 3600, scope: row.scopes.join(' ') });
+        }
+
+        res.status(400).json({ error: 'unsupported_grant_type' });
+    } catch (e) { console.error('[oauth-token]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+// --- Apps platform: app-facing API (Phase 1) ---
+//
+// Deliberately a separate, small namespace rather than layering app-token
+// support onto the existing /api/* handlers — see requireAppToken's comment.
+
+/** Post as the installed app's bot. Requires the bot to already be a member
+ *  of the target channel (an admin's separate, explicit per-channel add) —
+ *  OAuth install alone grants API access, not channel presence. */
+app.post('/api/app/messages', requireAppToken, requireScope('chat:write'), async (req, res) => {
+    try {
+        const { channelId, text } = req.body;
+        if (!channelId || channelId.includes('_')) return res.status(400).json({ error: 'bad_request', message: 'channelId (a channel, not a DM) is required' });
+        if (!text) return res.status(400).json({ error: 'bad_request', message: 'text required' });
+        const bot = await User.findByPk(req.app_.botUserId);
+        if (!bot) return res.status(500).json({ error: 'server_error', message: 'Installation has no bot identity' });
+        const member = await ChannelMember.findOne({ where: { channelId, userId: bot.id } });
+        if (!member) return res.status(403).json({ error: 'forbidden', message: 'This app has not been added to that channel' });
+        const ch = await Channel.findByPk(channelId, { attributes: ['is_active'] });
+        if (ch && ch.is_active === false) return res.status(403).json({ error: 'channel_deactivated' });
+        const msg = await createMessage({ senderId: bot.id, senderName: bot.name, senderAvatarUrl: bot.avatarUrl, body: text, channelId, type: 'text' });
+        res.json(msg);
+    } catch (e) { console.error('[api-app-messages]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
 app.get('/api/channels/:id/members', auth.requireAuth, async (req, res) => {
