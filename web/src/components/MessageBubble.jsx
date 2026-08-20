@@ -420,17 +420,21 @@ export default function MessageBubble({
 
           {reactionCounts.length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
-              {reactionCounts.map(([emoji, count]) => (
-                <button
-                  key={emoji}
-                  onClick={() => react(emoji)}
-                  className={`rounded-full px-1.5 py-0.5 text-[11px] ${
-                    own ? 'bg-blue-500/40' : 'bg-slate-100 dark:bg-slate-700'
-                  }`}
-                >
-                  {emoji} {count > 1 ? count : ''}
-                </button>
-              ))}
+              {reactionCounts.map(([emoji, count]) => {
+                const names = (m.reactions || []).filter((r) => r.emoji === emoji).map((r) => r.userName).join(', ');
+                return (
+                  <button
+                    key={emoji}
+                    onClick={() => react(emoji)}
+                    title={names}
+                    className={`rounded-full px-1.5 py-0.5 text-[11px] ${
+                      own ? 'bg-blue-500/40' : 'bg-slate-100 dark:bg-slate-700'
+                    }`}
+                  >
+                    {emoji} {count > 1 ? count : ''}
+                  </button>
+                );
+              })}
             </div>
           )}
 

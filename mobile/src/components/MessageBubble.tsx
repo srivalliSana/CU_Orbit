@@ -265,7 +265,15 @@ export default function MessageBubble({
         {reactionCounts.length > 0 ? (
           <View style={styles.reactionsRow}>
             {reactionCounts.map(([emoji, count]) => (
-              <Pressable key={emoji} style={styles.reactionChip} onPress={() => onReact(emoji)}>
+              <Pressable
+                key={emoji}
+                style={styles.reactionChip}
+                onPress={() => onReact(emoji)}
+                onLongPress={() => {
+                  const names = message.reactions.filter((r) => r.emoji === emoji).map((r) => r.userName);
+                  Alert.alert(emoji, names.join("\n"));
+                }}
+              >
                 <Text style={styles.reactionText}>
                   {emoji} {count > 1 ? count : ""}
                 </Text>
