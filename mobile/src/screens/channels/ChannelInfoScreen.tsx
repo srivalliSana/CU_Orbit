@@ -234,7 +234,7 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
             </Text>
           </View>
 
-          {channel ? (
+          {channel && (isChannelAdmin || isSuperAdmin) ? (
             <View style={styles.inviteBlock}>
               <Text style={styles.sectionLabel}>INVITE LINK</Text>
               <Text style={styles.inviteHint}>

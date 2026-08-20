@@ -2707,7 +2707,16 @@ app.get('/api/channels/:id', auth.requireAuth, async (req, res) => {
             return res.status(403).json({ error: 'forbidden', message: 'Not a member of this channel' });
         }
         const ch = await Channel.findByPk(req.params.id);
-        res.json(ch);
+        if (!ch) return res.status(404).json({ error: 'not_found' });
+        // invite_code lets anyone holding it add outsiders — only channel
+        // admins, faculty, and superadmins are allowed to invite (see
+        // POST /:id/members and /:id/invite-email), so a plain member's
+        // response strips it rather than trusting the client to hide it.
+        const payload = ch.toJSON();
+        const me = await ChannelMember.findOne({ where: { channelId: req.params.id, userId: req.user.id } });
+        const canInvite = (me && me.role === 'admin') || isGroupAdmin(req.user) || isFacultyEmail(req.user.email);
+        if (!canInvite) delete payload.invite_code;
+        res.json(payload);
     } catch (e) { res.status(500).json(e); }
 });
 
