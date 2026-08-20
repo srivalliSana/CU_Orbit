@@ -3042,6 +3042,157 @@ app.post('/api/app/messages', requireAppToken, requireScope('chat:write'), async
     } catch (e) { console.error('[api-app-messages]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
+// --- Apps platform: admin management (Phase 2) ---
+//
+// CRUD over Apps/SlashCommands/AppInstallations for the Admin panel's Apps
+// tab, replacing the throwaway register-test-app.js script as the way to
+// actually register something. Every route here is isGroupAdmin-gated,
+// same as the rest of /api/admin/*.
+
+const isValidWebhookUrl = (url) => {
+    try {
+        const u = new URL(url);
+        if (u.protocol === 'https:') return true;
+        return u.protocol === 'http:' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1');
+    } catch { return false; }
+};
+
+/** List registered apps (never the secret — only its hash exists server-side anyway). */
+app.get('/api/admin/apps', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const apps = await App.findAll({ order: [['createdAt', 'DESC']] });
+        res.json(apps.map((a) => ({
+            id: a.id, name: a.name, description: a.description, icon_url: a.icon_url,
+            client_id: a.client_id, redirect_uris: a.redirect_uris, scopes: a.scopes,
+            is_first_party: a.is_first_party, status: a.status, createdAt: a.createdAt,
+        })));
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** Register a new app. The client_secret is returned exactly once, here — it
+ *  is never stored in recoverable form and is never sent back by any other
+ *  route, same handling as a GitHub PAT. */
+app.post('/api/admin/apps', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const { name, description, icon_url, redirect_uris, scopes } = req.body;
+        if (!name || !String(name).trim()) return res.status(400).json({ error: 'bad_request', message: 'name required' });
+        const uris = Array.isArray(redirect_uris) ? redirect_uris.filter(Boolean) : [];
+        if (!uris.length) return res.status(400).json({ error: 'bad_request', message: 'At least one redirect_uri is required' });
+        for (const uri of uris) {
+            if (!/^https?:\/\//.test(uri)) return res.status(400).json({ error: 'bad_request', message: `Invalid redirect_uri: ${uri}` });
+        }
+        const scopeList = Array.isArray(scopes) && scopes.length ? scopes : ['commands', 'chat:write', 'channels:read'];
+
+        const client_id = `app_${crypto.randomBytes(8).toString('hex')}`;
+        const client_secret = randomToken();
+        const app_ = await App.create({
+            name: String(name).trim(), description: description || '', icon_url: icon_url || '',
+            owner_user_id: req.user.id, client_id, client_secret_hash: sha256Hex(client_secret),
+            redirect_uris: uris, scopes: scopeList, is_first_party: false, status: 'approved',
+        });
+        await logAudit(req.user, 'app.registered', 'app', app_.id, app_.name);
+        res.json({
+            app: { id: app_.id, name: app_.name, client_id: app_.client_id, redirect_uris: uris, scopes: scopeList, status: app_.status },
+            client_secret,
+        });
+    } catch (e) { console.error('[admin-apps-create]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+/** Suspend/reactivate an app — a suspended app can no longer complete the OAuth
+ *  handshake (authorize-info / authorize both check status), but existing
+ *  installations and issued tokens are untouched (revoke those separately). */
+app.put('/api/admin/apps/:id/status', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const { status } = req.body;
+        if (!['approved', 'suspended'].includes(status)) return res.status(400).json({ error: 'bad_request' });
+        const app_ = await App.findByPk(req.params.id);
+        if (!app_) return res.status(404).json({ error: 'not_found' });
+        app_.status = status;
+        await app_.save();
+        await logAudit(req.user, status === 'suspended' ? 'app.suspended' : 'app.reactivated', 'app', app_.id, app_.name);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** Installations for one app, with their bot identity, for the revoke list. */
+app.get('/api/admin/apps/:id/installations', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const installations = await AppInstallation.findAll({ where: { app_id: req.params.id }, order: [['createdAt', 'DESC']] });
+        const botIds = installations.map((i) => i.bot_user_id).filter(Boolean);
+        const bots = botIds.length ? await User.findAll({ where: { id: { [Op.in]: botIds } } }) : [];
+        res.json(installations.map((i) => ({
+            id: i.id, installed_by: i.installed_by, granted_scopes: i.granted_scopes,
+            status: i.status, revoked_at: i.revoked_at, createdAt: i.createdAt,
+            bot_user: bots.find((b) => b.id === i.bot_user_id) ? { id: i.bot_user_id, name: bots.find((b) => b.id === i.bot_user_id).name, handle: bots.find((b) => b.id === i.bot_user_id).handle } : null,
+        })));
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** Revoke an installation: flips it to revoked and kills every token issued
+ *  under it, so a stolen/leaked access token stops working immediately
+ *  rather than lingering until its 1h expiry. */
+app.post('/api/admin/apps/:id/installations/:instId/revoke', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const installation = await AppInstallation.findOne({ where: { id: req.params.instId, app_id: req.params.id } });
+        if (!installation) return res.status(404).json({ error: 'not_found' });
+        installation.status = 'revoked';
+        installation.revoked_at = new Date();
+        await installation.save();
+        await AppToken.update({ revoked_at: new Date() }, { where: { installation_id: installation.id, revoked_at: null } });
+        const app_ = await App.findByPk(req.params.id);
+        await logAudit(req.user, 'app.installation_revoked', 'app', req.params.id, app_?.name || req.params.id);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** Slash commands registered by one app. */
+app.get('/api/admin/apps/:id/slash-commands', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const rows = await SlashCommand.findAll({ where: { app_id: req.params.id }, order: [['command', 'ASC']] });
+        res.json(rows);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** Register a slash command for an app. Command names are global — first to
+ *  register "/foo" owns it — so a duplicate is a 409, not a silent overwrite. */
+app.post('/api/admin/apps/:id/slash-commands', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const app_ = await App.findByPk(req.params.id);
+        if (!app_) return res.status(404).json({ error: 'not_found' });
+        let { command, description, usage_hint, webhook_url } = req.body;
+        command = String(command || '').trim().replace(/^\//, '').toLowerCase();
+        if (!command || !/^[a-z0-9_-]+$/.test(command)) {
+            return res.status(400).json({ error: 'bad_request', message: 'command must be letters/numbers/-/_ only' });
+        }
+        if (!webhook_url || !isValidWebhookUrl(webhook_url)) {
+            return res.status(400).json({ error: 'bad_request', message: 'webhook_url must be https:// (or http://localhost for local testing)' });
+        }
+        const existing = await SlashCommand.findOne({ where: { command } });
+        if (existing) return res.status(409).json({ error: 'conflict', message: `/${command} is already registered` });
+        const row = await SlashCommand.create({ app_id: app_.id, command, description: description || '', usage_hint: usage_hint || '', webhook_url });
+        await logAudit(req.user, 'app.slash_command_added', 'app', app_.id, `/${command}`);
+        res.json(row);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.delete('/api/admin/slash-commands/:id', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const row = await SlashCommand.findByPk(req.params.id);
+        if (!row) return res.status(404).json({ error: 'not_found' });
+        await logAudit(req.user, 'app.slash_command_removed', 'app', row.app_id, `/${row.command}`);
+        await row.destroy();
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
 app.get('/api/channels/:id/members', auth.requireAuth, async (req, res) => {
     try {
         if (!(await canViewChannel(req.user.id, req.params.id, req.user))) {

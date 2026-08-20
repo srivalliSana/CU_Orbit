@@ -33,3 +33,26 @@ export const getSystemHealth = () => api('/api/admin/system-health');
 export const getSecurityEvents = () => api('/api/admin/security-events');
 
 export const getActivitySummary = () => api('/api/admin/activity-summary');
+
+export const getApps = () => api('/api/admin/apps');
+
+export const createApp = (data) => api('/api/admin/apps', { method: 'POST', body: JSON.stringify(data) });
+
+export const setAppStatus = (id, status) =>
+  api(`/api/admin/apps/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+
+export const getAppInstallations = (id) => api(`/api/admin/apps/${id}/installations`);
+
+export const revokeInstallation = (appId, installationId) =>
+  api(`/api/admin/apps/${appId}/installations/${installationId}/revoke`, { method: 'POST' });
+
+export const getSlashCommands = (appId) => api(`/api/admin/apps/${appId}/slash-commands`);
+
+export const createSlashCommand = (appId, data) =>
+  api(`/api/admin/apps/${appId}/slash-commands`, { method: 'POST', body: JSON.stringify(data) });
+
+export const deleteSlashCommand = (id) => api(`/api/admin/slash-commands/${id}`, { method: 'DELETE' });
+
+export const getOAuthAuthorizeInfo = (params) => api(`/api/oauth/authorize-info?${new URLSearchParams(params)}`);
+
+export const authorizeOAuthApp = (data) => api('/api/oauth/authorize', { method: 'POST', body: JSON.stringify(data) });

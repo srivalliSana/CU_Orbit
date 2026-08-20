@@ -5,12 +5,14 @@ import {
   getSecurityEvents, getSystemHealth, promoteByEmail, removeUser, setUserActive,
 } from '../api/admin';
 import { timeLabel } from '../lib/format';
+import AppsTab from './admin/AppsTab';
 
 const ROLES = ['student', 'faculty', 'admin', 'examcell', 'coordinator'];
 const TABS = [
   { id: 'members', label: 'Members' },
   { id: 'activity', label: 'Activity monitor' },
   { id: 'security', label: 'Security monitor' },
+  { id: 'apps', label: 'Apps' },
   { id: 'audit', label: 'Audit log' },
   { id: 'deleted', label: 'Deleted messages' },
 ];
@@ -47,6 +49,7 @@ export default function AdminPanel({ currentUser, onClose }) {
           {tab === 'members' && <MembersTab currentUser={currentUser} />}
           {tab === 'activity' && <ActivityTab />}
           {tab === 'security' && <SecurityTab />}
+          {tab === 'apps' && <AppsTab />}
           {tab === 'audit' && <AuditTab />}
           {tab === 'deleted' && <DeletedTab />}
         </div>

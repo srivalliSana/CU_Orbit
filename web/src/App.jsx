@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { checkSession, signOut } from './api/auth';
 import { getHome } from './api/chat';
@@ -15,6 +15,7 @@ import ProfilePanel from './components/ProfilePanel';
 import SettingsPanel from './components/SettingsPanel';
 import SignInScreen from './components/SignInScreen';
 import AdminPanel from './components/AdminPanel';
+import OAuthConsentScreen from './components/OAuthConsentScreen';
 import UserProfileModal from './components/UserProfileModal';
 import { joinChannelByLink } from './api/channels';
 import { notifyMessage, permission, requestPermission, setBadge } from './lib/notify';
@@ -42,6 +43,24 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(
     () => Number(localStorage.getItem('cuorbit_sidebar_width')) || 320
   );
+  // A third-party app's own "Install on CU Orbit" button links here with
+  // ?oauth_client_id=..., mirroring the existing /join/:code -> ?join=...
+  // pattern — a real hard link that must work whether or not the visitor is
+  // already signed in, so this is read once at mount rather than cleared
+  // the way the join-code param is.
+  const oauthParams = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    const client_id = params.get('oauth_client_id');
+    if (!client_id) return null;
+    return {
+      client_id,
+      redirect_uri: params.get('oauth_redirect_uri') || '',
+      scope: params.get('oauth_scope') || '',
+      state: params.get('oauth_state') || '',
+      code_challenge: params.get('oauth_code_challenge') || undefined,
+      code_challenge_method: params.get('oauth_code_challenge_method') || undefined,
+    };
+  }, []);
   const resizing = useRef(false);
   const seen = useRef(null);   // last-seen unread snapshot, for notifications
   const queryClient = useQueryClient();
@@ -238,6 +257,16 @@ export default function App() {
 
   if (status === 'signed-out') {
     return <SignInScreen onSignedIn={handleSignedIn} />;
+  }
+
+  if (oauthParams && status === 'ready') {
+    return (
+      <OAuthConsentScreen
+        params={oauthParams}
+        currentUser={user}
+        onDone={() => { window.location.href = window.location.pathname; }}
+      />
+    );
   }
 
   return (
