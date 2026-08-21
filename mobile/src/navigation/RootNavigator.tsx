@@ -4,6 +4,7 @@ import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/
 import * as Linking from "expo-linking";
 
 import { useAuthSession } from "../hooks/useAuthSession";
+import { useNotifications } from "../hooks/useNotifications";
 import { useSocket } from "../hooks/useSocket";
 import { useAuthStore } from "../state/authStore";
 import { useThemeColors, useThemeStore } from "../state/themeStore";
@@ -26,6 +27,7 @@ export default function RootNavigator() {
   const hydrateTheme = useThemeStore((s) => s.hydrate);
   const setPendingJoinCode = useAuthStore((s) => s.setPendingJoinCode);
   useSocket();
+  useNotifications();
 
   useEffect(() => {
     hydrateTheme();

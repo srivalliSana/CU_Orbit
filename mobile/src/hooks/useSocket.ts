@@ -30,8 +30,8 @@ export function useSocket() {
       socket.on("channel-added", () => {
         queryClient.invalidateQueries({ queryKey: ["home"] });
       }),
-      // No push service on mobile (no APNs/FCM) — a mention can only surface
-      // by refreshing the mentions list live, same as the badge counts above.
+      // Push (useNotifications) delivers the actual alert; this just keeps
+      // the in-app mentions list live while the socket is connected.
       socket.on("mentioned", () => {
         queryClient.invalidateQueries({ queryKey: ["mentions"] });
       }),

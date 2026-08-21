@@ -93,6 +93,19 @@ export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo,
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
   };
 
+  // A screenshot copied to the clipboard (Ctrl+V) attaches like a picked
+  // file — same as WhatsApp Web. Falls through to normal text paste when
+  // the clipboard holds no image.
+  const onPaste = (e) => {
+    const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'));
+    if (!item) return;
+    e.preventDefault();
+    const blob = item.getAsFile();
+    if (!blob) return;
+    const ext = item.type.split('/')[1] || 'png';
+    setFile(new File([blob], `pasted-image-${Date.now()}.${ext}`, { type: item.type }));
+  };
+
   const onChange = (e) => {
     setText(e.target.value);
     grow(e.target);
@@ -298,7 +311,7 @@ export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo,
             ref={fileInput}
             type="file"
             hidden
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            onChange={(e) => { setFile(e.target.files?.[0] || null); box.current?.focus(); }}
           />
           <input
             ref={cameraInput}
@@ -306,7 +319,7 @@ export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo,
             accept="image/*,video/*"
             capture="environment"
             hidden
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            onChange={(e) => { setFile(e.target.files?.[0] || null); box.current?.focus(); }}
           />
           {attachMenuOpen && (
             <>
@@ -359,6 +372,7 @@ export default function Composer({ chatId, isChannel, onSend, onTyping, replyTo,
           value={text}
           onChange={onChange}
           onKeyDown={onKeyDown}
+          onPaste={onPaste}
           placeholder="Type a message"
           aria-label="Message"
           className="max-h-40 flex-1 resize-none rounded-2xl bg-slate-100 px-4 py-2.5 text-sm outline-none ring-blue-500/40 placeholder:text-slate-400 focus:ring-2 dark:bg-slate-800 dark:text-slate-100"

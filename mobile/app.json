@@ -16,6 +16,7 @@
     },
     "android": {
       "package": "ac.in.cutm.cuorbit",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#1E40AF",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -75,6 +76,7 @@
       "expo-asset",
       "expo-font",
       "expo-video",
+      "expo-notifications",
       [
         "expo-build-properties",
         {

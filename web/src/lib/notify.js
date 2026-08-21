@@ -28,12 +28,16 @@ export async function requestPermission() {
 let lastTag = null;
 
 /**
- * Show a notification for a message. Focus-aware: nothing fires while the user
- * is already looking at the conversation.
+ * Show a notification for a message. Callers already skip the conversation
+ * currently open on screen (see App.jsx) — this used to also suppress
+ * everything whenever the tab merely had focus, which silenced notifications
+ * for every *other* conversation too any time the app was the active tab,
+ * i.e. almost always. WhatsApp Web's actual behavior (and what's wanted
+ * here) is: no alert for the chat you're looking at, alert for everything
+ * else, focused tab or not.
  */
 export function notifyMessage({ title, body, tag, onClick }) {
   if (!supported() || Notification.permission !== 'granted') return;
-  if (document.visibilityState === 'visible' && document.hasFocus()) return;
 
   try {
     // Reusing the tag collapses a burst from one conversation into a single

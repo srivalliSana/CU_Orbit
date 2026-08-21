@@ -150,6 +150,10 @@ const User = sequelize.define('User', {
     // person's messages do, for free.
     is_bot: { type: DataTypes.BOOLEAN, defaultValue: false },
     app_id: { type: DataTypes.UUID, allowNull: true },
+    // Expo push token for this device — overwritten on every sign-in/app
+    // launch (see PUT /api/users/me/push-token), so it's always the most
+    // recent device, not a history of every device ever signed in.
+    push_token: { type: DataTypes.STRING, allowNull: true },
 });
 
 const Workspace = sequelize.define('Workspace', {
@@ -573,6 +577,47 @@ async function routeMentionNotification(user, message) {
         sender_name: message.senderName,
         text: message.body,
     });
+    sendPushNotification(user, {
+        title: `${message.senderName} mentioned you`,
+        body: message.body || '',
+        data: { container_id: message.channelId || message.dm_id },
+    });
+}
+
+/**
+ * Sends one push notification via Expo's push API — the same channel Expo's
+ * own client-side getExpoPushTokenAsync() ultimately delivers through
+ * (FCM on Android under the hood), so the server only ever talks to Expo,
+ * never to Firebase directly. Best-effort: a missing token, an unreachable
+ * Expo endpoint, or a dead/uninstalled-app token must never break message
+ * sending — this always resolves, never throws into its caller.
+ */
+async function sendPushNotification(user, { title, body, data }) {
+    if (!user?.push_token) return;
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        try {
+            const resp = await fetch('https://exp.host/--/api/v2/push/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify([{ to: user.push_token, title, body: (body || '').slice(0, 180), data, sound: 'default', channelId: 'default' }]),
+                signal: controller.signal,
+            });
+            const result = await resp.json().catch(() => null);
+            // DeviceNotRegistered means the app was uninstalled or the token
+            // rotated — clear it so future sends don't keep paying the
+            // round-trip for a token that will never work again.
+            const status = result?.data?.[0]?.status;
+            if (status === 'error' && result?.data?.[0]?.details?.error === 'DeviceNotRegistered') {
+                await User.update({ push_token: null }, { where: { id: user.id } });
+            }
+        } finally {
+            clearTimeout(timeout);
+        }
+    } catch (e) {
+        console.error('[push]', e.message);
+    }
 }
 
 // --- LANDING PAGE & APK DOWNLOAD ---
@@ -1918,8 +1963,22 @@ async function createMessage({ senderId, senderName, senderAvatarUrl, body, chan
         reply_to: msg.reply_to,
         forwarded_from: msg.forwarded_from,
     });
+    const isDm = channelId && channelId.includes('_');
+    const channelName = !isDm ? (await Channel.findByPk(channelId, { attributes: ['name'] }))?.name : null;
     for (const uid of recipientIds) {
-        if (uid !== senderId) realtime.toUser(uid, 'unread-changed', { container_id: container });
+        if (uid === senderId) continue;
+        realtime.toUser(uid, 'unread-changed', { container_id: container });
+        // Someone already mentioned gets that push instead (see
+        // routeMentionNotification above) — not both for the same message.
+        if (mentionedIds.has(uid)) continue;
+        User.findByPk(uid).then((recipient) => {
+            if (!recipient) return;
+            sendPushNotification(recipient, {
+                title: isDm ? senderName : `${senderName} in #${channelName || '...'}`,
+                body: body || (mediaUrl ? 'Sent an attachment' : ''),
+                data: { container_id: container },
+            });
+        });
     }
     return msg;
 }
@@ -2630,6 +2689,17 @@ app.put('/api/users/:phone', auth.requireAuth, async (req, res) => {
         await user.save();
         res.json({ success: true, user });
     } catch (e) { res.status(500).json(e); }
+});
+
+/** Registers/updates this device's Expo push token — called on every sign-in
+ *  and app launch, so it always reflects the most recently active device. */
+app.put('/api/users/me/push-token', auth.requireAuth, async (req, res) => {
+    try {
+        const { token } = req.body;
+        if (!token) return res.status(400).json({ error: 'bad_request', message: 'token required' });
+        await User.update({ push_token: token }, { where: { id: req.user.id } });
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
 // WORKSPACES

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "657972852044",
+    "project_id": "cuorbit-34d869cd",
+    "storage_bucket": "cuorbit-34d869cd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:657972852044:android:72e327608c8dca7265cbe9",
+        "android_client_info": {
+          "package_name": "ac.in.cutm.cuorbit"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDl3Rj7YfBnJfLYyGbVrnObtLi867x9QTo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
