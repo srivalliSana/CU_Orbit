@@ -1632,14 +1632,16 @@ app.get('/api/home/:userId/:workspaceId', auth.requireAuth, async (req, res) => 
         const memberships = await ChannelMember.findAll({ where: { userId: userId } });
         const channelIds = memberships.map(m => m.channelId);
 
-        // Faculty and students see the groups they belong to. Admins see every
-        // group in the workspace, so they can oversee and join without waiting
-        // to be added. Direct messages are never included for anyone but their
-        // participants, regardless of role. A deactivated channel disappears
-        // entirely for regular members — admins still see it (greyed out on
-        // the client), since they're the only ones who can reactivate it.
+        // Everyone, including superadmins, only sees channels they're actually
+        // a member of — membership is what makes a channel visible, not role.
+        // A superadmin's broader powers (deactivate, delete, oversee) operate
+        // on a channel by id via the admin routes and don't require it to
+        // show up here first. Deactivated channels the admin *is* a member of
+        // still show (greyed out on the client) since they're the ones who
+        // can reactivate it; a deactivated channel they're not in stays fully
+        // hidden either way.
         const channels = isGroupAdmin(req.user)
-            ? await Channel.findAll({ where: { workspace_id: workspaceId } })
+            ? await Channel.findAll({ where: { workspace_id: workspaceId, id: { [Op.in]: channelIds } } })
             : await Channel.findAll({ where: { workspace_id: workspaceId, id: { [Op.in]: channelIds }, is_active: true } });
 
         const memberOf = new Set(channelIds);
