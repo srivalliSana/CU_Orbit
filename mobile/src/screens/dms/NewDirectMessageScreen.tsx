@@ -22,7 +22,12 @@ export default function NewDirectMessageScreen({ navigation }: Props) {
     const term = q.trim().toLowerCase();
     return (data ?? [])
       .filter((u) => u.id !== selfId)
-      .filter((u) => !term || (u.name || "").toLowerCase().includes(term));
+      .filter((u) => {
+        if (!term) return true;
+        const name = (u.name || "").toLowerCase();
+        const email = (u.email || u.campus_email || u.campusEmail || "").toLowerCase();
+        return name.includes(term) || email.includes(term);
+      });
   }, [data, selfId, q]);
 
   const openDm = (otherId: string, otherName: string) => {
@@ -45,7 +50,8 @@ export default function NewDirectMessageScreen({ navigation }: Props) {
       <TextInput
         value={q}
         onChangeText={setQ}
-        placeholder="Search people"
+        placeholder="Search by name or email"
+        autoCapitalize="none"
         style={styles.search}
       />
       <FlatList
@@ -54,7 +60,12 @@ export default function NewDirectMessageScreen({ navigation }: Props) {
         renderItem={({ item }) => (
           <Pressable style={styles.row} onPress={() => openDm(item.id, item.name)}>
             <Avatar name={item.name} url={item.avatarUrl} size={40} />
-            <Text style={styles.name}>{item.name}</Text>
+            <View>
+              <Text style={styles.name}>{item.name}</Text>
+              {(item.email || item.campus_email) && (
+                <Text style={styles.email}>{item.email || item.campus_email}</Text>
+              )}
+            </View>
           </Pressable>
         )}
         ListEmptyComponent={
@@ -100,5 +111,10 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   name: {
     fontSize: 15,
     color: colors.text,
+  },
+  email: {
+    fontSize: 12.5,
+    color: colors.textMuted,
+    marginTop: 1,
   },
 });

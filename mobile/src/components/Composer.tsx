@@ -71,6 +71,8 @@ export default function Composer({
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [taggedUsers, setTaggedUsers] = useState<{ user_id: string; display_name: string }[]>([]);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [formattingOpen, setFormattingOpen] = useState(false);
+  const [selection, setSelection] = useState({ start: 0, end: 0 });
   const lastTyped = useRef(0);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
@@ -120,6 +122,37 @@ export default function Composer({
       onTyping?.();
     }
   };
+
+  // Wraps the current selection (or, with nothing selected, inserts the pair
+  // at the cursor) with a marker on each side — mirrors web/src/components/
+  // Composer.jsx's wrapSelection. Doesn't try to restore the exact cursor
+  // position afterward (RN's controlled `selection` prop fights typing if
+  // driven every keystroke), so the cursor lands wherever the native input
+  // defaults to after a value change — a minor UX gap versus web, not a bug.
+  const wrapSelection = (before: string, after: string = before) => {
+    const { start, end } = selection;
+    const selected = text.slice(start, end);
+    setText(text.slice(0, start) + before + selected + after + text.slice(end));
+  };
+
+  // Applies mapper() to every line touching the current selection — mirrors
+  // web's mapLines, the primitive behind the list/indent buttons.
+  const mapLines = (mapper: (line: string) => string) => {
+    const { start, end } = selection;
+    const lineStart = text.lastIndexOf("\n", start - 1) + 1;
+    let lineEnd = text.indexOf("\n", end);
+    if (lineEnd === -1) lineEnd = text.length;
+    const block = text.slice(lineStart, lineEnd);
+    const nextBlock = block.split("\n").map(mapper).join("\n");
+    setText(text.slice(0, lineStart) + nextBlock + text.slice(lineEnd));
+  };
+
+  const toggleBulletList = () => mapLines((line) => (line.startsWith("- ") ? line.slice(2) : `- ${line}`));
+  const toggleNumberedList = () => {
+    let n = 1;
+    mapLines((line) => (/^\d+\.\s/.test(line) ? line.replace(/^\d+\.\s/, "") : `${n++}. ${line}`));
+  };
+  const decreaseIndent = () => mapLines((line) => line.replace(/^(\s{1,2}|- |\d+\.\s)/, ""));
 
   const pickMention = (member: ChannelMemberRow) => {
     const replaced = text.replace(MENTION_TRIGGER, (m) => `${m.startsWith(" ") ? " " : ""}@${member.name} `);
@@ -277,6 +310,39 @@ export default function Composer({
           </Pressable>
         </View>
       )}
+      {formattingOpen && (
+        <View style={styles.formattingBar}>
+          <Pressable onPress={() => wrapSelection("**")} style={styles.formatButton}>
+            <Text style={[styles.formatButtonText, { fontWeight: "700" }]}>B</Text>
+          </Pressable>
+          <Pressable onPress={() => wrapSelection("_")} style={styles.formatButton}>
+            <Text style={[styles.formatButtonText, { fontStyle: "italic" }]}>I</Text>
+          </Pressable>
+          <Pressable onPress={() => wrapSelection("<u>", "</u>")} style={styles.formatButton}>
+            <Text style={[styles.formatButtonText, { textDecorationLine: "underline" }]}>U</Text>
+          </Pressable>
+          <Pressable onPress={() => wrapSelection("~~")} style={styles.formatButton}>
+            <Text style={[styles.formatButtonText, { textDecorationLine: "line-through" }]}>S</Text>
+          </Pressable>
+          <View style={styles.formatDivider} />
+          <Pressable onPress={toggleNumberedList} style={styles.formatButton}>
+            <Text style={styles.formatButtonText}>1.</Text>
+          </Pressable>
+          <Pressable onPress={toggleBulletList} style={styles.formatButton}>
+            <Text style={styles.formatButtonText}>•</Text>
+          </Pressable>
+          <Pressable onPress={decreaseIndent} style={styles.formatButton}>
+            <Text style={styles.formatButtonText}>⇤</Text>
+          </Pressable>
+          <View style={styles.formatDivider} />
+          <Pressable onPress={() => wrapSelection("`")} style={styles.formatButton}>
+            <Text style={[styles.formatButtonText, { fontFamily: "monospace" }]}>{"</>"}</Text>
+          </Pressable>
+          <Pressable onPress={() => wrapSelection("```\n", "\n```")} style={styles.formatButton}>
+            <Text style={[styles.formatButtonText, { fontFamily: "monospace" }]}>{"{ }"}</Text>
+          </Pressable>
+        </View>
+      )}
       <View style={styles.container}>
         <View>
           <Pressable onPress={() => setAttachMenuOpen((v) => !v)} style={styles.iconButton}>
@@ -314,9 +380,17 @@ export default function Composer({
           ) : null}
         </View>
 
+        <Pressable
+          onPress={() => setFormattingOpen((v) => !v)}
+          style={[styles.iconButton, formattingOpen && styles.iconButtonActive]}
+        >
+          <Text style={[styles.formatToggleText, formattingOpen && { color: colors.primary }]}>Aa</Text>
+        </Pressable>
+
         <TextInput
           value={text}
           onChangeText={onChangeText}
+          onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
           placeholder="Type a message"
           style={styles.input}
           multiline
@@ -418,8 +492,43 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   iconButton: {
     padding: 8,
   },
+  iconButtonActive: {
+    backgroundColor: `${colors.primary}1a`,
+    borderRadius: 14,
+  },
   icon: {
     fontSize: 20,
+  },
+  formatToggleText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.textMuted,
+    paddingHorizontal: 2,
+  },
+  formattingBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  formatButton: {
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  formatButtonText: {
+    fontSize: 14,
+    color: colors.text,
+  },
+  formatDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 16,
+    backgroundColor: colors.border,
+    marginHorizontal: 2,
   },
   recordingRow: {
     flexDirection: "row",

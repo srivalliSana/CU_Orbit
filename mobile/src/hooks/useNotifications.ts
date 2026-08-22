@@ -5,6 +5,7 @@ import Constants from "expo-constants";
 
 import { registerPushToken } from "../api/push";
 import { useAuthStore } from "../state/authStore";
+import { navigateToChat } from "../navigation/navigationRef";
 
 // Foreground behavior: show the banner/sound even while the app is open,
 // same reasoning as the web fix — the currently-open chat is the only thing
@@ -32,6 +33,17 @@ Notifications.setNotificationHandler({
  */
 export function useNotifications() {
   const status = useAuthStore((s) => s.status);
+
+  // Tapping a push (or a foreground banner) jumps straight to that chat —
+  // registered once, independent of sign-in status, since a tap can arrive
+  // from a notification that was delivered before this mount.
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const containerId = response.notification.request.content.data?.container_id;
+      if (typeof containerId === "string") navigateToChat(containerId);
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     if (status !== "signedIn") return;

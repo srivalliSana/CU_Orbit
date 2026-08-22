@@ -39,6 +39,8 @@ export default function MentionsScreen() {
           style={[styles.row, !item.is_read && styles.rowUnread]}
           onPress={() => {
             if (!item.is_read) markRead.mutate(item.id);
+            // A status-post mention has no real chat container to open.
+            if (item.channel_id === "STATUS") return;
             const isDm = item.channel_id.includes("_");
             navigation.navigate("Chat", {
               containerId: item.channel_id,

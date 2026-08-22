@@ -19,6 +19,7 @@ import ProfileScreen from "../screens/profile/ProfileScreen";
 import SettingsScreen from "../screens/profile/SettingsScreen";
 import AdminScreen from "../screens/admin/AdminScreen";
 import { useAuthSession } from "../hooks/useAuthSession";
+import { useMentions } from "../hooks/useMentions";
 import { useThemeColors } from "../state/themeStore";
 import type { ActivityStackParamList, DrawerParamList, HomeStackParamList, ProfileStackParamList, TabParamList } from "./types";
 
@@ -93,6 +94,8 @@ const TAB_ICONS: Record<keyof TabParamList, keyof typeof Ionicons.glyphMap> = {
 const Tab = createBottomTabNavigator<TabParamList>();
 function Tabs() {
   const colors = useThemeColors();
+  const { data: mentions } = useMentions();
+  const unreadMentions = mentions?.filter((m) => !m.is_read).length ?? 0;
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -110,7 +113,11 @@ function Tabs() {
       })}
     >
       <Tab.Screen name="HomeTab" component={HomeStackNavigator} options={{ title: "Home" }} />
-      <Tab.Screen name="ActivityTab" component={ActivityStackNavigator} options={{ title: "Activity" }} />
+      <Tab.Screen
+        name="ActivityTab"
+        component={ActivityStackNavigator}
+        options={{ title: "Activity", tabBarBadge: unreadMentions > 0 ? unreadMentions : undefined }}
+      />
       <Tab.Screen name="ProfileTab" component={ProfileStackNavigator} options={{ title: "You" }} />
     </Tab.Navigator>
   );

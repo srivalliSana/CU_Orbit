@@ -11,6 +11,7 @@ import { useThemeColors, useThemeStore } from "../state/themeStore";
 import AuthStack from "./AuthStack";
 import AppShell from "./AppShell";
 import { linking } from "./linking";
+import { navigationRef } from "./navigationRef";
 
 /** Pulls a join code out of any shape the join link can arrive in:
  *  cuorbit://join/abc123, https://cuorbit.app/join/abc123, or the Expo Go
@@ -61,7 +62,7 @@ export default function RootNavigator() {
   };
 
   return (
-    <NavigationContainer linking={linking} theme={navTheme}>
+    <NavigationContainer ref={navigationRef} linking={linking} theme={navTheme}>
       {status === "hydrating" ? (
         <View style={[styles.center, { backgroundColor: colors.background }]}>
           <ActivityIndicator size="large" color={colors.primary} />
