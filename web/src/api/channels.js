@@ -4,6 +4,8 @@ export const getChannel = (id) => api(`/api/channels/${id}`);
 
 export const getChannelMembers = (id) => api(`/api/channels/${id}/members`);
 
+export const getAvailableApps = (id) => api(`/api/channels/${id}/available-apps`);
+
 export const addChannelMember = (id, userId, role) =>
   api(`/api/channels/${id}/members`, {
     method: 'POST',

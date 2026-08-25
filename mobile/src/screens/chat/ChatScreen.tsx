@@ -5,6 +5,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { useMessages } from "../../hooks/useMessages";
 import { useChannelSocket } from "../../hooks/useSocket";
+import { on as onSocketEvent } from "../../api/socket";
 import { useTyping } from "../../hooks/useTyping";
 import { markConversationRead } from "../../api/messages";
 import { getChannelMembers } from "../../api/channels";
@@ -37,6 +38,7 @@ export default function ChatScreen({ route, navigation }: Props) {
   const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const [creatingPoll, setCreatingPoll] = useState(false);
   const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [ephemeralNotice, setEphemeralNotice] = useState<{ app_name: string; text: string } | null>(null);
   const listRef = useRef<FlatList<Message>>(null);
   const pinnedMessage = messages?.find((m) => m.is_pinned);
 
@@ -113,6 +115,17 @@ export default function ChatScreen({ route, navigation }: Props) {
     markConversationRead(containerId);
   }, [containerId]);
 
+  // A slash command's private (ephemeral) reply — never a real Message row,
+  // pushed only to whoever ran the command.
+  useEffect(() => {
+    setEphemeralNotice(null);
+    const off = onSocketEvent("ephemeral", (e: { channel_id: string; app_name: string; text: string }) => {
+      if (e.channel_id !== containerId) return;
+      setEphemeralNotice(e);
+    });
+    return off;
+  }, [containerId]);
+
   if (isLoading) {
     return (
       <View style={styles.center}>
@@ -186,6 +199,15 @@ export default function ChatScreen({ route, navigation }: Props) {
       />
       {typingName ? (
         <Text style={styles.typing}>{typingName} is typing…</Text>
+      ) : null}
+      {ephemeralNotice ? (
+        <Pressable onPress={() => setEphemeralNotice(null)} style={styles.ephemeralBanner}>
+          <Text style={styles.ephemeralTag}>Only visible to you</Text>
+          <Text style={styles.ephemeralText}>
+            <Text style={styles.ephemeralApp}>{ephemeralNotice.app_name}: </Text>
+            {ephemeralNotice.text}
+          </Text>
+        </Pressable>
       ) : null}
       <Composer
         onSend={(payload) => send.mutate(payload)}
@@ -266,5 +288,28 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     paddingBottom: 4,
     fontSize: 12,
     color: colors.textMuted,
+  },
+  ephemeralBanner: {
+    marginHorizontal: 12,
+    marginBottom: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: `${colors.primary}1a`,
+  },
+  ephemeralTag: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: colors.primary,
+    marginBottom: 2,
+  },
+  ephemeralText: {
+    fontSize: 13,
+    color: colors.text,
+  },
+  ephemeralApp: {
+    fontWeight: "600",
   },
 });

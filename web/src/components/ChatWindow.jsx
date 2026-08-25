@@ -24,6 +24,7 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
   const [forwarding, setForwarding] = useState(null);
   const [creatingPoll, setCreatingPoll] = useState(false);
   const [highlightId, setHighlightId] = useState(null);
+  const [ephemeralNotice, setEphemeralNotice] = useState(null);
   const scroller = useRef(null);
   const atBottom = useRef(true);
   const pinned = messages.find((m) => m.is_pinned);
@@ -86,7 +87,14 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
     const offPoll = on('poll-updated', (poll) => {
       setMessages((prev) => prev.map((m) => (m.poll?.id === poll.id ? { ...m, poll } : m)));
     });
-    return () => { offMessage(); offRead(); offTyping(); offPoll(); leave(chat.id); };
+    // A slash command's private (ephemeral) reply — never a real Message row,
+    // pushed only to whoever ran the command, so it can't ever show up via
+    // the normal fetch/poll and can't be seen by anyone else in the channel.
+    const offEphemeral = on('ephemeral', (e) => {
+      if (e.channel_id !== chat.id) return;
+      setEphemeralNotice(e);
+    });
+    return () => { offMessage(); offRead(); offTyping(); offPoll(); offEphemeral(); leave(chat.id); };
   }, [chat.id, user?.id]);
 
   // Typing indicators expire on their own; the server never sends a "stopped".
@@ -153,7 +161,7 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
   };
 
   // A different conversation starts with a clean composer, not a stale reply.
-  useEffect(() => { setReplyTo(null); }, [chat.id]);
+  useEffect(() => { setReplyTo(null); setEphemeralNotice(null); }, [chat.id]);
 
   const handleSend = async ({ text, file, enrichedMentions, replyToId }) => {
     setSendError(null);
@@ -285,6 +293,19 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
         <p role="alert" className="border-t border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
           {sendError}
         </p>
+      )}
+
+      {ephemeralNotice && (
+        <div className="flex items-start gap-2 border-t border-violet-200 bg-violet-50 px-4 py-2 text-xs text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300">
+          <span className="mt-0.5 shrink-0 rounded bg-violet-100 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-600 dark:bg-violet-900/60 dark:text-violet-300">
+            Only visible to you
+          </span>
+          <p className="min-w-0 flex-1">
+            <span className="font-medium">{ephemeralNotice.app_name}: </span>
+            {ephemeralNotice.text}
+          </p>
+          <button onClick={() => setEphemeralNotice(null)} aria-label="Dismiss" className="shrink-0 text-violet-400 hover:text-violet-600">✕</button>
+        </div>
       )}
 
       <Composer

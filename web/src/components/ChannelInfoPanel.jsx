@@ -4,6 +4,7 @@ import { saveFile } from '../lib/saveFile';
 import {
   addChannelMember,
   approveJoinRequest,
+  getAvailableApps,
   getChannel,
   getChannelMembers,
   getJoinRequests,
@@ -37,6 +38,8 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
   const [error, setError] = useState(null);
   const [adding, setAdding] = useState(false);
   const [candidates, setCandidates] = useState([]);
+  const [addingApp, setAddingApp] = useState(false);
+  const [availableApps, setAvailableApps] = useState([]);
   const [busyUserId, setBusyUserId] = useState(null);
   const [copied, setCopied] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -133,6 +136,27 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
       setAdding(false);
     } catch (e) {
       setError(e.message || 'Could not add that person.');
+    } finally {
+      setBusyUserId(null);
+    }
+  };
+
+  const startAddingApp = () => {
+    setAddingApp(true);
+    getAvailableApps(channelId).then(setAvailableApps).catch(() => setAvailableApps([]));
+  };
+
+  // A bot is just a User row (is_bot: true) — adding one to a channel is
+  // the exact same membership call as adding a person.
+  const addApp = async (botUserId) => {
+    setBusyUserId(botUserId);
+    try {
+      await addChannelMember(channelId, botUserId);
+      load();
+      onChanged?.();
+      setAddingApp(false);
+    } catch (e) {
+      setError(e.message || 'Could not add that app.');
     } finally {
       setBusyUserId(null);
     }
@@ -411,6 +435,11 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm text-slate-700 dark:text-slate-200">
                         {m.name}
+                        {m.is_bot && (
+                          <span className="ml-1.5 rounded bg-violet-100 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-600 dark:bg-violet-900/40 dark:text-violet-300">
+                            App
+                          </span>
+                        )}
                         {isCreator(m.id) && <span className="ml-1.5 text-[10px] text-slate-400">creator</span>}
                       </p>
                       {m.role === 'admin' && <p className="text-[11px] text-blue-500">Admin</p>}
@@ -456,6 +485,38 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                 </div>
               )}
             </div>
+
+            {(isChannelAdmin || isSuperAdmin) && (
+              <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Apps</h4>
+                  <button
+                    onClick={startAddingApp}
+                    className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                  >
+                    + Add app
+                  </button>
+                </div>
+                {addingApp && (
+                  <div className="mt-3 max-h-52 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                    {availableApps.length === 0 && (
+                      <p className="p-3 text-xs text-slate-400">No installed apps to add — register or install one from Admin → Apps first.</p>
+                    )}
+                    {availableApps.map((a) => (
+                      <button
+                        key={a.installation_id}
+                        disabled={busyUserId === a.bot_user_id}
+                        onClick={() => addApp(a.bot_user_id)}
+                        className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 disabled:opacity-40 dark:hover:bg-slate-800"
+                      >
+                        <Avatar name={a.bot?.name || a.app_name} url={a.bot?.avatarUrl} size={28} />
+                        <span className="truncate text-sm text-slate-700 dark:text-slate-200">{a.app_name || a.bot?.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="mt-6 space-y-1 border-t border-slate-200 pt-4 dark:border-slate-800">
               <button onClick={() => setView('media')} className="block w-full rounded-lg px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">

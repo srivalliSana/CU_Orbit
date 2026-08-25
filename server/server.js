@@ -1999,6 +1999,7 @@ async function createMessage({ senderId, senderName, senderAvatarUrl, body, chan
 async function dispatchSlashCommand(slash, { text, user, channelId }) {
     const start = Date.now();
     let responseText = null;
+    let responseType = 'in_channel';
     try {
         const app = await App.findByPk(slash.app_id);
         if (!app) throw new Error('app not found');
@@ -2029,6 +2030,10 @@ async function dispatchSlashCommand(slash, { text, user, channelId }) {
         const capped = (await resp.text()).slice(0, 65536);
         const parsed = JSON.parse(capped);
         responseText = typeof parsed.text === 'string' ? parsed.text : '';
+        // Only "ephemeral" opts out of the default — an app that omits
+        // response_type, or sends anything else, posts in_channel, matching
+        // Slack's own default for a slash-command reply.
+        if (parsed.response_type === 'ephemeral') responseType = 'ephemeral';
     } catch (e) {
         console.error('[SLASH-COMMAND]', slash.command, 'failed after', Date.now() - start, 'ms:', e.message);
         responseText = `\`/${slash.command}\` didn't respond in time.`;
@@ -2037,6 +2042,17 @@ async function dispatchSlashCommand(slash, { text, user, channelId }) {
     const installation = await AppInstallation.findOne({ where: { app_id: slash.app_id, status: 'active' } });
     const botUser = installation?.bot_user_id ? await User.findByPk(installation.bot_user_id) : null;
     if (!botUser) return { error: 'app_unavailable', message: 'This app is not installed.' };
+
+    if (responseType === 'ephemeral') {
+        // Never persisted, never broadcast to the channel — pushed only to
+        // the person who ran the command, over their own socket room. No
+        // "ephemeral message" concept exists in the Message table (that's a
+        // bigger, later piece of work); this is the realtime-only version.
+        realtime.toUser(user.id, 'ephemeral', {
+            channel_id: channelId, app_name: botUser.name, text: responseText, at: Date.now(),
+        });
+        return { ephemeral: true, text: responseText };
+    }
 
     return createMessage({
         senderId: botUser.id, senderName: botUser.name, senderAvatarUrl: botUser.avatarUrl,
@@ -3278,6 +3294,34 @@ app.get('/api/channels/:id/members', auth.requireAuth, async (req, res) => {
             return { ...u.toJSON(), role: member ? member.role : 'member' };
         }));
     } catch (e) { res.json([]); }
+});
+
+/** Installed apps' bots not already in this channel — the picklist behind
+ *  "Add app" in Channel Info. Same permission bar as adding a human member:
+ *  a bot only ever appears/posts in a channel an admin/faculty explicitly
+ *  put it in, and this is that explicit action. Adding the bot itself still
+ *  goes through the ordinary POST /members below — a bot is just a User row. */
+app.get('/api/channels/:id/available-apps', auth.requireAuth, async (req, res) => {
+    try {
+        const me = await ChannelMember.findOne({ where: { channelId: req.params.id, userId: req.user.id } });
+        if ((!me || me.role !== 'admin') && !isGroupAdmin(req.user) && !isFacultyEmail(req.user.email)) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
+        const installations = await AppInstallation.findAll({ where: { status: 'active' } });
+        const existingBotIds = new Set(
+            (await ChannelMember.findAll({ where: { channelId: req.params.id } })).map((m) => m.userId)
+        );
+        const candidates = installations.filter((i) => i.bot_user_id && !existingBotIds.has(i.bot_user_id));
+        const botIds = candidates.map((i) => i.bot_user_id);
+        const bots = botIds.length ? await User.findAll({ where: { id: { [Op.in]: botIds } }, attributes: ['id', 'name', 'avatarUrl'] }) : [];
+        const apps = candidates.length ? await App.findAll({ where: { id: { [Op.in]: candidates.map((i) => i.app_id) } }, attributes: ['id', 'name'] }) : [];
+        res.json(candidates.map((i) => ({
+            installation_id: i.id,
+            bot_user_id: i.bot_user_id,
+            bot: bots.find((b) => b.id === i.bot_user_id),
+            app_name: apps.find((a) => a.id === i.app_id)?.name,
+        })));
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
 app.post('/api/channels/:id/members', auth.requireAuth, async (req, res) => {
