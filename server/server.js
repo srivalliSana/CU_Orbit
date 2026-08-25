@@ -678,63 +678,123 @@ app.get('/', async (req, res) => {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Let's Connect | Centurion University Messaging</title>
             <meta name="description" content="Let's Connect — real-time messaging, channels, and an app platform built for Centurion University.">
+            <script>
+                // Runs before paint — no light-flash for a visitor who already chose dark.
+                if (localStorage.getItem('lc-theme') === 'dark') document.documentElement.classList.add('dark');
+            </script>
             <script src="https://cdn.tailwindcss.com"></script>
             <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
             <style>
                 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap');
+
+                :root {
+                    --bg: #F6F8FC; --bg-alt: #EEF2FA; --surface: #FFFFFF; --border: #DFE6F3;
+                    --text: #101728; --muted: #55617D; --faint: #8792AB;
+                    --accent: #2F5FE0; --accent-soft: #E7EEFD;
+                    --code-bg: #0B1220; --code-text: #DCE4F5; --code-border: #1D2740;
+                    --shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.05);
+                }
+                html.dark {
+                    --bg: #0B1220; --bg-alt: #0E1729; --surface: #121B30; --border: #253150;
+                    --text: #E7ECF7; --muted: #94A2C2; --faint: #64719A;
+                    --accent: #6C9BFF; --accent-soft: #1B2947;
+                    --code-bg: #060A14; --code-text: #DCE4F5; --code-border: #1D2740;
+                    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.28);
+                }
+
                 html { scroll-behavior: smooth; }
-                body { background: #0B1220; color: #E7ECF7; font-family: 'Plus Jakarta Sans', sans-serif; }
+                body { background: var(--bg); color: var(--text); font-family: 'Plus Jakarta Sans', sans-serif; transition: background .25s, color .25s; }
                 .font-display { font-family: 'Fraunces', Georgia, serif; }
-                .glass { background: rgba(22, 33, 58, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); }
+                .bg-page { background: var(--bg); }
+                .bg-alt { background: var(--bg-alt); }
+                .bg-card { background: var(--surface); }
+                .border-tok { border-color: var(--border); }
+                .text-body { color: var(--text); }
+                .text-muted-tok { color: var(--muted); }
+                .text-faint-tok { color: var(--faint); }
+                .text-accent-tok { color: var(--accent); }
+                .bg-accent-tok { background: var(--accent); }
+                .bg-accent-soft { background: var(--accent-soft); }
+
+                header.nav { background: color-mix(in srgb, var(--bg) 82%, transparent); border-color: var(--border); }
+                .btn-primary { background: var(--accent); color: #fff; }
+                html:not(.dark) .btn-primary { color: #fff; }
+                html.dark .btn-primary { color: #071022; }
                 .btn-shine { position: relative; overflow: hidden; }
-                .btn-shine::after { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: linear-gradient(45deg, transparent, rgba(255,255,255,0.15), transparent); transform: rotate(45deg); transition: 0.5s; }
+                .btn-shine::after { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: linear-gradient(45deg, transparent, rgba(255,255,255,0.25), transparent); transform: rotate(45deg); transition: 0.5s; }
                 .btn-shine:hover::after { left: 120%; }
-                .feature-card { background: #121B30; border: 1px solid #253150; transition: transform .2s, border-color .2s; }
-                .feature-card:hover { transform: translateY(-3px); border-color: rgba(96,165,250,0.4); }
-                .step-num { font-family: 'Fraunces', Georgia, serif; }
-                code.inline { background: rgba(96,165,250,0.12); color: #93C5FD; padding: 1px 7px; border-radius: 5px; font-family: ui-monospace, 'IBM Plex Mono', monospace; font-size: 0.88em; }
-                pre.code-block { background: #060A14; border: 1px solid #1D2740; border-radius: 12px; padding: 18px 20px; overflow-x: auto; font-family: ui-monospace, 'IBM Plex Mono', monospace; font-size: 12.5px; line-height: 1.7; color: #DCE4F5; }
+
+                .feature-card { background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); transition: transform .25s ease, border-color .25s; }
+                .feature-card:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+                .step-card { background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); }
+                .step-num { font-family: 'Fraunces', Georgia, serif; color: var(--accent); }
+
+                code.inline { background: var(--accent-soft); color: var(--accent); padding: 1px 7px; border-radius: 5px; font-family: ui-monospace, 'IBM Plex Mono', monospace; font-size: 0.88em; }
+                pre.code-block { background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 12px; padding: 18px 20px; overflow-x: auto; font-family: ui-monospace, 'IBM Plex Mono', monospace; font-size: 12.5px; line-height: 1.7; color: var(--code-text); box-shadow: var(--shadow); }
+
+                .theme-toggle { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--muted); transition: border-color .2s, color .2s; }
+                .theme-toggle:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+                .theme-toggle .fa-sun { display: none; }
+                html.dark .theme-toggle .fa-sun { display: inline; }
+                html.dark .theme-toggle .fa-moon { display: none; }
+
+                /* Scroll-reveal — respects prefers-reduced-motion below */
+                .reveal { opacity: 0; transform: translateY(18px); transition: opacity .7s ease, transform .7s ease; }
+                .reveal.in-view { opacity: 1; transform: translateY(0); }
+                .hero-in { animation: heroIn .8s ease both; }
+                .hero-in-delay-1 { animation: heroIn .8s .12s ease both; }
+                .hero-in-delay-2 { animation: heroIn .8s .24s ease both; }
+                @keyframes heroIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+                @media (prefers-reduced-motion: reduce) {
+                    .reveal, .hero-in, .hero-in-delay-1, .hero-in-delay-2 { animation: none !important; transition: none !important; opacity: 1 !important; transform: none !important; }
+                }
             </style>
         </head>
-        <body class="min-h-screen bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-900/15 via-[#0B1220] to-[#0B1220]">
+        <body class="bg-page min-h-screen">
 
             <!-- NAV -->
-            <header class="sticky top-0 z-30 border-b border-white/5 bg-[#0B1220]/80 backdrop-blur-md">
+            <header class="nav sticky top-0 z-30 border-b backdrop-blur-md">
                 <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
                     <a href="/" class="flex items-center gap-2.5">
                         <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-400 to-blue-600 shadow shadow-blue-500/30">
-                            <i class="fa-solid fa-satellite-dish text-sm text-slate-950"></i>
+                            <i class="fa-solid fa-satellite-dish text-sm text-white"></i>
                         </div>
-                        <span class="font-display text-lg font-semibold">Let's Connect</span>
+                        <span class="font-display text-body text-lg font-semibold">Let's Connect</span>
                     </a>
-                    <nav class="hidden items-center gap-8 text-sm font-medium text-slate-300 sm:flex">
-                        <a href="#features" class="hover:text-white">Features</a>
-                        <a href="#apps" class="hover:text-white">Apps &amp; Integrations</a>
-                        <a href="#guide" class="hover:text-white">Developer Guide</a>
-                        <a href="#download" class="hover:text-white">Download</a>
+                    <nav class="text-muted-tok hidden items-center gap-8 text-sm font-medium sm:flex">
+                        <a href="#features" class="hover:text-accent-tok">Features</a>
+                        <a href="#apps" class="hover:text-accent-tok">Apps &amp; Integrations</a>
+                        <a href="#guide" class="hover:text-accent-tok">Developer Guide</a>
+                        <a href="#download" class="hover:text-accent-tok">Download</a>
                     </nav>
-                    <a href="/portal" class="rounded-lg bg-blue-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-blue-400">
-                        Open Web Portal
-                    </a>
+                    <div class="flex items-center gap-3">
+                        <button class="theme-toggle" onclick="lcToggleTheme()" aria-label="Toggle dark mode">
+                            <i class="fa-solid fa-moon"></i>
+                            <i class="fa-solid fa-sun"></i>
+                        </button>
+                        <a href="/portal" class="btn-primary rounded-lg px-4 py-2 text-sm font-bold hover:opacity-90">
+                            Open Web Portal
+                        </a>
+                    </div>
                 </div>
             </header>
 
             <!-- HERO -->
             <section class="mx-auto max-w-6xl px-6 pb-20 pt-16 text-center sm:pt-24">
-                <div class="mx-auto mb-8 inline-flex items-center rounded-full border border-blue-500/20 bg-blue-500/10 px-4 py-2">
-                    <span class="mr-3 h-2 w-2 animate-pulse rounded-full bg-blue-500"></span>
-                    <span class="text-xs font-bold uppercase tracking-widest text-blue-400">System Detected: ${osName}</span>
+                <div class="hero-in bg-accent-soft mx-auto mb-8 inline-flex items-center rounded-full border border-transparent px-4 py-2">
+                    <span class="bg-accent-tok mr-3 h-2 w-2 animate-pulse rounded-full"></span>
+                    <span class="text-accent-tok text-xs font-bold uppercase tracking-widest">System Detected: ${osName}</span>
                 </div>
 
-                <h1 class="font-display text-5xl font-semibold tracking-tight text-white sm:text-6xl">
-                    Let's <span class="text-blue-400">Connect</span>
+                <h1 class="hero-in-delay-1 text-body font-display text-5xl font-semibold tracking-tight sm:text-6xl">
+                    Let's <span class="text-accent-tok">Connect</span>
                 </h1>
-                <p class="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-slate-400 sm:text-xl">
+                <p class="hero-in-delay-1 text-muted-tok mx-auto mt-5 max-w-xl text-lg leading-relaxed sm:text-xl">
                     Real-time messaging, channels, and an app platform — built for Centurion University, not adapted from someone else's.
                 </p>
 
-                <div class="mx-auto mt-10 grid max-w-lg grid-cols-1 gap-4 sm:grid-cols-2">
-                    <a href="/?download=true" class="btn-shine group flex items-center justify-center space-x-4 rounded-2xl bg-blue-500 px-8 py-5 font-bold text-slate-950 shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-400">
+                <div class="hero-in-delay-2 mx-auto mt-10 grid max-w-lg grid-cols-1 gap-4 sm:grid-cols-2">
+                    <a href="/?download=true" class="btn-shine btn-primary group flex items-center justify-center space-x-4 rounded-2xl px-8 py-5 font-bold shadow-lg shadow-blue-500/20 transition-all hover:opacity-90">
                         <i class="fa-brands fa-android text-3xl transition-transform group-hover:scale-110"></i>
                         <div class="text-left">
                             <div class="text-[10px] uppercase opacity-70">Download for</div>
@@ -742,28 +802,28 @@ app.get('/', async (req, res) => {
                         </div>
                     </a>
 
-                    <button onclick="alert('iOS App is currently in development. Registration will open soon!')" class="group flex items-center justify-center space-x-4 rounded-2xl border border-slate-700/50 bg-slate-800/50 px-8 py-5 font-bold text-slate-300 transition-all hover:bg-slate-800">
+                    <button onclick="alert('iOS App is currently in development. Registration will open soon!')" class="bg-card text-body border-tok group flex items-center justify-center space-x-4 rounded-2xl border px-8 py-5 font-bold transition-all hover:opacity-80">
                         <i class="fa-brands fa-apple text-3xl transition-transform group-hover:scale-110"></i>
                         <div class="text-left">
-                            <div class="text-[10px] uppercase opacity-50">Coming Soon</div>
+                            <div class="text-faint-tok text-[10px] uppercase">Coming Soon</div>
                             <div class="text-lg leading-none">iOS Mobile</div>
                         </div>
                     </button>
                 </div>
 
-                <div class="mt-8 flex flex-col items-center justify-center gap-2 text-sm sm:flex-row sm:gap-8">
-                    <a href="/portal" class="group flex items-center font-bold text-blue-400 hover:text-blue-300">
+                <div class="hero-in-delay-2 mt-8 flex flex-col items-center justify-center gap-2 text-sm sm:flex-row sm:gap-8">
+                    <a href="/portal" class="text-accent-tok group flex items-center font-bold hover:opacity-80">
                         <span>Continue in Web Portal</span>
                         <i class="fa-solid fa-arrow-right ml-2 transition-transform group-hover:translate-x-1"></i>
                     </a>
-                    ${history[0] ? `<span class="text-slate-500">Latest: v${history[0].version} (build ${history[0].build_number})</span>` : ''}
+                    ${history[0] ? `<span class="text-faint-tok">Latest: v${history[0].version} (build ${history[0].build_number})</span>` : ''}
                 </div>
             </section>
 
             <!-- FEATURES -->
             <section id="features" class="mx-auto max-w-6xl px-6 py-20">
-                <p class="text-center text-xs font-bold uppercase tracking-widest text-blue-400">Everything in one place</p>
-                <h2 class="font-display mt-2 text-center text-3xl font-semibold text-white sm:text-4xl">Built for how a campus actually talks</h2>
+                <p class="text-accent-tok reveal text-center text-xs font-bold uppercase tracking-widest">Everything in one place</p>
+                <h2 class="font-display text-body reveal mt-2 text-center text-3xl font-semibold sm:text-4xl">Built for how a campus actually talks</h2>
 
                 <div class="mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
                     ${[
@@ -776,42 +836,42 @@ app.get('/', async (req, res) => {
                         ['fa-user-shield', 'Admin oversight', 'Deactivate a channel instead of deleting it, an audit log, and live server health &amp; security monitoring.'],
                         ['fa-shield-halved', 'Campus-locked sign-in', 'Google sign-in or a one-time email code, gated to your campus domains — no open registration.'],
                         ['fa-plug', 'Apps &amp; integrations', 'A real OAuth platform: install apps, wire up slash commands, let a bot post on your behalf. See below.'],
-                    ].map(([icon, title, desc]) => `
-                        <div class="feature-card rounded-2xl p-6">
-                            <div class="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
-                                <i class="fa-solid ${icon} text-blue-400"></i>
+                    ].map(([icon, title, desc], i) => `
+                        <div class="feature-card reveal rounded-2xl p-6" style="transition-delay:${(i % 3) * 70}ms">
+                            <div class="bg-accent-soft mb-4 flex h-10 w-10 items-center justify-center rounded-xl">
+                                <i class="fa-solid ${icon} text-accent-tok"></i>
                             </div>
-                            <h3 class="font-semibold text-white">${title}</h3>
-                            <p class="mt-1.5 text-sm leading-relaxed text-slate-400">${desc}</p>
+                            <h3 class="text-body font-semibold">${title}</h3>
+                            <p class="text-muted-tok mt-1.5 text-sm leading-relaxed">${desc}</p>
                         </div>
                     `).join('')}
                 </div>
             </section>
 
             <!-- APPS & INTEGRATIONS -->
-            <section id="apps" class="border-y border-white/5 bg-white/[0.02] py-20">
+            <section id="apps" class="bg-alt border-tok border-y py-20">
                 <div class="mx-auto max-w-6xl px-6">
-                    <p class="text-center text-xs font-bold uppercase tracking-widest text-blue-400">Apps &amp; Integrations</p>
-                    <h2 class="font-display mt-2 text-center text-3xl font-semibold text-white sm:text-4xl">Let's Connect isn't a closed box</h2>
-                    <p class="mx-auto mt-4 max-w-2xl text-center text-slate-400">
+                    <p class="text-accent-tok reveal text-center text-xs font-bold uppercase tracking-widest">Apps &amp; Integrations</p>
+                    <h2 class="font-display text-body reveal mt-2 text-center text-3xl font-semibold sm:text-4xl">Let's Connect isn't a closed box</h2>
+                    <p class="text-muted-tok reveal mx-auto mt-4 max-w-2xl text-center">
                         A real OAuth 2.0 platform sits underneath — third-party apps can install with a proper consent screen, post as their own bot, and respond to slash commands. Built the same way Slack's is, from the ground up for this campus.
                     </p>
 
                     <div class="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-3">
-                        <div class="rounded-2xl border border-white/10 bg-[#121B30] p-6">
-                            <div class="step-num mb-3 text-3xl font-semibold text-blue-400">01</div>
-                            <h3 class="font-semibold text-white">Register &amp; install</h3>
-                            <p class="mt-1.5 text-sm leading-relaxed text-slate-400">An admin registers the app, then approves it through a real consent screen — same shape as any OAuth login you've already used.</p>
+                        <div class="step-card reveal rounded-2xl p-6">
+                            <div class="step-num mb-3 text-3xl font-semibold">01</div>
+                            <h3 class="text-body font-semibold">Register &amp; install</h3>
+                            <p class="text-muted-tok mt-1.5 text-sm leading-relaxed">An admin registers the app, then approves it through a real consent screen — same shape as any OAuth login you've already used.</p>
                         </div>
-                        <div class="rounded-2xl border border-white/10 bg-[#121B30] p-6">
-                            <div class="step-num mb-3 text-3xl font-semibold text-blue-400">02</div>
-                            <h3 class="font-semibold text-white">Add the bot to a channel</h3>
-                            <p class="mt-1.5 text-sm leading-relaxed text-slate-400">Installing grants API access; posting anywhere still needs an explicit invite into that channel, same as adding a person.</p>
+                        <div class="step-card reveal rounded-2xl p-6" style="transition-delay:80ms">
+                            <div class="step-num mb-3 text-3xl font-semibold">02</div>
+                            <h3 class="text-body font-semibold">Add the bot to a channel</h3>
+                            <p class="text-muted-tok mt-1.5 text-sm leading-relaxed">Installing grants API access; posting anywhere still needs an explicit invite into that channel, same as adding a person.</p>
                         </div>
-                        <div class="rounded-2xl border border-white/10 bg-[#121B30] p-6">
-                            <div class="step-num mb-3 text-3xl font-semibold text-blue-400">03</div>
-                            <h3 class="font-semibold text-white">Wire up a slash command</h3>
-                            <p class="mt-1.5 text-sm leading-relaxed text-slate-400">Type <code class="inline">/command</code> anywhere the bot can see, and its webhook replies — publicly to the channel, or privately, just to you.</p>
+                        <div class="step-card reveal rounded-2xl p-6" style="transition-delay:160ms">
+                            <div class="step-num mb-3 text-3xl font-semibold">03</div>
+                            <h3 class="text-body font-semibold">Wire up a slash command</h3>
+                            <p class="text-muted-tok mt-1.5 text-sm leading-relaxed">Type <code class="inline">/command</code> anywhere the bot can see, and its webhook replies — publicly to the channel, or privately, just to you.</p>
                         </div>
                     </div>
                 </div>
@@ -819,19 +879,19 @@ app.get('/', async (req, res) => {
 
             <!-- DEVELOPER GUIDE -->
             <section id="guide" class="mx-auto max-w-3xl px-6 py-20">
-                <p class="text-center text-xs font-bold uppercase tracking-widest text-blue-400">For developers</p>
-                <h2 class="font-display mt-2 text-center text-3xl font-semibold text-white sm:text-4xl">Building your own app</h2>
-                <p class="mt-4 text-center text-slate-400">Everything you need to install, post messages, and handle a slash command — with real requests.</p>
+                <p class="text-accent-tok reveal text-center text-xs font-bold uppercase tracking-widest">For developers</p>
+                <h2 class="font-display text-body reveal mt-2 text-center text-3xl font-semibold sm:text-4xl">Building your own app</h2>
+                <p class="text-muted-tok reveal mt-4 text-center">Everything you need to install, post messages, and handle a slash command — with real requests.</p>
 
                 <div class="mt-10 space-y-10">
-                    <div>
-                        <h3 class="flex items-center gap-2.5 font-semibold text-white"><span class="step-num text-blue-400">1</span> Register your app</h3>
-                        <p class="mt-1.5 text-sm text-slate-400">A workspace admin registers it from <strong class="text-slate-300">Admin panel &rarr; Apps</strong>. You get a <code class="inline">client_id</code> and a <code class="inline">client_secret</code> — the secret is shown once, copy it immediately.</p>
+                    <div class="reveal">
+                        <h3 class="text-body flex items-center gap-2.5 font-semibold"><span class="step-num">1</span> Register your app</h3>
+                        <p class="text-muted-tok mt-1.5 text-sm">A workspace admin registers it from <strong class="text-body">Admin panel &rarr; Apps</strong>. You get a <code class="inline">client_id</code> and a <code class="inline">client_secret</code> — the secret is shown once, copy it immediately.</p>
                     </div>
 
-                    <div>
-                        <h3 class="flex items-center gap-2.5 font-semibold text-white"><span class="step-num text-blue-400">2</span> Send an admin to install it</h3>
-                        <p class="mt-1.5 mb-3 text-sm text-slate-400">Link your app's own "Install" button here, then trade the code you get back for tokens:</p>
+                    <div class="reveal">
+                        <h3 class="text-body flex items-center gap-2.5 font-semibold"><span class="step-num">2</span> Send an admin to install it</h3>
+                        <p class="text-muted-tok mt-1.5 mb-3 text-sm">Link your app's own "Install" button here, then trade the code you get back for tokens:</p>
                         <pre class="code-block">GET https://cumess.cutm.ac.in/portal
   ?oauth_client_id=YOUR_CLIENT_ID
   &oauth_redirect_uri=YOUR_REDIRECT_URI
@@ -843,18 +903,18 @@ POST https://cumess.cutm.ac.in/oauth/token
   "redirect_uri": "...", "client_id": "...", "client_secret": "..." }</pre>
                     </div>
 
-                    <div>
-                        <h3 class="flex items-center gap-2.5 font-semibold text-white"><span class="step-num text-blue-400">3</span> Post as your bot</h3>
-                        <p class="mt-1.5 mb-3 text-sm text-slate-400">Once an admin has added your bot to a channel:</p>
+                    <div class="reveal">
+                        <h3 class="text-body flex items-center gap-2.5 font-semibold"><span class="step-num">3</span> Post as your bot</h3>
+                        <p class="text-muted-tok mt-1.5 mb-3 text-sm">Once an admin has added your bot to a channel:</p>
                         <pre class="code-block">POST https://cumess.cutm.ac.in/api/app/messages
 Authorization: Bearer YOUR_ACCESS_TOKEN
 
 { "channelId": "...", "text": "hello from your app" }</pre>
                     </div>
 
-                    <div>
-                        <h3 class="flex items-center gap-2.5 font-semibold text-white"><span class="step-num text-blue-400">4</span> Handle a slash command</h3>
-                        <p class="mt-1.5 mb-3 text-sm text-slate-400">Every webhook call is signed with <code class="inline">X-CU-Orbit-Signature</code> — an HMAC using <code class="inline">SHA-256(your client_secret)</code> as the key. Reply within 3 seconds:</p>
+                    <div class="reveal">
+                        <h3 class="text-body flex items-center gap-2.5 font-semibold"><span class="step-num">4</span> Handle a slash command</h3>
+                        <p class="text-muted-tok mt-1.5 mb-3 text-sm">Every webhook call is signed with <code class="inline">X-CU-Orbit-Signature</code> — an HMAC using <code class="inline">SHA-256(your client_secret)</code> as the key. Reply within 3 seconds:</p>
                         <pre class="code-block">// what you receive
 { "command": "/yours", "text": "...", "user_name": "...", "channel_id": "..." }
 
@@ -867,42 +927,42 @@ Authorization: Bearer YOUR_ACCESS_TOKEN
             </section>
 
             <!-- DOWNLOAD -->
-            <section id="download" class="border-t border-white/5 bg-white/[0.02] py-20">
+            <section id="download" class="bg-alt border-tok border-t py-20">
                 <div class="mx-auto max-w-2xl px-6 text-center">
-                    <h2 class="font-display text-3xl font-semibold text-white sm:text-4xl">Get Let's Connect</h2>
-                    <p class="mt-4 text-slate-400">Android today, iOS on the way, or just open the web portal — same account, same conversations, everywhere.</p>
+                    <h2 class="font-display text-body reveal text-3xl font-semibold sm:text-4xl">Get Let's Connect</h2>
+                    <p class="text-muted-tok reveal mt-4">Android today, iOS on the way, or just open the web portal — same account, same conversations, everywhere.</p>
 
-                    <div class="mx-auto mt-10 grid max-w-lg grid-cols-1 gap-4 sm:grid-cols-2">
-                        <a href="/?download=true" class="btn-shine group flex items-center justify-center space-x-4 rounded-2xl bg-blue-500 px-8 py-5 font-bold text-slate-950 shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-400">
+                    <div class="reveal mx-auto mt-10 grid max-w-lg grid-cols-1 gap-4 sm:grid-cols-2">
+                        <a href="/?download=true" class="btn-shine btn-primary group flex items-center justify-center space-x-4 rounded-2xl px-8 py-5 font-bold shadow-lg shadow-blue-500/20 transition-all hover:opacity-90">
                             <i class="fa-brands fa-android text-3xl transition-transform group-hover:scale-110"></i>
                             <div class="text-left">
                                 <div class="text-[10px] uppercase opacity-70">Download for</div>
                                 <div class="text-lg leading-none">Android APK</div>
                             </div>
                         </a>
-                        <a href="/portal" class="group flex items-center justify-center space-x-4 rounded-2xl border border-slate-700/50 bg-slate-800/50 px-8 py-5 font-bold text-slate-300 transition-all hover:bg-slate-800">
-                            <i class="fa-solid fa-globe text-3xl transition-transform group-hover:scale-110"></i>
+                        <a href="/portal" class="bg-card text-body border-tok group flex items-center justify-center space-x-4 rounded-2xl border px-8 py-5 font-bold transition-all hover:opacity-80">
+                            <i class="fa-solid fa-globe text-accent-tok text-3xl transition-transform group-hover:scale-110"></i>
                             <div class="text-left">
-                                <div class="text-[10px] uppercase opacity-50">Use in browser</div>
+                                <div class="text-faint-tok text-[10px] uppercase">Use in browser</div>
                                 <div class="text-lg leading-none">Web Portal</div>
                             </div>
                         </a>
                     </div>
 
-                    <div class="mx-auto mt-10 max-w-lg rounded-3xl border border-slate-800/50 bg-slate-950/40 p-6 text-left">
+                    <div class="reveal bg-card border-tok mx-auto mt-10 max-w-lg rounded-3xl border p-6 text-left" style="box-shadow:var(--shadow)">
                         <div class="grid grid-cols-2 gap-4">
                             <div class="flex items-start space-x-3 text-sm">
-                                <i class="fa-solid fa-shield-halved mt-1 text-blue-500"></i>
+                                <i class="fa-solid fa-shield-halved text-accent-tok mt-1"></i>
                                 <div>
-                                    <span class="block font-bold text-slate-200">Secure</span>
-                                    <span class="text-xs text-slate-500">University Locked</span>
+                                    <span class="text-body block font-bold">Secure</span>
+                                    <span class="text-faint-tok text-xs">University Locked</span>
                                 </div>
                             </div>
                             <div class="flex items-start space-x-3 text-sm">
-                                <i class="fa-solid fa-bolt mt-1 text-blue-500"></i>
+                                <i class="fa-solid fa-bolt text-accent-tok mt-1"></i>
                                 <div>
-                                    <span class="block font-bold text-slate-200">Real-time</span>
-                                    <span class="text-xs text-slate-500">Zero Latency</span>
+                                    <span class="text-body block font-bold">Real-time</span>
+                                    <span class="text-faint-tok text-xs">Zero Latency</span>
                                 </div>
                             </div>
                         </div>
@@ -910,9 +970,30 @@ Authorization: Bearer YOUR_ACCESS_TOKEN
                 </div>
             </section>
 
-            <footer class="border-t border-white/5 py-10 text-center text-xs text-slate-600">
+            <footer class="border-tok text-faint-tok border-t py-10 text-center text-xs">
                 Let's Connect &middot; Centurion University
             </footer>
+
+            <script>
+                function lcToggleTheme() {
+                    var root = document.documentElement;
+                    var dark = root.classList.toggle('dark');
+                    try { localStorage.setItem('lc-theme', dark ? 'dark' : 'light'); } catch (e) {}
+                }
+                (function () {
+                    var els = document.querySelectorAll('.reveal');
+                    if (!('IntersectionObserver' in window) || !els.length) {
+                        els.forEach(function (el) { el.classList.add('in-view'); });
+                        return;
+                    }
+                    var io = new IntersectionObserver(function (entries) {
+                        entries.forEach(function (entry) {
+                            if (entry.isIntersecting) { entry.target.classList.add('in-view'); io.unobserve(entry.target); }
+                        });
+                    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+                    els.forEach(function (el) { io.observe(el); });
+                })();
+            </script>
 
         </body>
         </html>
