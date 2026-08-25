@@ -40,7 +40,7 @@ export default function SettingsScreen() {
           <Text style={[styles.rowValue, { color: colors.textMuted }]}>Campus directory</Text>
         </View>
         <Text style={[styles.hint, { color: colors.textMuted }]}>
-          Your name, avatar, and status are visible to other CU Orbit users in
+          Your name, avatar, and status are visible to other Let's Connect users in
           your channels and DMs. Your campus email is only shown to people
           you message directly.
         </Text>

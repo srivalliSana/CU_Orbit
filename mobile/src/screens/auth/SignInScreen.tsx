@@ -40,7 +40,7 @@ export default function SignInScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Text style={styles.title}>CU Orbit</Text>
+      <Text style={styles.title}>Let's Connect</Text>
       <Text style={styles.subtitle}>Sign in with your CUTM campus email</Text>
 
       {signingIn ? (

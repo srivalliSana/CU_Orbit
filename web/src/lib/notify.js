@@ -56,7 +56,7 @@ export function notifyMessage({ title, body, tag, onClick }) {
 
 /** Unread total in the tab title, so it is visible without notifications. */
 export function setBadge(count) {
-  const base = 'CU Orbit';
+  const base = "Let's Connect";
   document.title = count > 0 ? `(${count}) ${base}` : base;
   if (navigator.setAppBadge) {
     count > 0 ? navigator.setAppBadge(count).catch(() => {}) : navigator.clearAppBadge?.().catch(() => {});

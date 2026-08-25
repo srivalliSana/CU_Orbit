@@ -121,7 +121,7 @@ function CreateAppForm({ onCreated }) {
         />
       </div>
       <div>
-        <label className="text-[11px] font-medium text-slate-500">Redirect URIs (one per line — where CU Orbit sends the OAuth code back)</label>
+        <label className="text-[11px] font-medium text-slate-500">Redirect URIs (one per line — where Let's Connect sends the OAuth code back)</label>
         <textarea
           required rows={2} value={redirectUris} onChange={(e) => setRedirectUris(e.target.value)}
           placeholder="https://designhub.example.com/oauth/callback"

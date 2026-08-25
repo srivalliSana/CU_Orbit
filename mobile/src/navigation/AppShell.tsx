@@ -27,7 +27,7 @@ const HomeStack = createNativeStackNavigator<HomeStackParamList>();
 function HomeStackNavigator() {
   return (
     <HomeStack.Navigator>
-      <HomeStack.Screen name="List" component={HomeScreen} options={{ title: "CU Orbit" }} />
+      <HomeStack.Screen name="List" component={HomeScreen} options={{ title: "Let's Connect" }} />
       <HomeStack.Screen name="Chat" component={ChatScreen} />
       <HomeStack.Screen name="Threads" component={ThreadsScreen} options={{ title: "Threads" }} />
       <HomeStack.Screen name="Mentions" component={MentionsScreen} options={{ title: "Mentions" }} />

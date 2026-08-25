@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "CU Orbit",
+    "name": "Let's Connect",
     "slug": "cuorbit",
     "scheme": "cuorbit",
     "version": "1.0.0",
@@ -62,15 +62,15 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "CU Orbit accesses your photos so you can share them in chat.",
-          "cameraPermission": "CU Orbit uses your camera so you can capture and share photos.",
-          "microphonePermission": "CU Orbit uses your microphone to record voice messages."
+          "photosPermission": "Let's Connect accesses your photos so you can share them in chat.",
+          "cameraPermission": "Let's Connect uses your camera so you can capture and share photos.",
+          "microphonePermission": "Let's Connect uses your microphone to record voice messages."
         }
       ],
       [
         "expo-contacts",
         {
-          "contactsPermission": "CU Orbit uses your contacts to help you find people to message."
+          "contactsPermission": "Let's Connect uses your contacts to help you find people to message."
         }
       ],
       "expo-asset",

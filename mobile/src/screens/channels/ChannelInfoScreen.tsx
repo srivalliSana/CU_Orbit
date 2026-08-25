@@ -244,7 +244,7 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
                 style={styles.shareButton}
                 onPress={() =>
                   Share.share({
-                    message: `Join #${channel.name} on CU Orbit: https://cuorbit.app/join/${channel.invite_code}`,
+                    message: `Join #${channel.name} on Let's Connect: https://cuorbit.app/join/${channel.invite_code}`,
                   })
                 }
               >

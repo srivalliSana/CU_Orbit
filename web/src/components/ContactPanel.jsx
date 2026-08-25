@@ -164,7 +164,7 @@ export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMess
               {presence && <p className="mt-0.5 text-xs text-slate-500">{presence}</p>}
               {!person.in_orbit && (
                 <p className="mt-2 rounded-full bg-amber-50 px-3 py-1 text-[11px] text-amber-700 dark:bg-amber-950 dark:text-amber-300">
-                  Hasn’t used CU Orbit yet
+                  Hasn’t used Let's Connect yet
                 </p>
               )}
             </div>

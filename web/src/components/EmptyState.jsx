@@ -14,7 +14,7 @@ export default function EmptyState({ user, onNewGroup }) {
           </svg>
         </div>
         <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
-          {user?.name ? `Welcome, ${user.name.split(' ')[0]}` : 'CU Orbit'}
+          {user?.name ? `Welcome, ${user.name.split(' ')[0]}` : "Let's Connect"}
         </h1>
         <p className="mt-2 text-sm text-slate-500">
           {canCreate ? 'Pick a channel or a person on the left, or start a new group.' : 'Pick a channel or a person on the left to start messaging.'}

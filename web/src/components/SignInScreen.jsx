@@ -85,7 +85,7 @@ export default function SignInScreen({ onSignedIn }) {
   return (
     <div className="flex h-screen items-center justify-center bg-slate-50 p-6 dark:bg-slate-950">
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-lg ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
-        <h1 className="text-center text-xl font-semibold text-slate-800 dark:text-slate-100">CU Orbit</h1>
+        <h1 className="text-center text-xl font-semibold text-slate-800 dark:text-slate-100">Let's Connect</h1>
         <p className="mt-1 text-center text-sm text-slate-500">Sign in with your CUTM campus email</p>
 
         <div className="mt-6 flex justify-center" ref={buttonRef} />

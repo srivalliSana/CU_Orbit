@@ -44,7 +44,7 @@ export default function SettingsPanel({ onClose, onSignOut }) {
         <div className="mt-2 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
           <p className="text-sm text-slate-700 dark:text-slate-200">Profile visibility: Campus directory</p>
           <p className="mt-2 text-xs text-slate-500">
-            Your name, avatar, and status are visible to other CU Orbit users in
+            Your name, avatar, and status are visible to other Let's Connect users in
             your channels and DMs. Your CampusOne email is only shown to people
             you message directly.
           </p>

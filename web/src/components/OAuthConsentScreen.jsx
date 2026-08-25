@@ -44,10 +44,10 @@ export default function OAuthConsentScreen({ params, currentUser, onDone }) {
           <>
             <h1 className="text-center text-lg font-semibold text-slate-800 dark:text-slate-100">Admins only</h1>
             <p className="mt-2 text-center text-sm text-slate-500">
-              Only workspace admins can install apps on CU Orbit.
+              Only workspace admins can install apps on Let's Connect.
             </p>
             <button onClick={onDone} className="mt-5 w-full rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300">
-              Back to CU Orbit
+              Back to Let's Connect
             </button>
           </>
         ) : !info && !error ? (
@@ -57,7 +57,7 @@ export default function OAuthConsentScreen({ params, currentUser, onDone }) {
             <h1 className="text-center text-lg font-semibold text-slate-800 dark:text-slate-100">Couldn't verify this app</h1>
             <p className="mt-2 text-center text-sm text-red-500">{error}</p>
             <button onClick={onDone} className="mt-5 w-full rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300">
-              Back to CU Orbit
+              Back to Let's Connect
             </button>
           </>
         ) : (

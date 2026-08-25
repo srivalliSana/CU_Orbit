@@ -132,7 +132,7 @@ const User = sequelize.define('User', {
     handle: { type: DataTypes.STRING, unique: true },
     email: DataTypes.STRING,
     avatarUrl: { type: DataTypes.STRING, defaultValue: '' },
-    bio: { type: DataTypes.TEXT, defaultValue: 'Hey there! I am using CU Orbit.' },
+    bio: { type: DataTypes.TEXT, defaultValue: "Hey there! I am using Let's Connect." },
     status_emoji: { type: DataTypes.STRING, defaultValue: '✨' },
     status_text: { type: DataTypes.STRING, defaultValue: '' },
     presence: { type: DataTypes.ENUM('online', 'away', 'dnd', 'offline'), defaultValue: 'online' },
@@ -524,7 +524,7 @@ sequelize.authenticate()
 
         const [ws] = await Workspace.findOrCreate({
             where: { slug: 'cu-orbit' },
-            defaults: { name: 'CU Orbit', slug: 'cu-orbit' }
+            defaults: { name: "Let's Connect", slug: 'cu-orbit' }
         });
 
         const [genChannel] = await Channel.findOrCreate({
@@ -676,47 +676,74 @@ app.get('/', async (req, res) => {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>CU Orbit | official University Messaging</title>
+            <title>Let's Connect | Centurion University Messaging</title>
+            <meta name="description" content="Let's Connect — real-time messaging, channels, and an app platform built for Centurion University.">
             <script src="https://cdn.tailwindcss.com"></script>
             <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
             <style>
-                @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap');
-                body { background: #0f172a; color: white; font-family: 'Plus Jakarta Sans', sans-serif; }
-                .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); }
+                @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap');
+                html { scroll-behavior: smooth; }
+                body { background: #0B1220; color: #E7ECF7; font-family: 'Plus Jakarta Sans', sans-serif; }
+                .font-display { font-family: 'Fraunces', Georgia, serif; }
+                .glass { background: rgba(22, 33, 58, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); }
                 .btn-shine { position: relative; overflow: hidden; }
-                .btn-shine::after { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent); transform: rotate(45deg); transition: 0.5s; }
+                .btn-shine::after { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: linear-gradient(45deg, transparent, rgba(255,255,255,0.15), transparent); transform: rotate(45deg); transition: 0.5s; }
                 .btn-shine:hover::after { left: 120%; }
+                .feature-card { background: #121B30; border: 1px solid #253150; transition: transform .2s, border-color .2s; }
+                .feature-card:hover { transform: translateY(-3px); border-color: rgba(96,165,250,0.4); }
+                .step-num { font-family: 'Fraunces', Georgia, serif; }
+                code.inline { background: rgba(96,165,250,0.12); color: #93C5FD; padding: 1px 7px; border-radius: 5px; font-family: ui-monospace, 'IBM Plex Mono', monospace; font-size: 0.88em; }
+                pre.code-block { background: #060A14; border: 1px solid #1D2740; border-radius: 12px; padding: 18px 20px; overflow-x: auto; font-family: ui-monospace, 'IBM Plex Mono', monospace; font-size: 12.5px; line-height: 1.7; color: #DCE4F5; }
             </style>
         </head>
-        <body class="min-h-screen flex items-center justify-center p-6 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-900 to-slate-950">
-            <div class="glass max-w-2xl w-full rounded-[2.5rem] p-10 shadow-2xl text-center border-t border-blue-400/20">
-                <div class="flex justify-center mb-8">
-                    <div class="w-24 h-24 bg-gradient-to-br from-blue-400 to-blue-600 rounded-3xl flex items-center justify-center shadow-xl shadow-blue-500/20 rotate-3">
-                        <i class="fa-solid fa-satellite-dish text-5xl text-slate-900"></i>
-                    </div>
+        <body class="min-h-screen bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-900/15 via-[#0B1220] to-[#0B1220]">
+
+            <!-- NAV -->
+            <header class="sticky top-0 z-30 border-b border-white/5 bg-[#0B1220]/80 backdrop-blur-md">
+                <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+                    <a href="/" class="flex items-center gap-2.5">
+                        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-400 to-blue-600 shadow shadow-blue-500/30">
+                            <i class="fa-solid fa-satellite-dish text-sm text-slate-950"></i>
+                        </div>
+                        <span class="font-display text-lg font-semibold">Let's Connect</span>
+                    </a>
+                    <nav class="hidden items-center gap-8 text-sm font-medium text-slate-300 sm:flex">
+                        <a href="#features" class="hover:text-white">Features</a>
+                        <a href="#apps" class="hover:text-white">Apps &amp; Integrations</a>
+                        <a href="#guide" class="hover:text-white">Developer Guide</a>
+                        <a href="#download" class="hover:text-white">Download</a>
+                    </nav>
+                    <a href="/portal" class="rounded-lg bg-blue-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-blue-400">
+                        Open Web Portal
+                    </a>
+                </div>
+            </header>
+
+            <!-- HERO -->
+            <section class="mx-auto max-w-6xl px-6 pb-20 pt-16 text-center sm:pt-24">
+                <div class="mx-auto mb-8 inline-flex items-center rounded-full border border-blue-500/20 bg-blue-500/10 px-4 py-2">
+                    <span class="mr-3 h-2 w-2 animate-pulse rounded-full bg-blue-500"></span>
+                    <span class="text-xs font-bold uppercase tracking-widest text-blue-400">System Detected: ${osName}</span>
                 </div>
 
-                <h1 class="text-6xl font-extrabold tracking-tight text-white mb-3">CU <span class="text-blue-400">Orbit</span></h1>
-                <p class="text-slate-400 text-xl mb-10 max-w-lg mx-auto leading-relaxed">
-                    Elevate your university communication with our professional messaging ecosystem.
+                <h1 class="font-display text-5xl font-semibold tracking-tight text-white sm:text-6xl">
+                    Let's <span class="text-blue-400">Connect</span>
+                </h1>
+                <p class="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-slate-400 sm:text-xl">
+                    Real-time messaging, channels, and an app platform — built for Centurion University, not adapted from someone else's.
                 </p>
 
-                <div class="inline-flex items-center px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/20 mb-10">
-                    <span class="w-2 h-2 bg-blue-500 rounded-full animate-pulse mr-3"></span>
-                    <span class="text-xs font-bold text-blue-400 uppercase tracking-widest">System Detected: ${osName}</span>
-                </div>
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-10">
-                    <a href="/?download=true" class="btn-shine bg-blue-500 hover:bg-blue-400 text-slate-950 font-bold py-5 px-8 rounded-2xl flex items-center justify-center space-x-4 transition-all shadow-lg shadow-blue-500/20 group">
-                        <i class="fa-brands fa-android text-3xl group-hover:scale-110 transition-transform"></i>
+                <div class="mx-auto mt-10 grid max-w-lg grid-cols-1 gap-4 sm:grid-cols-2">
+                    <a href="/?download=true" class="btn-shine group flex items-center justify-center space-x-4 rounded-2xl bg-blue-500 px-8 py-5 font-bold text-slate-950 shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-400">
+                        <i class="fa-brands fa-android text-3xl transition-transform group-hover:scale-110"></i>
                         <div class="text-left">
                             <div class="text-[10px] uppercase opacity-70">Download for</div>
                             <div class="text-lg leading-none">Android APK</div>
                         </div>
                     </a>
 
-                    <button onclick="alert('iOS App is currently in development. Registration will open soon!')" class="bg-slate-800/50 hover:bg-slate-800 text-slate-300 font-bold py-5 px-8 rounded-2xl flex items-center justify-center space-x-4 transition-all border border-slate-700/50 group">
-                        <i class="fa-brands fa-apple text-3xl group-hover:scale-110 transition-transform"></i>
+                    <button onclick="alert('iOS App is currently in development. Registration will open soon!')" class="group flex items-center justify-center space-x-4 rounded-2xl border border-slate-700/50 bg-slate-800/50 px-8 py-5 font-bold text-slate-300 transition-all hover:bg-slate-800">
+                        <i class="fa-brands fa-apple text-3xl transition-transform group-hover:scale-110"></i>
                         <div class="text-left">
                             <div class="text-[10px] uppercase opacity-50">Coming Soon</div>
                             <div class="text-lg leading-none">iOS Mobile</div>
@@ -724,33 +751,168 @@ app.get('/', async (req, res) => {
                     </button>
                 </div>
 
-                <div class="flex flex-col sm:flex-row items-center justify-center space-y-2 sm:space-y-0 sm:space-x-8 mb-10">
-                    <a href="/portal" class="text-blue-400 hover:text-blue-300 font-bold flex items-center group">
+                <div class="mt-8 flex flex-col items-center justify-center gap-2 text-sm sm:flex-row sm:gap-8">
+                    <a href="/portal" class="group flex items-center font-bold text-blue-400 hover:text-blue-300">
                         <span>Continue in Web Portal</span>
-                        <i class="fa-solid fa-arrow-right ml-2 group-hover:translate-x-1 transition-transform"></i>
+                        <i class="fa-solid fa-arrow-right ml-2 transition-transform group-hover:translate-x-1"></i>
                     </a>
-                    ${history[0] ? `<span class="text-slate-500 text-sm">Latest: v${history[0].version} (build ${history[0].build_number})</span>` : ''}
+                    ${history[0] ? `<span class="text-slate-500">Latest: v${history[0].version} (build ${history[0].build_number})</span>` : ''}
                 </div>
+            </section>
 
-                <div class="bg-slate-950/40 rounded-3xl p-6 text-left border border-slate-800/50">
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="flex items-start space-x-3 text-sm">
-                            <i class="fa-solid fa-shield-halved text-blue-500 mt-1"></i>
-                            <div>
-                                <span class="block text-slate-200 font-bold">Secure</span>
-                                <span class="text-slate-500 text-xs">University Locked</span>
+            <!-- FEATURES -->
+            <section id="features" class="mx-auto max-w-6xl px-6 py-20">
+                <p class="text-center text-xs font-bold uppercase tracking-widest text-blue-400">Everything in one place</p>
+                <h2 class="font-display mt-2 text-center text-3xl font-semibold text-white sm:text-4xl">Built for how a campus actually talks</h2>
+
+                <div class="mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                    ${[
+                        ['fa-comments', 'Channels &amp; DMs', 'Public and private channels, one-to-one messages, invite links gated to your campus domains.'],
+                        ['fa-at', '@Mentions', 'Get called out directly, with a dedicated unread badge and a feed of everything you were tagged in.'],
+                        ['fa-text-height', 'Rich formatting', 'Bold, italic, underline, strikethrough, lists, and code — right from the composer, on web and mobile.'],
+                        ['fa-microphone', 'Voice &amp; files', 'Record a voice note, share photos and documents, snap a photo straight from the camera.'],
+                        ['fa-square-poll-vertical', 'Polls', 'Ask a question, let a channel vote, watch the results update live for everyone.'],
+                        ['fa-bell', 'Push notifications', 'Real alerts for messages and mentions, even with the app closed — not just a browser tab trick.'],
+                        ['fa-user-shield', 'Admin oversight', 'Deactivate a channel instead of deleting it, an audit log, and live server health &amp; security monitoring.'],
+                        ['fa-shield-halved', 'Campus-locked sign-in', 'Google sign-in or a one-time email code, gated to your campus domains — no open registration.'],
+                        ['fa-plug', 'Apps &amp; integrations', 'A real OAuth platform: install apps, wire up slash commands, let a bot post on your behalf. See below.'],
+                    ].map(([icon, title, desc]) => `
+                        <div class="feature-card rounded-2xl p-6">
+                            <div class="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
+                                <i class="fa-solid ${icon} text-blue-400"></i>
                             </div>
+                            <h3 class="font-semibold text-white">${title}</h3>
+                            <p class="mt-1.5 text-sm leading-relaxed text-slate-400">${desc}</p>
                         </div>
-                        <div class="flex items-start space-x-3 text-sm">
-                            <i class="fa-solid fa-bolt text-blue-500 mt-1"></i>
-                            <div>
-                                <span class="block text-slate-200 font-bold">Real-time</span>
-                                <span class="text-slate-500 text-xs">Zero Latency</span>
+                    `).join('')}
+                </div>
+            </section>
+
+            <!-- APPS & INTEGRATIONS -->
+            <section id="apps" class="border-y border-white/5 bg-white/[0.02] py-20">
+                <div class="mx-auto max-w-6xl px-6">
+                    <p class="text-center text-xs font-bold uppercase tracking-widest text-blue-400">Apps &amp; Integrations</p>
+                    <h2 class="font-display mt-2 text-center text-3xl font-semibold text-white sm:text-4xl">Let's Connect isn't a closed box</h2>
+                    <p class="mx-auto mt-4 max-w-2xl text-center text-slate-400">
+                        A real OAuth 2.0 platform sits underneath — third-party apps can install with a proper consent screen, post as their own bot, and respond to slash commands. Built the same way Slack's is, from the ground up for this campus.
+                    </p>
+
+                    <div class="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-3">
+                        <div class="rounded-2xl border border-white/10 bg-[#121B30] p-6">
+                            <div class="step-num mb-3 text-3xl font-semibold text-blue-400">01</div>
+                            <h3 class="font-semibold text-white">Register &amp; install</h3>
+                            <p class="mt-1.5 text-sm leading-relaxed text-slate-400">An admin registers the app, then approves it through a real consent screen — same shape as any OAuth login you've already used.</p>
+                        </div>
+                        <div class="rounded-2xl border border-white/10 bg-[#121B30] p-6">
+                            <div class="step-num mb-3 text-3xl font-semibold text-blue-400">02</div>
+                            <h3 class="font-semibold text-white">Add the bot to a channel</h3>
+                            <p class="mt-1.5 text-sm leading-relaxed text-slate-400">Installing grants API access; posting anywhere still needs an explicit invite into that channel, same as adding a person.</p>
+                        </div>
+                        <div class="rounded-2xl border border-white/10 bg-[#121B30] p-6">
+                            <div class="step-num mb-3 text-3xl font-semibold text-blue-400">03</div>
+                            <h3 class="font-semibold text-white">Wire up a slash command</h3>
+                            <p class="mt-1.5 text-sm leading-relaxed text-slate-400">Type <code class="inline">/command</code> anywhere the bot can see, and its webhook replies — publicly to the channel, or privately, just to you.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- DEVELOPER GUIDE -->
+            <section id="guide" class="mx-auto max-w-3xl px-6 py-20">
+                <p class="text-center text-xs font-bold uppercase tracking-widest text-blue-400">For developers</p>
+                <h2 class="font-display mt-2 text-center text-3xl font-semibold text-white sm:text-4xl">Building your own app</h2>
+                <p class="mt-4 text-center text-slate-400">Everything you need to install, post messages, and handle a slash command — with real requests.</p>
+
+                <div class="mt-10 space-y-10">
+                    <div>
+                        <h3 class="flex items-center gap-2.5 font-semibold text-white"><span class="step-num text-blue-400">1</span> Register your app</h3>
+                        <p class="mt-1.5 text-sm text-slate-400">A workspace admin registers it from <strong class="text-slate-300">Admin panel &rarr; Apps</strong>. You get a <code class="inline">client_id</code> and a <code class="inline">client_secret</code> — the secret is shown once, copy it immediately.</p>
+                    </div>
+
+                    <div>
+                        <h3 class="flex items-center gap-2.5 font-semibold text-white"><span class="step-num text-blue-400">2</span> Send an admin to install it</h3>
+                        <p class="mt-1.5 mb-3 text-sm text-slate-400">Link your app's own "Install" button here, then trade the code you get back for tokens:</p>
+                        <pre class="code-block">GET https://cumess.cutm.ac.in/portal
+  ?oauth_client_id=YOUR_CLIENT_ID
+  &oauth_redirect_uri=YOUR_REDIRECT_URI
+  &oauth_scope=chat:write commands
+  &oauth_state=random-string
+
+POST https://cumess.cutm.ac.in/oauth/token
+{ "grant_type": "authorization_code", "code": "...",
+  "redirect_uri": "...", "client_id": "...", "client_secret": "..." }</pre>
+                    </div>
+
+                    <div>
+                        <h3 class="flex items-center gap-2.5 font-semibold text-white"><span class="step-num text-blue-400">3</span> Post as your bot</h3>
+                        <p class="mt-1.5 mb-3 text-sm text-slate-400">Once an admin has added your bot to a channel:</p>
+                        <pre class="code-block">POST https://cumess.cutm.ac.in/api/app/messages
+Authorization: Bearer YOUR_ACCESS_TOKEN
+
+{ "channelId": "...", "text": "hello from your app" }</pre>
+                    </div>
+
+                    <div>
+                        <h3 class="flex items-center gap-2.5 font-semibold text-white"><span class="step-num text-blue-400">4</span> Handle a slash command</h3>
+                        <p class="mt-1.5 mb-3 text-sm text-slate-400">Every webhook call is signed with <code class="inline">X-CU-Orbit-Signature</code> — an HMAC using <code class="inline">SHA-256(your client_secret)</code> as the key. Reply within 3 seconds:</p>
+                        <pre class="code-block">// what you receive
+{ "command": "/yours", "text": "...", "user_name": "...", "channel_id": "..." }
+
+// what you reply with
+{ "text": "here's your answer", "response_type": "in_channel" }
+// or, visible only to whoever ran it:
+{ "text": "just for you", "response_type": "ephemeral" }</pre>
+                    </div>
+                </div>
+            </section>
+
+            <!-- DOWNLOAD -->
+            <section id="download" class="border-t border-white/5 bg-white/[0.02] py-20">
+                <div class="mx-auto max-w-2xl px-6 text-center">
+                    <h2 class="font-display text-3xl font-semibold text-white sm:text-4xl">Get Let's Connect</h2>
+                    <p class="mt-4 text-slate-400">Android today, iOS on the way, or just open the web portal — same account, same conversations, everywhere.</p>
+
+                    <div class="mx-auto mt-10 grid max-w-lg grid-cols-1 gap-4 sm:grid-cols-2">
+                        <a href="/?download=true" class="btn-shine group flex items-center justify-center space-x-4 rounded-2xl bg-blue-500 px-8 py-5 font-bold text-slate-950 shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-400">
+                            <i class="fa-brands fa-android text-3xl transition-transform group-hover:scale-110"></i>
+                            <div class="text-left">
+                                <div class="text-[10px] uppercase opacity-70">Download for</div>
+                                <div class="text-lg leading-none">Android APK</div>
+                            </div>
+                        </a>
+                        <a href="/portal" class="group flex items-center justify-center space-x-4 rounded-2xl border border-slate-700/50 bg-slate-800/50 px-8 py-5 font-bold text-slate-300 transition-all hover:bg-slate-800">
+                            <i class="fa-solid fa-globe text-3xl transition-transform group-hover:scale-110"></i>
+                            <div class="text-left">
+                                <div class="text-[10px] uppercase opacity-50">Use in browser</div>
+                                <div class="text-lg leading-none">Web Portal</div>
+                            </div>
+                        </a>
+                    </div>
+
+                    <div class="mx-auto mt-10 max-w-lg rounded-3xl border border-slate-800/50 bg-slate-950/40 p-6 text-left">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="flex items-start space-x-3 text-sm">
+                                <i class="fa-solid fa-shield-halved mt-1 text-blue-500"></i>
+                                <div>
+                                    <span class="block font-bold text-slate-200">Secure</span>
+                                    <span class="text-xs text-slate-500">University Locked</span>
+                                </div>
+                            </div>
+                            <div class="flex items-start space-x-3 text-sm">
+                                <i class="fa-solid fa-bolt mt-1 text-blue-500"></i>
+                                <div>
+                                    <span class="block font-bold text-slate-200">Real-time</span>
+                                    <span class="text-xs text-slate-500">Zero Latency</span>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            </section>
+
+            <footer class="border-t border-white/5 py-10 text-center text-xs text-slate-600">
+                Let's Connect &middot; Centurion University
+            </footer>
 
         </body>
         </html>
@@ -1088,7 +1250,7 @@ app.post('/api/directory/dm', auth.requireAuth, async (req, res) => {
         }
 
         const user = await User.findOne({ where: { campus_email: email } });
-        if (!user) return res.status(404).json({ error: 'not_found', message: 'That person has not signed in to CU Orbit yet' });
+        if (!user) return res.status(404).json({ error: 'not_found', message: "That person has not signed in to Let's Connect yet" });
 
         res.json({ dm_id: [req.user.id, user.id].sort().join('_'), user });
     } catch (e) {
@@ -1356,7 +1518,7 @@ async function resolveWorkspaceId(given) {
     // ordering, create it on demand.
     const [ws] = await Workspace.findOrCreate({
         where: { slug: 'cu-orbit' },
-        defaults: { name: 'CU Orbit', slug: 'cu-orbit' },
+        defaults: { name: "Let's Connect", slug: 'cu-orbit' },
     });
     return ws.id;
 }
@@ -1501,8 +1663,8 @@ app.post('/api/auth/otp/request', async (req, res) => {
         mailer.sendMail({
             from: process.env.SMTP_FROM || process.env.SMTP_USER,
             to: email,
-            subject: `${code} is your CU Orbit sign-in code`,
-            text: `Your CU Orbit sign-in code is ${code}. It expires in 10 minutes. If you didn't request this, you can ignore this email.`,
+            subject: `${code} is your Let's Connect sign-in code`,
+            text: `Your Let's Connect sign-in code is ${code}. It expires in 10 minutes. If you didn't request this, you can ignore this email.`,
         }).catch((e) => console.error('[otp-request] send failed:', e.message));
     } catch (e) {
         console.error('[otp-request] failed:', e.message);
@@ -3432,8 +3594,8 @@ app.post('/api/channels/:id/invite-email', auth.requireAuth, async (req, res) =>
         mailer.sendMail({
             from: process.env.SMTP_FROM || process.env.SMTP_USER,
             to: email,
-            subject: `${inviter?.name || 'Someone'} invited you to #${channel.name} on CU Orbit`,
-            text: `${inviter?.name || 'Someone'} invited you to join #${channel.name} on CU Orbit.\n\nJoin here: ${joinUrl}\n\nIf you don't have a CU Orbit account yet, signing in with your campus Google account or email creates one automatically.`,
+            subject: `${inviter?.name || 'Someone'} invited you to #${channel.name} on Let's Connect`,
+            text: `${inviter?.name || 'Someone'} invited you to join #${channel.name} on Let's Connect.\n\nJoin here: ${joinUrl}\n\nIf you don't have a Let's Connect account yet, signing in with your campus Google account or email creates one automatically.`,
         }).catch((e) => console.error('[invite-email] send failed:', e.message));
     } catch (e) {
         console.error('[invite-email] failed:', e.message);
