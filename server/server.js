@@ -685,26 +685,28 @@ app.get('/', async (req, res) => {
             <script src="https://cdn.tailwindcss.com"></script>
             <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
             <style>
-                @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap');
+                @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
                 :root {
-                    --bg: #F6F8FC; --bg-alt: #EEF2FA; --surface: #FFFFFF; --border: #DFE6F3;
-                    --text: #101728; --muted: #55617D; --faint: #8792AB;
+                    --bg: #FFFFFF; --bg-alt: #F7F8FB; --surface: #FFFFFF; --border: #E6E9F1;
+                    --text: #14171F; --muted: #5B6272; --faint: #8991A3;
                     --accent: #2F5FE0; --accent-soft: #E7EEFD;
+                    --hero-1: #1D3FC4; --hero-2: #2F5FE0; --hero-3: #4F86F5;
                     --code-bg: #0B1220; --code-text: #DCE4F5; --code-border: #1D2740;
-                    --shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.05);
+                    --shadow: 0 1px 2px rgba(16,24,40,.04), 0 10px 28px rgba(16,24,40,.07);
                 }
                 html.dark {
                     --bg: #0B1220; --bg-alt: #0E1729; --surface: #121B30; --border: #253150;
                     --text: #E7ECF7; --muted: #94A2C2; --faint: #64719A;
                     --accent: #6C9BFF; --accent-soft: #1B2947;
+                    --hero-1: #0C1E63; --hero-2: #16308F; --hero-3: #2453C4;
                     --code-bg: #060A14; --code-text: #DCE4F5; --code-border: #1D2740;
-                    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.28);
+                    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 10px 28px rgba(0,0,0,.35);
                 }
 
                 html { scroll-behavior: smooth; }
                 body { background: var(--bg); color: var(--text); font-family: 'Plus Jakarta Sans', sans-serif; transition: background .25s, color .25s; }
-                .font-display { font-family: 'Fraunces', Georgia, serif; }
+                .font-display { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; letter-spacing: -0.02em; }
                 .bg-page { background: var(--bg); }
                 .bg-alt { background: var(--bg-alt); }
                 .bg-card { background: var(--surface); }
@@ -716,18 +718,24 @@ app.get('/', async (req, res) => {
                 .bg-accent-tok { background: var(--accent); }
                 .bg-accent-soft { background: var(--accent-soft); }
 
-                header.nav { background: color-mix(in srgb, var(--bg) 82%, transparent); border-color: var(--border); }
-                .btn-primary { background: var(--accent); color: #fff; }
+                header.nav { background: color-mix(in srgb, var(--bg) 88%, transparent); border-color: var(--border); }
+                .btn-primary { background: var(--accent); letter-spacing: .01em; }
                 html:not(.dark) .btn-primary { color: #fff; }
                 html.dark .btn-primary { color: #071022; }
                 .btn-shine { position: relative; overflow: hidden; }
                 .btn-shine::after { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: linear-gradient(45deg, transparent, rgba(255,255,255,0.25), transparent); transform: rotate(45deg); transition: 0.5s; }
                 .btn-shine:hover::after { left: 120%; }
 
+                .hero-banner { background: linear-gradient(120deg, var(--hero-1), var(--hero-2) 55%, var(--hero-3)); position: relative; overflow: hidden; }
+                .hero-curve { display: block; width: 100%; height: 64px; margin-bottom: -1px; }
+                .hero-curve path { fill: var(--bg); }
+
+                .launch-card { background: var(--surface); border: 1px solid var(--border); box-shadow: 0 20px 44px rgba(16,24,40,.16), 0 2px 6px rgba(16,24,40,.06); }
+
                 .feature-card { background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); transition: transform .25s ease, border-color .25s; }
                 .feature-card:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
                 .step-card { background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); }
-                .step-num { font-family: 'Fraunces', Georgia, serif; color: var(--accent); }
+                .step-num { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; color: var(--accent); }
 
                 code.inline { background: var(--accent-soft); color: var(--accent); padding: 1px 7px; border-radius: 5px; font-family: ui-monospace, 'IBM Plex Mono', monospace; font-size: 0.88em; }
                 pre.code-block { background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 12px; padding: 18px 20px; overflow-x: auto; font-family: ui-monospace, 'IBM Plex Mono', monospace; font-size: 12.5px; line-height: 1.7; color: var(--code-text); box-shadow: var(--shadow); }
@@ -780,45 +788,60 @@ app.get('/', async (req, res) => {
             </header>
 
             <!-- HERO -->
-            <section class="mx-auto max-w-6xl px-6 pb-20 pt-16 text-center sm:pt-24">
-                <div class="hero-in bg-accent-soft mx-auto mb-8 inline-flex items-center rounded-full border border-transparent px-4 py-2">
-                    <span class="bg-accent-tok mr-3 h-2 w-2 animate-pulse rounded-full"></span>
-                    <span class="text-accent-tok text-xs font-bold uppercase tracking-widest">System Detected: ${osName}</span>
+            <section class="hero-banner">
+                <div class="mx-auto max-w-6xl px-6 pb-24 pt-16 text-center sm:pt-20">
+                    <div class="hero-in mx-auto mb-7 inline-flex items-center rounded-full border border-white/25 bg-white/10 px-4 py-2 backdrop-blur">
+                        <span class="mr-3 h-2 w-2 animate-pulse rounded-full bg-white"></span>
+                        <span class="text-xs font-bold uppercase tracking-widest text-white">System Detected: ${osName}</span>
+                    </div>
+
+                    <h1 class="hero-in-delay-1 font-display text-5xl text-white sm:text-6xl">
+                        Let's Connect
+                    </h1>
+                    <p class="hero-in-delay-1 mx-auto mt-5 max-w-xl text-lg leading-relaxed text-blue-100 sm:text-xl">
+                        Real-time messaging, channels, and an app platform — built for Centurion University, not adapted from someone else's.
+                    </p>
                 </div>
+                <svg class="hero-curve" viewBox="0 0 1440 64" preserveAspectRatio="none" aria-hidden="true">
+                    <path d="M0,64 C240,0 480,0 720,20 C960,40 1200,64 1440,24 L1440,64 L0,64 Z"></path>
+                </svg>
+            </section>
 
-                <h1 class="hero-in-delay-1 text-body font-display text-5xl font-semibold tracking-tight sm:text-6xl">
-                    Let's <span class="text-accent-tok">Connect</span>
-                </h1>
-                <p class="hero-in-delay-1 text-muted-tok mx-auto mt-5 max-w-xl text-lg leading-relaxed sm:text-xl">
-                    Real-time messaging, channels, and an app platform — built for Centurion University, not adapted from someone else's.
-                </p>
+            <!-- LAUNCH CARD -->
+            <section class="mx-auto max-w-3xl px-6">
+                <div class="hero-in-delay-2 launch-card -mt-16 rounded-3xl p-8 text-center sm:-mt-20 sm:p-10">
+                    <p class="text-faint-tok text-xs font-bold uppercase tracking-widest">Get started</p>
+                    <h2 class="text-body font-display mt-2 text-2xl sm:text-[28px]">Ready to launch</h2>
 
-                <div class="hero-in-delay-2 mx-auto mt-10 grid max-w-lg grid-cols-1 gap-4 sm:grid-cols-2">
-                    <a href="/?download=true" class="btn-shine btn-primary group flex items-center justify-center space-x-4 rounded-2xl px-8 py-5 font-bold shadow-lg shadow-blue-500/20 transition-all hover:opacity-90">
-                        <i class="fa-brands fa-android text-3xl transition-transform group-hover:scale-110"></i>
-                        <div class="text-left">
-                            <div class="text-[10px] uppercase opacity-70">Download for</div>
-                            <div class="text-lg leading-none">Android APK</div>
-                        </div>
-                    </a>
+                    <div class="mx-auto mt-8 grid max-w-lg grid-cols-1 gap-4 sm:grid-cols-2">
+                        <a href="/?download=true" class="btn-shine btn-primary group flex items-center justify-center space-x-4 rounded-2xl px-8 py-5 font-bold shadow-lg shadow-blue-500/20 transition-all hover:opacity-90">
+                            <i class="fa-brands fa-android text-3xl transition-transform group-hover:scale-110"></i>
+                            <div class="text-left">
+                                <div class="text-[10px] uppercase opacity-70">Download for</div>
+                                <div class="text-lg leading-none">Android APK</div>
+                            </div>
+                        </a>
 
-                    <button onclick="alert('iOS App is currently in development. Registration will open soon!')" class="bg-card text-body border-tok group flex items-center justify-center space-x-4 rounded-2xl border px-8 py-5 font-bold transition-all hover:opacity-80">
-                        <i class="fa-brands fa-apple text-3xl transition-transform group-hover:scale-110"></i>
-                        <div class="text-left">
-                            <div class="text-faint-tok text-[10px] uppercase">Coming Soon</div>
-                            <div class="text-lg leading-none">iOS Mobile</div>
-                        </div>
-                    </button>
-                </div>
+                        <button onclick="alert('iOS App is currently in development. Registration will open soon!')" class="bg-card text-body border-tok group flex items-center justify-center space-x-4 rounded-2xl border px-8 py-5 font-bold transition-all hover:opacity-80">
+                            <i class="fa-brands fa-apple text-3xl transition-transform group-hover:scale-110"></i>
+                            <div class="text-left">
+                                <div class="text-faint-tok text-[10px] uppercase">Coming Soon</div>
+                                <div class="text-lg leading-none">iOS Mobile</div>
+                            </div>
+                        </button>
+                    </div>
 
-                <div class="hero-in-delay-2 mt-8 flex flex-col items-center justify-center gap-2 text-sm sm:flex-row sm:gap-8">
-                    <a href="/portal" class="text-accent-tok group flex items-center font-bold hover:opacity-80">
-                        <span>Continue in Web Portal</span>
-                        <i class="fa-solid fa-arrow-right ml-2 transition-transform group-hover:translate-x-1"></i>
-                    </a>
-                    ${history[0] ? `<span class="text-faint-tok">Latest: v${history[0].version} (build ${history[0].build_number})</span>` : ''}
+                    <div class="mt-7 flex flex-col items-center justify-center gap-2 text-sm sm:flex-row sm:gap-8">
+                        <a href="/portal" class="text-accent-tok group flex items-center font-bold hover:opacity-80">
+                            <span>Continue in Web Portal</span>
+                            <i class="fa-solid fa-arrow-right ml-2 transition-transform group-hover:translate-x-1"></i>
+                        </a>
+                        ${history[0] ? `<span class="text-faint-tok">Latest: v${history[0].version} (build ${history[0].build_number})</span>` : ''}
+                    </div>
                 </div>
             </section>
+
+            <div class="h-16 sm:h-20"></div>
 
             <!-- FEATURES -->
             <section id="features" class="mx-auto max-w-6xl px-6 py-20">
