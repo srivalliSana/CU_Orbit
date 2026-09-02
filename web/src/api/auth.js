@@ -3,7 +3,8 @@
  *
  * Two methods, both gated to a CUTM campus email (@cutm.ac.in / @cutmap.ac.in)
  * by the server — CampusOne SSO is no longer involved:
- *   1. Google — a Google Identity Services ID token, verified server-side.
+ *   1. Google — an OAuth2 access token (accounts.oauth2, prompt: 'select_account'
+ *      so the account chooser always shows), verified server-side.
  *   2. Email OTP — a one-time code emailed to the user, no password.
  */
 
@@ -57,11 +58,14 @@ export async function checkSession() {
   }
 }
 
-export async function signInWithGoogle(idToken) {
+// Takes an OAuth2 access token (from accounts.oauth2.initTokenClient — see
+// SignInScreen), not an ID token. Only that API supports prompt:
+// 'select_account', which is why the button flow isn't used here.
+export async function signInWithGoogle(accessToken) {
   const d = await json(fetch('/api/auth/google', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ idToken }),
+    body: JSON.stringify({ accessToken }),
   }));
   setToken(d.session);
   return d.user;

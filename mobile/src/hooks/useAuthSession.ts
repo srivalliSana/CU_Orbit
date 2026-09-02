@@ -4,7 +4,7 @@ import * as WebBrowser from "expo-web-browser";
 
 import { me, requestOtp as apiRequestOtp, signInWithGoogle, verifyOtp as apiVerifyOtp } from "../api/auth";
 import { apiErrorMessage } from "../api/client";
-import { APP_SCHEME, GOOGLE_ANDROID_CLIENT_ID } from "../constants/config";
+import { GOOGLE_ANDROID_CLIENT_ID, GOOGLE_REVERSED_CLIENT_ID } from "../constants/config";
 import { useAuthStore } from "../state/authStore";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -14,7 +14,10 @@ const GOOGLE_DISCOVERY = {
   tokenEndpoint: "https://oauth2.googleapis.com/token",
 };
 
-const REDIRECT_URI = AuthSession.makeRedirectUri({ scheme: APP_SCHEME });
+// A single slash after the colon, matching Google's own documented
+// reversed-client-id redirect convention exactly (scheme:/path, not
+// scheme://path) — see GOOGLE_REVERSED_CLIENT_ID's comment.
+const REDIRECT_URI = AuthSession.makeRedirectUri({ native: `${GOOGLE_REVERSED_CLIENT_ID}:/oauth2redirect` });
 
 export function useAuthSession() {
   const { status, user, hydrate, setSession, clear } = useAuthStore();

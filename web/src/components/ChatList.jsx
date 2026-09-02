@@ -120,23 +120,28 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
         </button>}
       </header>
 
-      <div className="px-3 py-2">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search"
-          aria-label="Search conversations"
-          className="w-full rounded-lg bg-slate-100 px-3 py-2 text-sm outline-none ring-blue-500/40 placeholder:text-slate-400 focus:ring-2 dark:bg-slate-800 dark:text-slate-100"
-        />
-        <div className="mt-2 flex gap-1">
+      <div className="px-3 py-2.5">
+        <div className="relative">
+          <svg className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
+          </svg>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search"
+            aria-label="Search conversations"
+            className="w-full rounded-lg bg-slate-100 py-2 pl-9 pr-3 text-sm outline-none ring-blue-500/40 placeholder:text-slate-400 transition focus:bg-white focus:ring-2 dark:bg-slate-800/70 dark:text-slate-100 dark:focus:bg-slate-800"
+          />
+        </div>
+        <div className="mt-2.5 flex gap-1.5">
           {['all', 'channels', 'dms'].map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`rounded-full px-3 py-1 text-xs font-medium capitalize transition ${
+              className={`rounded-full px-3 py-1 text-xs font-semibold capitalize transition ${
                 tab === t
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
+                  ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
               }`}
             >
               {t === 'dms' ? 'Direct' : t}
@@ -264,22 +269,23 @@ function Row({ active, onClick, avatar, title, preview, time, unread, mention })
   return (
     <button
       onClick={onClick}
-      className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition ${
-        active ? 'bg-blue-50 dark:bg-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
+      className={`relative flex w-full items-center gap-3 py-2.5 pl-4 pr-4 text-left transition ${
+        active ? 'bg-blue-50 dark:bg-slate-800/80' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
       }`}
     >
+      {active && <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-blue-600" />}
       {avatar}
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
-          <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{title}</p>
+          <p className={`truncate text-sm ${unread > 0 ? 'font-semibold text-slate-900 dark:text-white' : 'font-medium text-slate-800 dark:text-slate-100'}`}>{title}</p>
           {time ? <span className="shrink-0 text-[11px] text-slate-400">{timeLabel(time)}</span> : null}
         </div>
         <div className="flex items-center justify-between gap-2">
-          <p className="truncate text-xs text-slate-500">{preview}</p>
+          <p className={`truncate text-xs ${unread > 0 ? 'text-slate-600 dark:text-slate-300' : 'text-slate-500'}`}>{preview}</p>
           <span className="flex shrink-0 items-center gap-1">
             {mention ? <span className="text-xs font-bold text-red-500">@</span> : null}
             {unread > 0 ? (
-              <span className="rounded-full bg-green-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+              <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
                 {unread > 99 ? '99+' : unread}
               </span>
             ) : null}

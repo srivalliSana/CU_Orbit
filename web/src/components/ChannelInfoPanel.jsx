@@ -32,7 +32,7 @@ const MEDIA_CATEGORIES = [
  * what the server will actually allow, showing its rejection reason rather
  * than guessing who's allowed to do what.
  */
-export default function ChannelInfoPanel({ channelId, currentUser, onClose, onChanged, onJumpToMessage }) {
+export default function ChannelInfoPanel({ channelId, currentUser, onClose, onChanged, onJumpToMessage, onOpenProfile }) {
   const [channel, setChannel] = useState(null);
   const [members, setMembers] = useState([]);
   const [error, setError] = useState(null);
@@ -431,19 +431,24 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
               <ul className="mt-2 space-y-1">
                 {members.map((m) => (
                   <li key={m.id} className="flex items-center gap-3 py-1.5">
-                    <Avatar name={m.name} url={m.avatarUrl} size={32} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-slate-700 dark:text-slate-200">
-                        {m.name}
-                        {m.is_bot && (
-                          <span className="ml-1.5 rounded bg-violet-100 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-600 dark:bg-violet-900/40 dark:text-violet-300">
-                            App
-                          </span>
-                        )}
-                        {isCreator(m.id) && <span className="ml-1.5 text-[10px] text-slate-400">creator</span>}
-                      </p>
-                      {m.role === 'admin' && <p className="text-[11px] text-blue-500">Admin</p>}
-                    </div>
+                    <button
+                      onClick={() => onOpenProfile?.(m.id)}
+                      className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left hover:bg-slate-50 dark:hover:bg-slate-800"
+                    >
+                      <Avatar name={m.name} url={m.avatarUrl} size={32} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm text-slate-700 dark:text-slate-200">
+                          {m.name}
+                          {m.is_bot && (
+                            <span className="ml-1.5 rounded bg-violet-100 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-600 dark:bg-violet-900/40 dark:text-violet-300">
+                              App
+                            </span>
+                          )}
+                          {isCreator(m.id) && <span className="ml-1.5 text-[10px] text-slate-400">creator</span>}
+                        </p>
+                        {m.role === 'admin' && <p className="text-[11px] text-blue-500">Admin</p>}
+                      </div>
+                    </button>
                     {isChannelAdmin && !isCreator(m.id) && m.id !== currentUser?.id && (
                       <div className="flex shrink-0 items-center gap-2">
                         <button

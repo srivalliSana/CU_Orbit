@@ -1682,18 +1682,42 @@ async function findOrCreateOrbitUser(campusEmail, displayName) {
 }
 
 /**
- * Sign in with Google. The client (web via Google Identity Services, mobile
- * via a native/browser OAuth flow) hands us a Google-issued ID token; we
- * verify its signature against Google's own public keys and check the
- * audience is one of our two OAuth clients — no server-to-Google network
- * call needed beyond the (cached) public-key fetch, and no client secret
- * involved, since we are only checking a token Google already signed rather
- * than exchanging an authorization code.
+ * Verifies a Google OAuth2 access token — the counterpart to verifyIdToken
+ * for the web sign-in flow below, which had to move off the ID-token/button
+ * API entirely: that API has no documented way to force Google's account
+ * chooser (no equivalent of prompt=select_account), so it was silently
+ * completing sign-in with whichever Google account was already active in
+ * the browser. accounts.oauth2.initTokenClient does support prompt, at the
+ * cost of handing us an access token instead of a signed ID token — which
+ * carries no verifiable signature of its own, so unlike verifyIdToken this
+ * needs two real network calls to Google: one to confirm the token is both
+ * valid and was actually issued for our own client_id (tokeninfo doesn't
+ * return profile fields), and one to fetch the profile it authorizes.
+ */
+async function verifyGoogleAccessToken(accessToken) {
+    const infoResp = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`);
+    if (!infoResp.ok) throw new Error('Invalid or expired access token');
+    const info = await infoResp.json();
+    if (info.aud !== GOOGLE_WEB_CLIENT_ID) throw new Error('Token was not issued for this app');
+
+    const profileResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!profileResp.ok) throw new Error('Could not read Google profile');
+    return profileResp.json(); // { email, email_verified, name, ... } — same shape as an ID token payload
+}
+
+/**
+ * Sign in with Google. Mobile still hands us a signed ID token (native
+ * AuthSession flow, verified locally against Google's cached public keys —
+ * see verifyIdToken below). Web hands us an OAuth2 access token instead
+ * (see verifyGoogleAccessToken above) — the only way to get Google's real
+ * account-chooser behavior in a browser.
  */
 app.post('/api/auth/google', async (req, res) => {
     try {
-        const { idToken } = req.body;
-        if (!idToken) return res.status(400).json({ error: 'bad_request', message: 'idToken required' });
+        const { idToken, accessToken } = req.body;
+        if (!idToken && !accessToken) return res.status(400).json({ error: 'bad_request', message: 'idToken or accessToken required' });
 
         const audience = [GOOGLE_WEB_CLIENT_ID, GOOGLE_ANDROID_CLIENT_ID].filter(Boolean);
         if (!audience.length) {
@@ -1703,8 +1727,12 @@ app.post('/api/auth/google', async (req, res) => {
 
         let payload;
         try {
-            const ticket = await googleClient.verifyIdToken({ idToken, audience });
-            payload = ticket.getPayload();
+            if (idToken) {
+                const ticket = await googleClient.verifyIdToken({ idToken, audience });
+                payload = ticket.getPayload();
+            } else {
+                payload = await verifyGoogleAccessToken(accessToken);
+            }
         } catch (e) {
             logSecurityEvent('invalid_google_token', req, e.message);
             return res.status(401).json({ error: 'invalid_token', message: e.message });

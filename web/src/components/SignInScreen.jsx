@@ -4,6 +4,7 @@ import { getConfig, requestOtp, signInWithGoogle, verifyOtp } from '../api/auth'
 /** Shown when there is no valid session — Google or email-OTP sign-in, gated to a CUTM campus email. */
 export default function SignInScreen({ onSignedIn }) {
   const [googleReady, setGoogleReady] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
   const [error, setError] = useState(null);
   const [stage, setStage] = useState('email'); // 'email' | 'code'
   const [email, setEmail] = useState('');
@@ -11,7 +12,7 @@ export default function SignInScreen({ onSignedIn }) {
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [resendIn, setResendIn] = useState(0);
-  const buttonRef = useRef(null);
+  const tokenClientRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -20,32 +21,47 @@ export default function SignInScreen({ onSignedIn }) {
         if (cancelled || !cfg.google_web_client_id) return;
         // The GIS script tag in index.html loads async — poll briefly rather
         // than assuming it has landed by the time this effect runs.
-        for (let i = 0; i < 40 && !window.google?.accounts?.id; i++) {
+        for (let i = 0; i < 40 && !window.google?.accounts?.oauth2; i++) {
           await new Promise((r) => setTimeout(r, 100));
         }
-        if (cancelled || !window.google?.accounts?.id) return;
+        if (cancelled || !window.google?.accounts?.oauth2) return;
 
-        window.google.accounts.id.initialize({
+        // accounts.oauth2 (token client), not accounts.id (the rendered
+        // button) — only this API supports prompt: 'select_account'. The
+        // button API silently completes with whatever Google account is
+        // already active in the browser, with no documented way to force
+        // the chooser to show.
+        tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
           client_id: cfg.google_web_client_id,
+          scope: 'openid email profile',
+          prompt: 'select_account',
           callback: async (resp) => {
+            setGoogleBusy(false);
+            if (!resp || resp.error) {
+              if (resp?.error !== 'popup_closed' && resp?.error !== 'access_denied') {
+                setError('Google sign-in was interrupted. Please try again.');
+              }
+              return;
+            }
             try {
-              const user = await signInWithGoogle(resp.credential);
+              const user = await signInWithGoogle(resp.access_token);
               onSignedIn(user);
             } catch (e) {
               setError(e.message || 'Google sign-in failed.');
             }
           },
         });
-        if (buttonRef.current) {
-          window.google.accounts.id.renderButton(buttonRef.current, {
-            theme: 'outline', size: 'large', width: 320, text: 'signin_with',
-          });
-        }
         setGoogleReady(true);
       })
-      .catch(() => { /* Google button just won't render; email OTP still works */ });
+      .catch(() => { /* Google sign-in just won't be available; email OTP still works */ });
     return () => { cancelled = true; };
   }, [onSignedIn]);
+
+  const startGoogleSignIn = () => {
+    setError(null);
+    setGoogleBusy(true);
+    tokenClientRef.current?.requestAccessToken();
+  };
 
   useEffect(() => {
     if (resendIn <= 0) return;
@@ -88,10 +104,26 @@ export default function SignInScreen({ onSignedIn }) {
         <h1 className="text-center text-xl font-semibold text-slate-800 dark:text-slate-100">Let's Connect</h1>
         <p className="mt-1 text-center text-sm text-slate-500">Sign in with your CUTM campus email</p>
 
-        <div className="mt-6 flex justify-center" ref={buttonRef} />
-        {!googleReady && (
-          <p className="mt-2 text-center text-xs text-slate-400">Loading Google sign-in…</p>
-        )}
+        <div className="mt-6 flex justify-center">
+          {googleReady ? (
+            <button
+              type="button"
+              onClick={startGoogleSignIn}
+              disabled={googleBusy}
+              className="flex w-80 max-w-full items-center justify-center gap-3 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            >
+              <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.9-2.26 5.36-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                <path fill="#FBBC05" d="M10.53 28.59A14.5 14.5 0 0 1 9.5 24c0-1.59.27-3.13.76-4.59l-7.98-6.19A23.94 23.94 0 0 0 0 24c0 3.86.92 7.51 2.56 10.78l7.97-6.19z"/>
+                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.97 6.19C6.51 42.62 14.62 48 24 48z"/>
+              </svg>
+              {googleBusy ? 'Signing in…' : 'Sign in with Google'}
+            </button>
+          ) : (
+            <p className="text-center text-xs text-slate-400">Loading Google sign-in…</p>
+          )}
+        </div>
 
         <div className="my-6 flex items-center gap-3">
           <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />

@@ -328,6 +328,7 @@ export default function App() {
           onClose={() => setChannelInfoId(null)}
           onChanged={refreshChats}
           onJumpToMessage={(id) => { setChannelInfoId(null); setScrollToMessageId(id); }}
+          onOpenProfile={(userId) => setProfileUserId(userId)}
         />
       )}
 

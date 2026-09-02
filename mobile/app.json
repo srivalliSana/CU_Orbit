@@ -2,7 +2,10 @@
   "expo": {
     "name": "Let's Connect",
     "slug": "cuorbit",
-    "scheme": "cuorbit",
+    "scheme": [
+      "cuorbit",
+      "com.googleusercontent.apps.507457795270-i6l7709j47q1nki3da2epq2r239h1dqj"
+    ],
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
