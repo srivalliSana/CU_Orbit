@@ -213,6 +213,10 @@ const ConversationPref = sequelize.define('ConversationPref', {
     isPinned: { type: DataTypes.BOOLEAN, defaultValue: false },
     isMuted: { type: DataTypes.BOOLEAN, defaultValue: false },
     isHidden: { type: DataTypes.BOOLEAN, defaultValue: false }
+}, {
+    // findOne({ userId, containerId }) runs once per channel/DM on every
+    // home-feed load — unindexed, that's a full table scan per row.
+    indexes: [{ fields: ['userId', 'containerId'] }],
 });
 
 const Message = sequelize.define('Message', {
@@ -350,7 +354,12 @@ const MessageRead = sequelize.define('MessageRead', {
 }, {
     indexes: [
         { unique: true, fields: ['message_id', 'user_id'] },
-        { fields: ['container_id', 'user_id'] }
+        { fields: ['container_id', 'user_id'] },
+        // unreadWhere()'s subquery filters by user_id alone (not message_id
+        // or container_id first), which neither index above covers as a
+        // leading column — it runs once per channel/DM on every home-feed
+        // load and every unread-count check, so this one matters a lot.
+        { fields: ['user_id'] },
     ]
 });
 
@@ -360,6 +369,11 @@ const Mention = sequelize.define('Mention', {
     mentioned_user_id: { type: DataTypes.STRING, allowNull: false },
     source_channel_id: { type: DataTypes.STRING, allowNull: false },
     is_read: { type: DataTypes.BOOLEAN, defaultValue: false }
+}, {
+    // count({ mentioned_user_id, source_channel_id, is_read }) runs once per
+    // channel/DM on every home-feed load, plus the mentions badge/list —
+    // no index at all previously, a full table scan on every call.
+    indexes: [{ fields: ['mentioned_user_id', 'source_channel_id', 'is_read'] }],
 });
 
 const Thread = sequelize.define('Thread', {
