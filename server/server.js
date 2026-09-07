@@ -681,7 +681,19 @@ app.get('/', async (req, res) => {
         if (!fs.existsSync(apkPath)) {
             return res.status(404).send('No build is available to download yet.');
         }
-        return res.download(apkPath, name);
+        // The download URL itself never changes (always /?download=true), so
+        // without this a browser or Android's download manager can silently
+        // reuse a previously-downloaded file for a new build and never touch
+        // the network at all — exactly the stale-APK bug that cost real
+        // debugging time. Forcing no-cache isn't enough on its own either
+        // (some download managers key on the visible filename, not headers),
+        // so the served filename also carries the build number — a genuinely
+        // different name for every release, which is also just useful for a
+        // human glancing at their Downloads folder to tell builds apart.
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+        res.set('Pragma', 'no-cache');
+        const downloadName = release ? name.replace(/\.apk$/i, `-build${release.build_number}.apk`) : name;
+        return res.download(apkPath, downloadName);
     }
 
     res.send(`
