@@ -10,6 +10,7 @@ import EmptyState from './components/EmptyState';
 import NewGroupModal from './components/NewGroupModal';
 import ContactPanel from './components/ContactPanel';
 import ChannelInfoPanel from './components/ChannelInfoPanel';
+import ListsPanel from './components/ListsPanel';
 import MentionsPanel from './components/MentionsPanel';
 import ProfilePanel from './components/ProfilePanel';
 import SettingsPanel from './components/SettingsPanel';
@@ -32,6 +33,7 @@ export default function App() {
   const [askNotify, setAskNotify] = useState(false);
   const [contact, setContact] = useState(null);   // { id?, email } shown in the side panel
   const [channelInfoId, setChannelInfoId] = useState(null);   // channel id shown in the side panel
+  const [listsChannelId, setListsChannelId] = useState(null);   // channel id whose Lists workspace is open
   const [mentionsOpen, setMentionsOpen] = useState(false);
   const [mentionsUnread, setMentionsUnread] = useState(0);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -303,6 +305,7 @@ export default function App() {
             onSent={refreshChats}
             onOpenContact={(c) => { setChannelInfoId(null); setContact(c); }}
             onOpenChannelInfo={(id) => { setContact(null); setChannelInfoId(id); }}
+            onOpenLists={(id) => setListsChannelId(id)}
             onOpenProfile={(userId) => setProfileUserId(userId)}
             onOpenDm={(dmChat) => { setContact(null); setActive(dmChat); }}
             onBack={() => setActive(null)}
@@ -330,6 +333,10 @@ export default function App() {
           onJumpToMessage={(id) => { setChannelInfoId(null); setScrollToMessageId(id); }}
           onOpenProfile={(userId) => setProfileUserId(userId)}
         />
+      )}
+
+      {listsChannelId && (
+        <ListsPanel channelId={listsChannelId} onClose={() => setListsChannelId(null)} />
       )}
 
       {mentionsOpen && (

@@ -507,6 +507,54 @@ const SlashCommand = sequelize.define('SlashCommand', {
     webhook_url: { type: DataTypes.STRING, allowNull: false },
 });
 
+/**
+ * Lists platform (Slack Lists equivalent) — Phase 1: a spreadsheet-style
+ * table of items with custom fields, scoped to one channel. Kanban view,
+ * subtasks, per-item threads, templates, and workflow automation are later
+ * phases, deliberately not modeled yet.
+ */
+const List = sequelize.define('List', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    channel_id: { type: DataTypes.UUID, allowNull: false },
+    name: { type: DataTypes.STRING, allowNull: false },
+    icon: { type: DataTypes.STRING, defaultValue: '📋' },
+    created_by: { type: DataTypes.STRING, allowNull: false },
+}, {
+    indexes: [{ fields: ['channel_id'] }],
+});
+
+/** One column definition. `options` holds the {id,label,color}[] choices for
+ *  select/status/priority fields — empty/ignored for every other type. */
+const ListField = sequelize.define('ListField', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    list_id: { type: DataTypes.UUID, allowNull: false },
+    name: { type: DataTypes.STRING, allowNull: false },
+    type: {
+        type: DataTypes.ENUM('text', 'long_text', 'select', 'status', 'priority', 'date', 'assignee', 'checkbox', 'number'),
+        defaultValue: 'text',
+    },
+    options: { type: DataTypes.JSON, defaultValue: [] },
+    position: { type: DataTypes.INTEGER, defaultValue: 0 },
+    // Exactly one field per list is the title field — shown first, used as
+    // the item's display name everywhere a single label is needed.
+    is_title_field: { type: DataTypes.BOOLEAN, defaultValue: false },
+}, {
+    indexes: [{ fields: ['list_id'] }],
+});
+
+/** One row. `values` is keyed by ListField.id — sparse (a field added after
+ *  this item exists just has no key yet) rather than needing a migration
+ *  every time someone adds a column, matching Slack's own field flexibility. */
+const ListItem = sequelize.define('ListItem', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    list_id: { type: DataTypes.UUID, allowNull: false },
+    values: { type: DataTypes.JSON, defaultValue: {} },
+    position: { type: DataTypes.INTEGER, defaultValue: 0 },
+    created_by: { type: DataTypes.STRING, allowNull: false },
+}, {
+    indexes: [{ fields: ['list_id'] }],
+});
+
 const Status = sequelize.define('Status', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     userId: { type: DataTypes.STRING, allowNull: false },
@@ -3187,6 +3235,308 @@ app.post('/api/threads/:parentId/read', auth.requireAuth, async (req, res) => {
         await ThreadRead.upsert({ parent_message_id: req.params.parentId, user_id: req.user.id, last_read_at: new Date() });
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+// --- Lists platform (Slack Lists equivalent) — Phase 1 ---
+//
+// A List belongs to one channel; access is exactly channel-membership,
+// reusing canViewChannel rather than inventing a separate permission model.
+
+const LIST_FIELD_TYPES = ['text', 'long_text', 'select', 'status', 'priority', 'date', 'assignee', 'checkbox', 'number'];
+
+app.get('/api/channels/:channelId/lists', auth.requireAuth, async (req, res) => {
+    try {
+        if (!(await canViewChannel(req.user.id, req.params.channelId, req.user))) return res.json([]);
+        const lists = await List.findAll({ where: { channel_id: req.params.channelId }, order: [['createdAt', 'ASC']] });
+        const counts = await Promise.all(lists.map((l) => ListItem.count({ where: { list_id: l.id } })));
+        res.json(lists.map((l, i) => ({ ...l.get({ plain: true }), item_count: counts[i] })));
+    } catch (e) { console.error('[lists-index]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+app.post('/api/channels/:channelId/lists', auth.requireAuth, async (req, res) => {
+    try {
+        if (!(await canViewChannel(req.user.id, req.params.channelId, req.user))) return res.status(403).json({ error: 'forbidden' });
+        const name = String(req.body.name || '').trim();
+        if (!name) return res.status(400).json({ error: 'bad_request', message: 'name required' });
+        const list = await List.create({
+            channel_id: req.params.channelId, name, icon: req.body.icon || '📋', created_by: req.user.id,
+        });
+        // Every list starts with one title field — the item's display name —
+        // so a brand-new list is immediately usable, not an empty shell.
+        await ListField.create({ list_id: list.id, name: 'Name', type: 'text', position: 0, is_title_field: true });
+        await logAudit(req.user, 'list.created', 'list', list.id, list.name);
+        res.json(list);
+    } catch (e) { console.error('[lists-create]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+async function loadListWithAccess(listId, userId, user) {
+    const list = await List.findByPk(listId);
+    if (!list) return { error: 404 };
+    if (!(await canViewChannel(userId, list.channel_id, user))) return { error: 403 };
+    return { list };
+}
+
+app.get('/api/lists/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const { list, error } = await loadListWithAccess(req.params.id, req.user.id, req.user);
+        if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
+        const fields = await ListField.findAll({ where: { list_id: list.id }, order: [['position', 'ASC']] });
+        const items = await ListItem.findAll({ where: { list_id: list.id }, order: [['position', 'ASC'], ['createdAt', 'ASC']] });
+        res.json({ list, fields, items });
+    } catch (e) { console.error('[lists-detail]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+app.put('/api/lists/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const { list, error } = await loadListWithAccess(req.params.id, req.user.id, req.user);
+        if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
+        if (req.body.name !== undefined) list.name = String(req.body.name).trim() || list.name;
+        if (req.body.icon !== undefined) list.icon = req.body.icon;
+        await list.save();
+        res.json(list);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.delete('/api/lists/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const { list, error } = await loadListWithAccess(req.params.id, req.user.id, req.user);
+        if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
+        await ListItem.destroy({ where: { list_id: list.id } });
+        await ListField.destroy({ where: { list_id: list.id } });
+        await logAudit(req.user, 'list.deleted', 'list', list.id, list.name);
+        await list.destroy();
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.post('/api/lists/:id/fields', auth.requireAuth, async (req, res) => {
+    try {
+        const { list, error } = await loadListWithAccess(req.params.id, req.user.id, req.user);
+        if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
+        const name = String(req.body.name || '').trim();
+        const type = LIST_FIELD_TYPES.includes(req.body.type) ? req.body.type : 'text';
+        if (!name) return res.status(400).json({ error: 'bad_request', message: 'name required' });
+        const maxPos = await ListField.max('position', { where: { list_id: list.id } });
+        const field = await ListField.create({
+            list_id: list.id, name, type,
+            options: normalizeFieldOptions(req.body.options),
+            position: (Number.isFinite(maxPos) ? maxPos : -1) + 1,
+        });
+        res.json(field);
+    } catch (e) { console.error('[lists-field-create]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+/** select/status/priority options: [{id,label,color}]. Client may send bare
+ *  strings ("Todo") — normalized into the full shape server-side so every
+ *  reader can rely on the same structure. */
+function normalizeFieldOptions(raw) {
+    if (!Array.isArray(raw)) return [];
+    const palette = ['#64748b', '#2563eb', '#16a34a', '#d97706', '#dc2626', '#9333ea', '#0891b2'];
+    return raw.slice(0, 30).map((o, i) => {
+        if (typeof o === 'string') return { id: `opt_${i}_${Date.now().toString(36)}`, label: o.slice(0, 60), color: palette[i % palette.length] };
+        return {
+            id: o.id || `opt_${i}_${Date.now().toString(36)}`,
+            label: String(o.label || '').slice(0, 60),
+            color: typeof o.color === 'string' ? o.color : palette[i % palette.length],
+        };
+    }).filter((o) => o.label);
+}
+
+app.put('/api/fields/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const field = await ListField.findByPk(req.params.id);
+        if (!field) return res.status(404).json({ error: 'not_found' });
+        const { error } = await loadListWithAccess(field.list_id, req.user.id, req.user);
+        if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
+        if (req.body.name !== undefined) field.name = String(req.body.name).trim() || field.name;
+        if (req.body.options !== undefined) field.options = normalizeFieldOptions(req.body.options);
+        await field.save();
+        res.json(field);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.delete('/api/fields/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const field = await ListField.findByPk(req.params.id);
+        if (!field) return res.status(404).json({ error: 'not_found' });
+        const { error } = await loadListWithAccess(field.list_id, req.user.id, req.user);
+        if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
+        if (field.is_title_field) return res.status(400).json({ error: 'bad_request', message: "The title field can't be removed." });
+        // Strip this field's key from every item's sparse values object —
+        // otherwise a deleted-then-recreated field with the same random id
+        // would never collide, but stale orphaned data would sit forever.
+        const items = await ListItem.findAll({ where: { list_id: field.list_id } });
+        for (const item of items) {
+            if (item.values && field.id in item.values) {
+                const { [field.id]: _drop, ...rest } = item.values;
+                item.values = rest;
+                await item.save();
+            }
+        }
+        await field.destroy();
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.put('/api/lists/:id/fields/reorder', auth.requireAuth, async (req, res) => {
+    try {
+        const { list, error } = await loadListWithAccess(req.params.id, req.user.id, req.user);
+        if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
+        const order = Array.isArray(req.body.order) ? req.body.order : [];
+        await Promise.all(order.map((fieldId, i) =>
+            ListField.update({ position: i }, { where: { id: fieldId, list_id: list.id } })
+        ));
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.post('/api/lists/:id/items', auth.requireAuth, async (req, res) => {
+    try {
+        const { list, error } = await loadListWithAccess(req.params.id, req.user.id, req.user);
+        if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
+        const maxPos = await ListItem.max('position', { where: { list_id: list.id } });
+        const item = await ListItem.create({
+            list_id: list.id, values: req.body.values || {}, created_by: req.user.id,
+            position: (Number.isFinite(maxPos) ? maxPos : -1) + 1,
+        });
+        res.json(item);
+    } catch (e) { console.error('[lists-item-create]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+app.put('/api/items/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const item = await ListItem.findByPk(req.params.id);
+        if (!item) return res.status(404).json({ error: 'not_found' });
+        const { error } = await loadListWithAccess(item.list_id, req.user.id, req.user);
+        if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
+        if (req.body.values !== undefined) item.values = { ...item.values, ...req.body.values };
+        await item.save();
+        res.json(item);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.delete('/api/items/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const item = await ListItem.findByPk(req.params.id);
+        if (!item) return res.status(404).json({ error: 'not_found' });
+        const { error } = await loadListWithAccess(item.list_id, req.user.id, req.user);
+        if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
+        await item.destroy();
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.put('/api/lists/:id/items/reorder', auth.requireAuth, async (req, res) => {
+    try {
+        const { list, error } = await loadListWithAccess(req.params.id, req.user.id, req.user);
+        if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
+        const order = Array.isArray(req.body.order) ? req.body.order : [];
+        await Promise.all(order.map((itemId, i) =>
+            ListItem.update({ position: i }, { where: { id: itemId, list_id: list.id } })
+        ));
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** Coerces a raw CSV cell string into the shape each field type stores —
+ *  select/status/priority keep the raw label text (resolved against the
+ *  field's options client-side/at render time) since a fresh import's
+ *  options were just derived from these same values. */
+function coerceImportValue(type, raw) {
+    const s = String(raw ?? '').trim();
+    if (!s) return undefined;
+    if (type === 'checkbox') return ['true', '1', 'yes', 'y', 'done', 'x'].includes(s.toLowerCase());
+    if (type === 'number') { const n = Number(s); return Number.isFinite(n) ? n : undefined; }
+    return s.slice(0, 2000);
+}
+
+/**
+ * CSV import, step 2 of 2 — the client parses the CSV and resolves each
+ * column to either an existing field or a "create this new field" request
+ * (see ListImportModal.jsx); this just persists that decision. Column
+ * order in `columns` must match each row's cell order in `rows`.
+ */
+app.post('/api/lists/:id/import', auth.requireAuth, async (req, res) => {
+    try {
+        const { list, error } = await loadListWithAccess(req.params.id, req.user.id, req.user);
+        if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
+        const columns = Array.isArray(req.body.columns) ? req.body.columns : [];
+        const rows = Array.isArray(req.body.rows) ? req.body.rows.slice(0, 5000) : [];
+        if (!columns.length || !rows.length) return res.status(400).json({ error: 'bad_request', message: 'columns and rows required' });
+
+        let maxPos = await ListField.max('position', { where: { list_id: list.id } });
+        maxPos = Number.isFinite(maxPos) ? maxPos : -1;
+        const fieldIds = [];
+        const fieldTypes = [];
+        for (const col of columns) {
+            if (col.fieldId) {
+                const existing = await ListField.findOne({ where: { id: col.fieldId, list_id: list.id } });
+                if (!existing) return res.status(400).json({ error: 'bad_request', message: `Unknown fieldId ${col.fieldId}` });
+                fieldIds.push(existing.id);
+                fieldTypes.push(existing.type);
+            } else {
+                maxPos += 1;
+                const type = LIST_FIELD_TYPES.includes(col.type) ? col.type : 'text';
+                const created = await ListField.create({
+                    list_id: list.id, name: String(col.name || 'Column').trim().slice(0, 60) || 'Column',
+                    type, options: normalizeFieldOptions(col.options), position: maxPos,
+                });
+                fieldIds.push(created.id);
+                fieldTypes.push(created.type);
+            }
+        }
+
+        let itemPos = await ListItem.max('position', { where: { list_id: list.id } });
+        itemPos = Number.isFinite(itemPos) ? itemPos : -1;
+        const toCreate = rows.map((row) => {
+            const values = {};
+            fieldIds.forEach((fid, i) => {
+                const coerced = coerceImportValue(fieldTypes[i], row[i]);
+                if (coerced !== undefined) values[fid] = coerced;
+            });
+            itemPos += 1;
+            return { list_id: list.id, values, created_by: req.user.id, position: itemPos };
+        });
+        await ListItem.bulkCreate(toCreate);
+        await logAudit(req.user, 'list.imported', 'list', list.id, `${toCreate.length} rows`);
+        res.json({ success: true, imported: toCreate.length, fields: fieldIds });
+    } catch (e) { console.error('[lists-import]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+/** One line of CSV, RFC-4180 quoting: any cell containing a comma, quote,
+ *  or newline is wrapped in quotes with internal quotes doubled. */
+function csvRow(cells) {
+    return cells.map((c) => {
+        const s = c === null || c === undefined ? '' : String(c);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    }).join(',');
+}
+
+app.get('/api/lists/:id/export', auth.requireAuth, async (req, res) => {
+    try {
+        const { list, error } = await loadListWithAccess(req.params.id, req.user.id, req.user);
+        if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
+        const fields = await ListField.findAll({ where: { list_id: list.id }, order: [['position', 'ASC']] });
+        const items = await ListItem.findAll({ where: { list_id: list.id }, order: [['position', 'ASC'], ['createdAt', 'ASC']] });
+
+        const optionLabel = (field, id) => (field.options || []).find((o) => o.id === id)?.label ?? id;
+        const cellText = (field, raw) => {
+            if (raw === undefined || raw === null) return '';
+            if (field.type === 'checkbox') return raw ? 'true' : 'false';
+            if (field.type === 'select' || field.type === 'status' || field.type === 'priority') return optionLabel(field, raw);
+            return String(raw);
+        };
+
+        const lines = [csvRow(fields.map((f) => f.name))];
+        for (const item of items) {
+            lines.push(csvRow(fields.map((f) => cellText(f, item.values?.[f.id]))));
+        }
+        const csv = lines.join('\r\n');
+        const filename = `${(list.name || 'list').replace(/[^a-z0-9-_]+/gi, '_')}.csv`;
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send('﻿' + csv);   // BOM so Excel opens UTF-8 correctly
+    } catch (e) { console.error('[lists-export]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
 // STATUS

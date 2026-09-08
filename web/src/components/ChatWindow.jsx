@@ -14,7 +14,7 @@ import { join, leave, on, sendTyping } from '../api/socket';
 const POLL_MS = 20000;
 const TYPING_TTL_MS = 4000;
 
-export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenChannelInfo, onOpenProfile, onOpenDm, onBack, scrollToMessageId, onScrolledToMessage }) {
+export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenChannelInfo, onOpenLists, onOpenProfile, onOpenDm, onBack, scrollToMessageId, onScrolledToMessage }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [typing, setTyping] = useState([]);
@@ -237,6 +237,18 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
             </p>
           </div>
         </button>
+        {chat.kind === 'channel' && (
+          <button
+            onClick={() => onOpenLists?.(chat.id)}
+            title="Lists"
+            aria-label="Lists"
+            className="shrink-0 rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="4" y="4" width="16" height="16" rx="2" /><path d="M8 9h8M8 13h8M8 17h5" />
+            </svg>
+          </button>
+        )}
       </header>
 
       {pinned && (
