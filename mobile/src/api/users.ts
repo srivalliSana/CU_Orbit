@@ -11,6 +11,12 @@ export const listUsers = () => client.get<User[]>("/users?signed_in=true").then(
 // search (which stays faculty-only).
 export const getUser = (id: string) => client.get<User>(`/users/${encodeURIComponent(id)}`).then((res) => res.data);
 
+// "Message someone by email" — checks Let's Connect's own user table only,
+// not the CampusOne roster, so open to any signed-in user. A 404 means that
+// email has never signed in yet, distinct from a malformed request.
+export const startDmByEmail = (email: string) =>
+  client.post<{ dm_id: string; user: User }>("/directory/dm", { email }).then((res) => res.data);
+
 export interface ProfileUpdate {
   name?: string;
   bio?: string;

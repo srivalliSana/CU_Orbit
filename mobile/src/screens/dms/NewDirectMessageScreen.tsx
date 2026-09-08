@@ -1,79 +1,76 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
-import { listUsers } from "../../api/users";
-import { useAuthStore } from "../../state/authStore";
-import Avatar from "../../components/Avatar";
+import { startDmByEmail } from "../../api/users";
+import { apiErrorMessage } from "../../api/client";
 import { useThemeColors } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "NewDirectMessage">;
 
+/**
+ * Message someone by their campus email — no browsable list of every
+ * bulk-provisioned account in the roster, just "type an email, find out
+ * whether they're actually on Let's Connect yet." Mirrors the check
+ * POST /api/directory/dm does server-side.
+ */
 export default function NewDirectMessageScreen({ navigation }: Props) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [q, setQ] = useState("");
-  const selfId = useAuthStore((s) => s.user?.id);
-  const { data, isLoading } = useQuery({ queryKey: ["users"], queryFn: listUsers });
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const people = useMemo(() => {
-    const term = q.trim().toLowerCase();
-    return (data ?? [])
-      .filter((u) => u.id !== selfId)
-      .filter((u) => {
-        if (!term) return true;
-        const name = (u.name || "").toLowerCase();
-        const email = (u.email || u.campus_email || u.campusEmail || "").toLowerCase();
-        return name.includes(term) || email.includes(term);
-      });
-  }, [data, selfId, q]);
-
-  const openDm = (otherId: string, otherName: string) => {
-    if (!selfId) return;
-    // Matches server.js's dm_id convention exactly: [userId, u.id].sort().join('_').
-    const containerId = [selfId, otherId].sort().join("_");
-    navigation.replace("Chat", { containerId, title: otherName, kind: "dm" });
+  const submit = async () => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { dm_id, user } = await startDmByEmail(trimmed);
+      navigation.replace("Chat", { containerId: dm_id, title: user.name, kind: "dm" });
+    } catch (e) {
+      setError(apiErrorMessage(e, "Could not find that person."));
+    } finally {
+      setBusy(false);
+    }
   };
-
-  if (isLoading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
-      <TextInput
-        value={q}
-        onChangeText={setQ}
-        placeholder="Search by name or email"
-        autoCapitalize="none"
-        style={styles.search}
-      />
-      <FlatList
-        data={people}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <Pressable style={styles.row} onPress={() => openDm(item.id, item.name)}>
-            <Avatar name={item.name} url={item.avatarUrl} size={40} />
-            <View>
-              <Text style={styles.name}>{item.name}</Text>
-              {(item.email || item.campus_email) && (
-                <Text style={styles.email}>{item.email || item.campus_email}</Text>
-              )}
-            </View>
-          </Pressable>
-        )}
-        ListEmptyComponent={
-          <View style={styles.center}>
-            <Text style={styles.emptyText}>No one found.</Text>
-          </View>
-        }
-      />
+      <Text style={styles.label}>Campus email</Text>
+      <View style={styles.inputRow}>
+        <TextInput
+          value={email}
+          onChangeText={(v) => { setEmail(v); setError(null); }}
+          placeholder="name@cutm.ac.in"
+          placeholderTextColor={colors.textMuted}
+          autoCapitalize="none"
+          autoFocus
+          keyboardType="email-address"
+          style={styles.input}
+          onSubmitEditing={submit}
+          returnKeyType="go"
+        />
+      </View>
+      {error ? (
+        <Text style={styles.error}>{error}</Text>
+      ) : (
+        <Text style={styles.hint}>Only allowed campus domains — if they've used Let's Connect before, you'll message them directly.</Text>
+      )}
+
+      <Pressable
+        style={({ pressed }) => [
+          styles.button,
+          (busy || !email.trim()) && styles.buttonDisabled,
+          pressed && !busy && email.trim() && styles.buttonPressed,
+        ]}
+        onPress={submit}
+        disabled={busy || !email.trim()}
+      >
+        {busy ? <ActivityIndicator color={colors.primaryText} /> : <Text style={styles.buttonText}>Message</Text>}
+      </Pressable>
     </View>
   );
 }
@@ -82,39 +79,55 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   container: {
     flex: 1,
     backgroundColor: colors.background,
+    padding: 20,
   },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 40,
-  },
-  emptyText: {
+  label: {
+    fontSize: 12,
+    fontWeight: "700",
     color: colors.textMuted,
+    letterSpacing: 0.4,
+    marginBottom: 6,
+    textTransform: "uppercase",
   },
-  search: {
-    margin: 12,
+  inputRow: {
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: colors.text,
     backgroundColor: colors.surface,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: colors.text,
   },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  name: {
-    fontSize: 15,
-    color: colors.text,
-  },
-  email: {
-    fontSize: 12.5,
+  hint: {
+    fontSize: 12,
     color: colors.textMuted,
-    marginTop: 1,
+    lineHeight: 17,
+  },
+  error: {
+    fontSize: 12,
+    color: colors.danger,
+    lineHeight: 17,
+  },
+  button: {
+    marginTop: 20,
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: "center",
+    backgroundColor: colors.primary,
+  },
+  buttonPressed: {
+    opacity: 0.85,
+  },
+  buttonDisabled: {
+    opacity: 0.45,
+  },
+  buttonText: {
+    color: colors.primaryText,
+    fontSize: 14,
+    fontWeight: "700",
   },
 });

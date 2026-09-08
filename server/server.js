@@ -1368,19 +1368,28 @@ app.get('/api/directory/person', auth.requireAuth, async (req, res) => {
  * people who already have an Orbit account — directory search itself no
  * longer surfaces anyone else, so this just resolves the row it returned.
  */
+/**
+ * "Message someone by email" — checks our own Users table only, never
+ * CampusOne, so this is open to any signed-in user (not faculty-gated like
+ * the CampusOne directory search below): finding out whether a campus email
+ * already has a Let's Connect account isn't privileged information the way
+ * the full campus roster is. A never-signed-in placeholder row (bulk-add,
+ * promote-by-email) doesn't count as "a member" here either — last_seen_at
+ * is only set by real activity.
+ */
 app.post('/api/directory/dm', auth.requireAuth, async (req, res) => {
     try {
-        if (!isFacultyEmail(req.user.email)) {
-            return res.status(403).json({ error: 'forbidden', message: 'The campus directory is available to faculty accounts only.' });
-        }
         const email = String(req.body.email || '').toLowerCase().trim();
         if (!email) return res.status(400).json({ error: 'bad_request', message: 'email required' });
+        if (!isCampusEmail(email)) {
+            return res.status(400).json({ error: 'bad_request', message: 'Enter a campus email address' });
+        }
         if (email === (req.user.email || '').toLowerCase()) {
             return res.status(400).json({ error: 'bad_request', message: 'Cannot message yourself' });
         }
 
-        const user = await User.findOne({ where: { campus_email: email } });
-        if (!user) return res.status(404).json({ error: 'not_found', message: "That person has not signed in to Let's Connect yet" });
+        const user = await User.findOne({ where: { campus_email: email, last_seen_at: { [Op.ne]: null } } });
+        if (!user) return res.status(404).json({ error: 'not_found', message: "That person isn't on Let's Connect yet." });
 
         res.json({ dm_id: [req.user.id, user.id].sort().join('_'), user });
     } catch (e) {

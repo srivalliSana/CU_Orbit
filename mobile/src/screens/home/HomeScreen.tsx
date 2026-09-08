@@ -256,7 +256,7 @@ export default function HomeScreen({ navigation }: Props) {
               </View>
               <View style={styles.fabMenuTextWrap}>
                 <Text style={styles.fabMenuTitle}>New direct message</Text>
-                <Text style={styles.fabMenuSubtitle}>Search by name or email</Text>
+                <Text style={styles.fabMenuSubtitle}>Enter their campus email</Text>
               </View>
             </Pressable>
           </View>
