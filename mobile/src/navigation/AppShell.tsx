@@ -9,6 +9,11 @@ import HomeScreen from "../screens/home/HomeScreen";
 import ChatScreen from "../screens/chat/ChatScreen";
 import ThreadsScreen from "../screens/activity/ThreadsScreen";
 import ThreadDetailScreen from "../screens/activity/ThreadDetailScreen";
+import ListsScreen from "../screens/lists/ListsScreen";
+import ListDetailScreen from "../screens/lists/ListDetailScreen";
+import ListItemScreen from "../screens/lists/ListItemScreen";
+import ListFieldsScreen from "../screens/lists/ListFieldsScreen";
+import ListImportScreen from "../screens/lists/ListImportScreen";
 import MentionsScreen from "../screens/activity/MentionsScreen";
 import CreateChannelScreen from "../screens/channels/CreateChannelScreen";
 import ChannelInfoScreen from "../screens/channels/ChannelInfoScreen";
@@ -32,6 +37,11 @@ function HomeStackNavigator() {
       <HomeStack.Screen name="Chat" component={ChatScreen} />
       <HomeStack.Screen name="Threads" component={ThreadsScreen} options={{ title: "Threads" }} />
       <HomeStack.Screen name="ThreadDetail" component={ThreadDetailScreen} options={{ title: "Thread" }} />
+      <HomeStack.Screen name="Lists" component={ListsScreen} options={{ title: "Lists" }} />
+      <HomeStack.Screen name="ListDetail" component={ListDetailScreen} options={{ title: "List" }} />
+      <HomeStack.Screen name="ListItem" component={ListItemScreen} options={{ title: "Item" }} />
+      <HomeStack.Screen name="ListFields" component={ListFieldsScreen} options={{ title: "Manage fields" }} />
+      <HomeStack.Screen name="ListImport" component={ListImportScreen} options={{ title: "Import CSV" }} />
       <HomeStack.Screen name="Mentions" component={MentionsScreen} options={{ title: "Mentions" }} />
       <HomeStack.Screen
         name="CreateChannel"

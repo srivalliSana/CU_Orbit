@@ -18,6 +18,11 @@ export type HomeStackParamList = {
     chatTitle: string;
     chatKind: "channel" | "dm";
   };
+  Lists: { channelId: string; channelName?: string };
+  ListDetail: { listId: string; listName?: string };
+  ListItem: { listId: string; itemId: string };
+  ListFields: { listId: string };
+  ListImport: { listId: string };
 };
 
 export type ActivityStackParamList = {

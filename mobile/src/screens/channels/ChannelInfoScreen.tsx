@@ -340,6 +340,12 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
             >
               <Text style={styles.navRowText}>⭐ Starred messages</Text>
             </Pressable>
+            <Pressable
+              style={styles.navRow}
+              onPress={() => navigation.navigate("Lists", { channelId, channelName: channel?.name })}
+            >
+              <Text style={styles.navRowText}>📋 Lists</Text>
+            </Pressable>
           </View>
 
           {isSuperAdmin && channel ? (
