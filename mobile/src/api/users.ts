@@ -2,7 +2,9 @@ import { client } from "./client";
 import { useAuthStore } from "../state/authStore";
 import type { User } from "../types/api";
 
-export const listUsers = () => client.get<User[]>("/users").then((res) => res.data);
+// signed_in=true excludes accounts that were only ever bulk-provisioned and
+// have never actually opened the app — not a real contact yet.
+export const listUsers = () => client.get<User[]>("/users?signed_in=true").then((res) => res.data);
 
 // Any signed-in user may look up any other by id — how tapping a name on a
 // message opens their profile card, unrelated to the CampusOne directory

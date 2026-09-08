@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -49,6 +48,7 @@ export default function HomeScreen({ navigation }: Props) {
   const { data: mentions } = useMentions();
   const { onLongPress } = useChatActions();
   const [query, setQuery] = useState("");
+  const [fabMenuOpen, setFabMenuOpen] = useState(false);
   const debouncedQuery = useDebounced(query.trim(), 300);
   const pendingJoinCode = useAuthStore((s) => s.pendingJoinCode);
   const setPendingJoinCode = useAuthStore((s) => s.setPendingJoinCode);
@@ -230,17 +230,41 @@ export default function HomeScreen({ navigation }: Props) {
         }}
       />
 
-      <Pressable
-        style={styles.fab}
-        onPress={() =>
-          Alert.alert("New", undefined, [
-            { text: "New channel", onPress: () => navigation.navigate("CreateChannel") },
-            { text: "New direct message", onPress: () => navigation.navigate("NewDirectMessage") },
-            { text: "Cancel", style: "cancel" },
-          ])
-        }
-      >
-        <Text style={styles.fabIcon}>+</Text>
+      {fabMenuOpen ? (
+        <>
+          <Pressable style={styles.fabBackdrop} onPress={() => setFabMenuOpen(false)} />
+          <View style={styles.fabMenu}>
+            <Pressable
+              style={styles.fabMenuRow}
+              onPress={() => { setFabMenuOpen(false); navigation.navigate("CreateChannel"); }}
+            >
+              <View style={styles.fabMenuIconWrap}>
+                <Text style={styles.fabMenuIcon}>#</Text>
+              </View>
+              <View style={styles.fabMenuTextWrap}>
+                <Text style={styles.fabMenuTitle}>New channel</Text>
+                <Text style={styles.fabMenuSubtitle}>Start a public or private group</Text>
+              </View>
+            </Pressable>
+            <View style={styles.fabMenuDivider} />
+            <Pressable
+              style={styles.fabMenuRow}
+              onPress={() => { setFabMenuOpen(false); navigation.navigate("NewDirectMessage"); }}
+            >
+              <View style={styles.fabMenuIconWrap}>
+                <Text style={styles.fabMenuIcon}>@</Text>
+              </View>
+              <View style={styles.fabMenuTextWrap}>
+                <Text style={styles.fabMenuTitle}>New direct message</Text>
+                <Text style={styles.fabMenuSubtitle}>Search by name or email</Text>
+              </View>
+            </Pressable>
+          </View>
+        </>
+      ) : null}
+
+      <Pressable style={styles.fab} onPress={() => setFabMenuOpen((v) => !v)}>
+        <Text style={styles.fabIcon}>{fabMenuOpen ? "×" : "+"}</Text>
       </Pressable>
     </View>
   );
@@ -361,5 +385,66 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     fontSize: 28,
     lineHeight: 30,
     fontWeight: "400",
+  },
+  fabBackdrop: {
+    position: "absolute",
+    top: -1000,
+    left: -1000,
+    right: -1000,
+    bottom: -1000,
+  },
+  fabMenu: {
+    position: "absolute",
+    right: 20,
+    bottom: 86,
+    width: 250,
+    borderRadius: 16,
+    paddingVertical: 6,
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  fabMenuRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  fabMenuIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: `${colors.primary}1a`,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  fabMenuIcon: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  fabMenuTextWrap: {
+    flex: 1,
+  },
+  fabMenuTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  fabMenuSubtitle: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 1,
+  },
+  fabMenuDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+    marginHorizontal: 8,
   },
 });

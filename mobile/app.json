@@ -84,8 +84,20 @@
         "expo-build-properties",
         {
           "android": {
-            "reactNativeArchitectures": ["armeabi-v7a", "arm64-v8a"]
+            "reactNativeArchitectures": [
+              "armeabi-v7a",
+              "arm64-v8a"
+            ]
           }
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "backgroundColor": "#1E40AF",
+          "imageWidth": 160,
+          "resizeMode": "contain"
         }
       ]
     ],

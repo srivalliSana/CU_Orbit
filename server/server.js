@@ -2890,17 +2890,30 @@ app.post('/api/status', auth.requireAuth, async (req, res) => {
 });
 
 // USERS
+// ?signed_in=true excludes accounts that were only ever pre-provisioned
+// (bulk-add, promote-by-email) and have never actually signed in and used
+// the app — last_seen_at is set on real API activity, not on creation, so
+// it's null for a placeholder row. Used by "New direct message": messaging
+// someone who has never opened the app isn't a real contact yet. Left
+// unfiltered by default since adding a not-yet-arrived person to a channel
+// ahead of time is a legitimate, separate use of this same list.
 app.get('/api/users', auth.requireAuth, async (req, res) => {
-    try { res.json(await User.findAll()); } catch (e) { res.json([]); }
+    try {
+        const where = req.query.signed_in === 'true' ? { last_seen_at: { [Op.ne]: null } } : undefined;
+        res.json(await User.findAll(where ? { where } : undefined));
+    } catch (e) { res.json([]); }
 });
 
 // --- SUPERADMIN: user management ---
 // "View all members list" / "View who joined when" — the plain member
-// roster, workspace-wide, not scoped to any one channel.
+// roster, workspace-wide, not scoped to any one channel. Excludes
+// never-signed-in placeholder rows (see /api/users above) — a name someone
+// bulk-added or promoted-by-email but who never actually opened the app
+// isn't a "member" to manage yet, just noise in this list.
 app.get('/api/admin/users', auth.requireAuth, async (req, res) => {
     if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
     try {
-        const users = await User.findAll({ order: [['createdAt', 'ASC']] });
+        const users = await User.findAll({ where: { last_seen_at: { [Op.ne]: null } }, order: [['createdAt', 'ASC']] });
         res.json(users);
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });

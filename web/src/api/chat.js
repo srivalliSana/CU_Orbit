@@ -70,7 +70,10 @@ export async function uploadFile(file) {
   return res.json();
 }
 
-export const listUsers = () => api('/api/users');
+// signed_in=true excludes accounts that were only ever bulk-provisioned
+// (bulk-add, promote-by-email) and have never actually opened the app —
+// not someone real to add to a channel or group yet.
+export const listUsers = () => api('/api/users?signed_in=true');
 
 export const createGroup = ({ workspaceId, name, description, type, members }) =>
   api(`/api/workspaces/${encodeURIComponent(workspaceId || 'default')}/channels`, {
