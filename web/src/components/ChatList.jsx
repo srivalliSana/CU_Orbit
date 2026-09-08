@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import Avatar from './Avatar';
 import { timeLabel } from '../lib/format';
-import { searchDirectory, searchMessages } from '../api/chat';
+import { searchDirectory, searchMessages, setConversationPref } from '../api/chat';
 import { isFacultyEmail } from '../lib/permissions';
 
 /** Left pane: search, then channels and direct messages. */
@@ -16,6 +17,12 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
   const [searching, setSearching] = useState(false);
   const [messageResults, setMessageResults] = useState([]);
   const searchSeq = useRef(0);
+  const queryClient = useQueryClient();
+
+  const toggleMute = async (containerId, muted) => {
+    await setConversationPref(containerId, 'mute', muted).catch(() => {});
+    queryClient.invalidateQueries({ queryKey: ['home'] });
+  };
 
   // Search the campus directory, plus message content, as well as open
   // conversations, so anyone/anything at the university can be found — not
@@ -184,17 +191,16 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
         {q.trim().length >= 2 && messageResults.length > 0 && (
           <Section title="Messages">
             {messageResults.map((r) => {
-              const isDm = r.container_id.includes('_');
-              // The search endpoint only returns who sent the matched
-              // message, not the container's own name — resolve the real
-              // channel/DM title from what's already loaded rather than
-              // showing the sender's name as if it were the chat's title.
+              const isDm = r.is_dm ?? r.container_id.includes('_');
+              // The search endpoint resolves the container's own name
+              // server-side now; fall back to whatever's already loaded
+              // (older cached results) and finally the sender's name so a
+              // title is never blank.
               const known = isDm
                 ? (chats.dms || []).find((d) => d.id === r.container_id)
                 : (chats.channels || []).find((c) => c.id === r.container_id);
-              const title = isDm
-                ? (known?.other_user_name || r.sender_name)
-                : `# ${known?.name || r.sender_name}`;
+              const resolvedName = r.container_name || (isDm ? known?.other_user_name : known?.name);
+              const title = isDm ? (resolvedName || r.sender_name) : `# ${resolvedName || r.sender_name}`;
               return (
                 <button
                   key={r.id}
@@ -224,6 +230,8 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
                 time={c.last_message_preview?.sent_at}
                 unread={c.unread_count}
                 mention={c.has_unread_mention}
+                muted={c.is_muted}
+                onToggleMute={() => toggleMute(c.id, !c.is_muted)}
               />
             ))}
           </Section>
@@ -242,6 +250,8 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
                 time={d.last_message_preview?.sent_at}
                 unread={d.unread_count}
                 mention={d.has_unread_mention}
+                muted={d.is_muted}
+                onToggleMute={() => toggleMute(d.id, !d.is_muted)}
               />
             ))}
           </Section>
@@ -265,33 +275,49 @@ const Section = ({ title, children }) => (
   </section>
 );
 
-function Row({ active, onClick, avatar, title, preview, time, unread, mention }) {
+function Row({ active, onClick, avatar, title, preview, time, unread, mention, muted, onToggleMute }) {
   return (
-    <button
-      onClick={onClick}
-      className={`relative flex w-full items-center gap-3 py-2.5 pl-4 pr-4 text-left transition ${
+    <div
+      className={`group relative flex w-full items-center gap-3 py-2.5 pl-4 pr-2 text-left transition ${
         active ? 'bg-blue-50 dark:bg-slate-800/80' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
       }`}
     >
       {active && <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-blue-600" />}
-      {avatar}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-2">
-          <p className={`truncate text-sm ${unread > 0 ? 'font-semibold text-slate-900 dark:text-white' : 'font-medium text-slate-800 dark:text-slate-100'}`}>{title}</p>
-          {time ? <span className="shrink-0 text-[11px] text-slate-400">{timeLabel(time)}</span> : null}
+      <button onClick={onClick} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+        {avatar}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className={`truncate text-sm ${unread > 0 ? 'font-semibold text-slate-900 dark:text-white' : 'font-medium text-slate-800 dark:text-slate-100'}`}>
+              {title}
+              {muted ? <span className="ml-1 align-middle text-slate-400" title="Muted">🔕</span> : null}
+            </p>
+            {time ? <span className="shrink-0 text-[11px] text-slate-400">{timeLabel(time)}</span> : null}
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <p className={`truncate text-xs ${unread > 0 ? 'text-slate-600 dark:text-slate-300' : 'text-slate-500'}`}>{preview}</p>
+            <span className="flex shrink-0 items-center gap-1">
+              {mention ? <span className="text-xs font-bold text-red-500">@</span> : null}
+              {unread > 0 ? (
+                <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              ) : null}
+            </span>
+          </div>
         </div>
-        <div className="flex items-center justify-between gap-2">
-          <p className={`truncate text-xs ${unread > 0 ? 'text-slate-600 dark:text-slate-300' : 'text-slate-500'}`}>{preview}</p>
-          <span className="flex shrink-0 items-center gap-1">
-            {mention ? <span className="text-xs font-bold text-red-500">@</span> : null}
-            {unread > 0 ? (
-              <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
-                {unread > 99 ? '99+' : unread}
-              </span>
-            ) : null}
-          </span>
-        </div>
-      </div>
-    </button>
+      </button>
+      {onToggleMute && (
+        <button
+          onClick={onToggleMute}
+          title={muted ? 'Unmute notifications' : 'Mute notifications'}
+          aria-label={muted ? 'Unmute notifications' : 'Mute notifications'}
+          className={`shrink-0 rounded-full p-1.5 text-sm text-slate-400 transition hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-slate-700 ${
+            muted ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          }`}
+        >
+          {muted ? '🔕' : '🔔'}
+        </button>
+      )}
+    </div>
   );
 }

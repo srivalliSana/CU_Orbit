@@ -154,6 +154,11 @@ const User = sequelize.define('User', {
     // launch (see PUT /api/users/me/push-token), so it's always the most
     // recent device, not a history of every device ever signed in.
     push_token: { type: DataTypes.STRING, allowNull: true },
+    // Global "pause all notifications until this time" — separate from the
+    // churny online/away/offline presence field (which gets overwritten on
+    // basically every request via touchLastSeen/socket connect), so a DND
+    // window can't be silently clobbered by the next API call.
+    dnd_until: { type: DataTypes.DATE, allowNull: true },
 });
 
 const Workspace = sequelize.define('Workspace', {
@@ -212,6 +217,10 @@ const ConversationPref = sequelize.define('ConversationPref', {
     containerId: { type: DataTypes.STRING, allowNull: false },
     isPinned: { type: DataTypes.BOOLEAN, defaultValue: false },
     isMuted: { type: DataTypes.BOOLEAN, defaultValue: false },
+    // Null = muted until manually unmuted. Set = auto-expiring "mute for 1h"
+    // style mute; isMuted stays true the whole time so existing readers of
+    // isMuted alone still work, this just adds an expiry on top.
+    mutedUntil: { type: DataTypes.DATE, allowNull: true },
     isHidden: { type: DataTypes.BOOLEAN, defaultValue: false }
 }, {
     // findOne({ userId, containerId }) runs once per channel/DM on every
@@ -430,6 +439,12 @@ const App = sequelize.define('App', {
     scopes: { type: DataTypes.JSON, defaultValue: [] },          // requested, not granted
     is_first_party: { type: DataTypes.BOOLEAN, defaultValue: false },
     status: { type: DataTypes.ENUM('pending', 'approved', 'suspended'), defaultValue: 'approved' },
+    // Events API equivalent: which platform events this app wants pushed to
+    // it, and where. Currently only 'app_mention' exists. Null/empty webhook
+    // means the app receives no events — it's still fully usable via slash
+    // commands + POST /api/app/messages without ever setting this.
+    event_subscriptions: { type: DataTypes.JSON, defaultValue: [] },
+    events_webhook_url: { type: DataTypes.STRING, allowNull: true },
 });
 
 /** Short-lived, single-use OAuth authorization code — traded for a token pair at /oauth/token. */
@@ -609,11 +624,28 @@ async function routeMentionNotification(user, message) {
         sender_name: message.senderName,
         text: message.body,
     });
+    // A mention cuts through a muted channel/DM (matching Slack's default —
+    // muting a channel doesn't silence being personally called out in it),
+    // but global DND still wins: DND means "don't notify me," full stop.
+    if (isUserDnd(user)) return;
     sendPushNotification(user, {
         title: `${message.senderName} mentioned you`,
         body: message.body || '',
         data: { container_id: message.channelId || message.dm_id },
     });
+}
+
+/** A per-conversation mute is "on" only while not past its optional expiry —
+ *  a lapsed "mute for 1h" silently reverts to unmuted rather than needing a
+ *  cron job to flip it back. */
+function isConversationMuted(pref) {
+    if (!pref || !pref.isMuted) return false;
+    if (pref.mutedUntil && new Date(pref.mutedUntil).getTime() < Date.now()) return false;
+    return true;
+}
+
+function isUserDnd(user) {
+    return !!(user?.dnd_until && new Date(user.dnd_until).getTime() > Date.now());
 }
 
 /**
@@ -2001,7 +2033,7 @@ app.get('/api/home/:userId/:workspaceId', auth.requireAuth, async (req, res) => 
             return {
                 ...ch.get({ plain: true }),
                 is_member: memberOf.has(ch.id),
-                is_muted: pref ? pref.isMuted : !!ch.is_muted,
+                is_muted: pref ? isConversationMuted(pref) : !!ch.is_muted,
                 is_pinned: pref ? pref.isPinned : false,
                 last_message_preview: lastMsg ? {
                     sender_id: lastMsg.senderId,
@@ -2050,7 +2082,7 @@ app.get('/api/home/:userId/:workspaceId', auth.requireAuth, async (req, res) => 
                 other_user_avatar_url: u.avatarUrl,
                 presence: u.presence,
                 is_pinned: pref ? pref.isPinned : false,
-                is_muted: pref ? pref.isMuted : false,
+                is_muted: pref ? isConversationMuted(pref) : false,
                 unread_count: await Message.count({ where: unreadWhere(userId, { dm_id: dmId }) }),
                 has_unread_mention: hasUnreadMention,
                 last_message_preview: {
@@ -2084,7 +2116,7 @@ app.get('/api/home/quick-access/:userId', auth.requireAuth, async (req, res) => 
 // PREFS
 app.post('/api/conversations/:id/prefs', auth.requireAuth, async (req, res) => {
     try {
-        const { action, value } = req.body;
+        const { action, value, duration_minutes } = req.body;
         const userId = req.user.id;      // preferences are per-user and personal
         const containerId = req.params.id;
         const isTrue = (value === 'true' || value === true);
@@ -2093,7 +2125,16 @@ app.post('/api/conversations/:id/prefs', auth.requireAuth, async (req, res) => {
             defaults: { userId, containerId, isPinned: false, isMuted: false, isHidden: false }
         });
         if (action === 'pin') pref.isPinned = isTrue;
-        if (action === 'mute') pref.isMuted = isTrue;
+        if (action === 'mute') {
+            pref.isMuted = isTrue;
+            // "Mute for 1h/8h" (mobile's duration picker) vs. plain indefinite
+            // mute (web's toggle, and mobile's "until I turn it back on") —
+            // a positive duration sets an auto-expiring mute, anything else
+            // (including unmuting) clears any expiry that was pending.
+            pref.mutedUntil = (isTrue && Number(duration_minutes) > 0)
+                ? new Date(Date.now() + Number(duration_minutes) * 60000)
+                : null;
+        }
         if (action === 'hide') pref.isHidden = isTrue;
         if (action === 'delete' && isTrue) pref.isHidden = true;
         await pref.save();
@@ -2101,6 +2142,20 @@ app.post('/api/conversations/:id/prefs', auth.requireAuth, async (req, res) => {
     } catch (e) {
         console.error('[PREF-ERROR]', e);
         res.status(500).json(e);
+    }
+});
+
+/** Global "pause all notifications" — separate from per-conversation mute.
+ *  minutes <= 0 clears it immediately; otherwise pauses push delivery
+ *  (not in-app badges/realtime, which still update normally) until then. */
+app.post('/api/users/me/dnd', auth.requireAuth, async (req, res) => {
+    try {
+        const minutes = Number(req.body.minutes) || 0;
+        const dnd_until = minutes > 0 ? new Date(Date.now() + minutes * 60000) : null;
+        await User.update({ dnd_until }, { where: { id: req.user.id } });
+        res.json({ success: true, dnd_until });
+    } catch (e) {
+        res.status(500).json({ error: 'server_error' });
     }
 });
 
@@ -2210,23 +2265,38 @@ app.get('/api/search', auth.requireAuth, async (req, res) => {
         if (q.length < 2) return res.json({ messages: [] });
 
         const userId = req.user.id;
+        // Optional: scope to one already-open conversation ("search in this chat").
+        const scopeContainerId = req.query.container_id ? String(req.query.container_id) : null;
+        const before = req.query.before ? Number(req.query.before) : null;
+        const limit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 100);
+
         const memberships = await ChannelMember.findAll({ where: { userId } });
         const channelIds = memberships.map((m) => m.channelId);
         const allChannelIds = isGroupAdmin(req.user)
             ? (await Channel.findAll({ attributes: ['id'] })).map((c) => c.id)
             : channelIds;
 
+        const where = {
+            body: { [Op.like]: `%${q}%` },
+            deleted_at: null,
+            [Op.or]: [
+                { channelId: { [Op.in]: allChannelIds } },
+                { dm_id: { [Op.like]: `%${userId}%` } },
+            ],
+        };
+        if (scopeContainerId) {
+            where[Op.and] = scopeContainerId.includes('_')
+                ? { dm_id: scopeContainerId }
+                : { channelId: scopeContainerId };
+        }
+        if (before) where.timestamp = { [Op.lt]: before };
+
+        // Fetch one extra row past the page size purely to know whether a
+        // next page exists, without a separate COUNT query.
         const messages = await Message.findAll({
-            where: {
-                body: { [Op.like]: `%${q}%` },
-                deleted_at: null,
-                [Op.or]: [
-                    { channelId: { [Op.in]: allChannelIds } },
-                    { dm_id: { [Op.like]: `%${userId}%` } },
-                ],
-            },
+            where,
             order: [['timestamp', 'DESC']],
-            limit: 50,
+            limit: limit + 1,
         });
 
         // The DM half of the OR above is a coarse pre-filter (dm_id contains
@@ -2235,16 +2305,35 @@ app.get('/api/search', auth.requireAuth, async (req, res) => {
         const filtered = messages.filter(
             (m) => !m.dm_id || m.dm_id.split('_').includes(userId)
         );
+        const hasMore = filtered.length > limit;
+        const page = filtered.slice(0, limit);
+
+        const dmOtherIds = [...new Set(page.filter((m) => m.dm_id).map((m) => m.dm_id.split('_').find((id) => id !== userId)).filter(Boolean))];
+        const channelResultIds = [...new Set(page.filter((m) => m.channelId).map((m) => m.channelId))];
+        const [dmOtherUsers, channelRows] = await Promise.all([
+            dmOtherIds.length ? User.findAll({ where: { id: { [Op.in]: dmOtherIds } }, attributes: ['id', 'name'] }) : [],
+            channelResultIds.length ? Channel.findAll({ where: { id: { [Op.in]: channelResultIds } }, attributes: ['id', 'name'] }) : [],
+        ]);
+        const nameByUserId = new Map(dmOtherUsers.map((u) => [u.id, u.name]));
+        const nameByChannelId = new Map(channelRows.map((c) => [c.id, c.name]));
 
         res.json({
-            messages: filtered.map((m) => ({
-                id: m.id,
-                container_id: m.channelId || m.dm_id,
-                sender_name: m.senderName,
-                text: m.body,
-                sent_at: m.timestamp,
-                type: m.type,
-            })),
+            messages: page.map((m) => {
+                const isDm = !!m.dm_id;
+                const otherId = isDm ? m.dm_id.split('_').find((id) => id !== userId) : null;
+                return {
+                    id: m.id,
+                    container_id: m.channelId || m.dm_id,
+                    container_name: isDm ? (nameByUserId.get(otherId) || null) : (nameByChannelId.get(m.channelId) || null),
+                    is_dm: isDm,
+                    sender_name: m.senderName,
+                    text: m.body,
+                    sent_at: m.timestamp,
+                    type: m.type,
+                };
+            }),
+            has_more: hasMore,
+            next_before: hasMore ? Number(page[page.length - 1].timestamp) : null,
         });
     } catch (e) {
         console.error('[SEARCH-ERROR]', e);
@@ -2259,7 +2348,7 @@ app.get('/api/search', auth.requireAuth, async (req, res) => {
  * membership/permission checks first; this only does the create-and-notify
  * work common to both.
  */
-async function createMessage({ senderId, senderName, senderAvatarUrl, body, channelId, type, mediaUrl, mediaName, mediaMimeType, replyToId, forwardedFromName, enrichedMentions }) {
+async function createMessage({ senderId, senderName, senderAvatarUrl, body, channelId, type, mediaUrl, mediaName, mediaMimeType, replyToId, forwardedFromName, enrichedMentions, actionsBlock }) {
     // Snapshotted server-side (not trusted from the client) so a reply
     // preview can't be spoofed to show text the quoted message never had.
     let reply_to = null;
@@ -2274,10 +2363,16 @@ async function createMessage({ senderId, senderName, senderAvatarUrl, body, chan
             parent_message_id = original.parent_message_id || original.id;
         }
     }
+    // An app's message can carry an interactive "actions" block (buttons)
+    // alongside/instead of ordinary media — the two are mutually exclusive
+    // in practice (a bot posts either a file or a button row), so one slot.
+    const attachments = mediaUrl
+        ? [{ type: type, url: mediaUrl, name: mediaName, mimeType: mediaMimeType }]
+        : (actionsBlock ? [actionsBlock] : []);
     const msg = await Message.create({
         senderId, senderName, body, channelId, type: type || 'text',
         senderAvatarUrl, dm_id: (channelId && channelId.includes('_')) ? channelId : null,
-        attachments: mediaUrl ? [{ type: type, url: mediaUrl, name: mediaName, mimeType: mediaMimeType }] : [],
+        attachments,
         reply_to, parent_message_id,
         forwarded_from: forwardedFromName ? { sender_name: forwardedFromName } : null,
     });
@@ -2327,7 +2422,12 @@ async function createMessage({ senderId, senderName, senderAvatarUrl, body, chan
             defaults: { source_channel_id: channelId, is_read: false }
         });
         const user = await User.findByPk(uid);
-        if (user) routeMentionNotification(user, msg);
+        if (!user) continue;
+        if (user.is_bot) {
+            notifyAppMention(user, { message: msg, mentioningUser: { id: senderId, name: senderName }, channelId });
+        } else {
+            routeMentionNotification(user, msg);
+        }
     }
     // Push to everyone in the conversation. Recipients also get a badge
     // signal on their own channel, so a closed conversation still counts.
@@ -2354,8 +2454,11 @@ async function createMessage({ senderId, senderName, senderAvatarUrl, body, chan
         // Someone already mentioned gets that push instead (see
         // routeMentionNotification above) — not both for the same message.
         if (mentionedIds.has(uid)) continue;
-        User.findByPk(uid).then((recipient) => {
-            if (!recipient) return;
+        Promise.all([
+            User.findByPk(uid),
+            ConversationPref.findOne({ where: { userId: uid, containerId: container } }),
+        ]).then(([recipient, pref]) => {
+            if (!recipient || isUserDnd(recipient) || isConversationMuted(pref)) return;
             sendPushNotification(recipient, {
                 title: isDm ? senderName : `${senderName} in #${channelName || '...'}`,
                 body: body || (mediaUrl ? 'Sent an attachment' : ''),
@@ -2367,15 +2470,48 @@ async function createMessage({ senderId, senderName, senderAvatarUrl, body, chan
 }
 
 /**
- * Fires a matched slash command's webhook and posts the app's response (or a
- * timeout notice) into the channel as the app's bot. Synchronous-only for
- * Phase 1 — no response_url/async ack yet, matching Slack's oldest, simplest
- * command contract.
+ * POSTs a signed JSON payload to an app-owned webhook URL and returns the
+ * parsed JSON response (capped, non-redirect-following, timed out). Shared
+ * by slash commands, mention events, and button-click interactions so all
+ * three sign and transport requests identically instead of drifting apart.
  *
  * Signing key: App.client_secret_hash is SHA-256(plaintext secret) — the app
  * independently derives the same value from the secret it was given at
  * registration, so it doubles as a shared HMAC key without CU Orbit ever
  * persisting the plaintext secret.
+ */
+async function postSignedWebhook(url, app, payload, timeoutMs = 3000) {
+    const raw = JSON.stringify(payload);
+    const signature = crypto.createHmac('sha256', app.client_secret_hash).update(raw).digest('hex');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    let resp;
+    try {
+        resp = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CU-Orbit-Signature': signature },
+            body: raw,
+            redirect: 'manual',
+            signal: controller.signal,
+        });
+    } finally {
+        clearTimeout(timeout);
+    }
+    // Treat any redirect as a failure rather than following it — closes a
+    // validated-https-then-redirects-to-internal-http bypass.
+    if (resp.type === 'opaqueredirect' || (resp.status >= 300 && resp.status < 400)) {
+        throw new Error('webhook returned a redirect');
+    }
+    if (!resp.ok) throw new Error(`webhook responded ${resp.status}`);
+    const capped = (await resp.text()).slice(0, 65536);
+    return capped ? JSON.parse(capped) : {};
+}
+
+/**
+ * Fires a matched slash command's webhook and posts the app's response (or a
+ * timeout notice) into the channel as the app's bot. Synchronous-only for
+ * Phase 1 — no response_url/async ack yet, matching Slack's oldest, simplest
+ * command contract.
  */
 async function dispatchSlashCommand(slash, { text, user, channelId }) {
     const start = Date.now();
@@ -2384,32 +2520,9 @@ async function dispatchSlashCommand(slash, { text, user, channelId }) {
     try {
         const app = await App.findByPk(slash.app_id);
         if (!app) throw new Error('app not found');
-        const raw = JSON.stringify({
+        const parsed = await postSignedWebhook(slash.webhook_url, app, {
             command: `/${slash.command}`, text, user_id: user.id, user_name: user.name, channel_id: channelId,
         });
-        const signature = crypto.createHmac('sha256', app.client_secret_hash).update(raw).digest('hex');
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 3000);
-        let resp;
-        try {
-            resp = await fetch(slash.webhook_url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CU-Orbit-Signature': signature },
-                body: raw,
-                redirect: 'manual',
-                signal: controller.signal,
-            });
-        } finally {
-            clearTimeout(timeout);
-        }
-        // Treat any redirect as a failure rather than following it — closes a
-        // validated-https-then-redirects-to-internal-http bypass.
-        if (resp.type === 'opaqueredirect' || (resp.status >= 300 && resp.status < 400)) {
-            throw new Error('webhook returned a redirect');
-        }
-        if (!resp.ok) throw new Error(`webhook responded ${resp.status}`);
-        const capped = (await resp.text()).slice(0, 65536);
-        const parsed = JSON.parse(capped);
         responseText = typeof parsed.text === 'string' ? parsed.text : '';
         // Only "ephemeral" opts out of the default — an app that omits
         // response_type, or sends anything else, posts in_channel, matching
@@ -2439,6 +2552,44 @@ async function dispatchSlashCommand(slash, { text, user, channelId }) {
         senderId: botUser.id, senderName: botUser.name, senderAvatarUrl: botUser.avatarUrl,
         body: responseText, channelId, type: 'text',
     });
+}
+
+/**
+ * Events API equivalent: notifies one installed, subscribed app that its bot
+ * was @mentioned. Fire-and-forget from createMessage's perspective — a slow
+ * or dead app-mention listener must never delay the message the mention was
+ * part of, unlike a slash command (which the user is actively waiting on).
+ */
+async function notifyAppMention(botUser, { message, mentioningUser, channelId }) {
+    if (!botUser?.app_id) return;
+    try {
+        const app = await App.findByPk(botUser.app_id);
+        if (!app || app.status !== 'approved' || !app.events_webhook_url) return;
+        if (!(app.event_subscriptions || []).includes('app_mention')) return;
+        const installation = await AppInstallation.findOne({ where: { app_id: app.id, status: 'active' } });
+        if (!installation) return;
+        await postSignedWebhook(app.events_webhook_url, app, {
+            type: 'app_mention',
+            text: message.body, message_id: message.id, channel_id: channelId,
+            user_id: mentioningUser.id, user_name: mentioningUser.name,
+            installation_id: installation.id,
+        }, 5000);
+    } catch (e) {
+        console.error('[APP-EVENT] app_mention failed:', e.message);
+    }
+}
+
+/**
+ * A human clicked an interactive button in a bot-posted message. Unlike
+ * mention events this is synchronous — the clicking user is waiting to see
+ * the result — but still capped at 3s, same SLA as a slash command.
+ */
+async function dispatchInteraction(app, installation, { actionId, value, user, channelId, messageId }) {
+    return postSignedWebhook(app.events_webhook_url, app, {
+        type: 'interaction', action_id: actionId, value: value ?? null,
+        user_id: user.id, user_name: user.name, channel_id: channelId,
+        message_id: messageId, installation_id: installation.id,
+    }, 3000);
 }
 
 app.post('/api/messages', auth.requireAuth, async (req, res) => {
@@ -3617,9 +3768,23 @@ app.post('/oauth/token', async (req, res) => {
 /** Post as the installed app's bot. Requires the bot to already be a member
  *  of the target channel (an admin's separate, explicit per-channel add) —
  *  OAuth install alone grants API access, not channel presence. */
+/** Buttons a bot attaches to a message: up to 5, each a plain {action_id,
+ *  text, value?, style?} — same cap and shape whether the app is validating
+ *  its own construction or CU Orbit is validating what it sent us. */
+function parseActionsBlock(actions) {
+    if (!Array.isArray(actions) || !actions.length) return null;
+    const buttons = actions.slice(0, 5).map((a) => ({
+        action_id: String(a?.action_id || '').slice(0, 100),
+        text: String(a?.text || '').slice(0, 40),
+        value: a?.value != null ? String(a.value).slice(0, 500) : undefined,
+        style: ['primary', 'danger'].includes(a?.style) ? a.style : undefined,
+    })).filter((b) => b.action_id && b.text);
+    return buttons.length ? { type: 'actions', buttons } : null;
+}
+
 app.post('/api/app/messages', requireAppToken, requireScope('chat:write'), async (req, res) => {
     try {
-        const { channelId, text } = req.body;
+        const { channelId, text, actions } = req.body;
         if (!channelId || channelId.includes('_')) return res.status(400).json({ error: 'bad_request', message: 'channelId (a channel, not a DM) is required' });
         if (!text) return res.status(400).json({ error: 'bad_request', message: 'text required' });
         const bot = await User.findByPk(req.app_.botUserId);
@@ -3628,9 +3793,66 @@ app.post('/api/app/messages', requireAppToken, requireScope('chat:write'), async
         if (!member) return res.status(403).json({ error: 'forbidden', message: 'This app has not been added to that channel' });
         const ch = await Channel.findByPk(channelId, { attributes: ['is_active'] });
         if (ch && ch.is_active === false) return res.status(403).json({ error: 'channel_deactivated' });
-        const msg = await createMessage({ senderId: bot.id, senderName: bot.name, senderAvatarUrl: bot.avatarUrl, body: text, channelId, type: 'text' });
+        const msg = await createMessage({
+            senderId: bot.id, senderName: bot.name, senderAvatarUrl: bot.avatarUrl, body: text, channelId, type: 'text',
+            actionsBlock: parseActionsBlock(actions),
+        });
         res.json(msg);
     } catch (e) { console.error('[api-app-messages]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+/**
+ * A human clicked a button in a bot-posted message. Looks up which app owns
+ * that bot, forwards the click as an "interaction" event, and — if the app's
+ * response includes new text/buttons — updates the message in place (the
+ * same "disable the button after it's clicked" pattern Slack's block-kit
+ * apps use), broadcasting the update the same way a reaction toggle does.
+ */
+app.post('/api/messages/:id/actions', auth.requireAuth, async (req, res) => {
+    try {
+        const { action_id, value } = req.body;
+        if (!action_id) return res.status(400).json({ error: 'bad_request', message: 'action_id required' });
+        const msg = await Message.findByPk(req.params.id);
+        if (!msg) return res.status(404).json({ error: 'not_found' });
+        const containerId = msg.channelId || msg.dm_id;
+        if (!(await canAccessContainer(req.user.id, containerId, req.user))) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
+        const block = (msg.attachments || []).find((a) => a.type === 'actions');
+        if (!block || !block.buttons?.some((b) => b.action_id === action_id)) {
+            return res.status(400).json({ error: 'bad_request', message: 'Unknown action_id for this message' });
+        }
+        const bot = await User.findByPk(msg.senderId);
+        if (!bot?.app_id) return res.status(400).json({ error: 'app_unavailable' });
+        const app_ = await App.findByPk(bot.app_id);
+        if (!app_ || app_.status !== 'approved' || !app_.events_webhook_url) {
+            return res.status(400).json({ error: 'app_unavailable', message: 'This app cannot receive button clicks.' });
+        }
+        const installation = await AppInstallation.findOne({ where: { app_id: app_.id, status: 'active' } });
+        if (!installation) return res.status(400).json({ error: 'app_unavailable' });
+
+        let updated = false;
+        try {
+            const result = await dispatchInteraction(app_, installation, {
+                actionId: action_id, value, user: req.user, channelId: containerId, messageId: msg.id,
+            });
+            if (typeof result.text === 'string') { msg.body = result.text; updated = true; }
+            const newActions = parseActionsBlock(result.actions);
+            if (newActions) { msg.attachments = [newActions]; updated = true; }
+            else if (result.remove_actions) { msg.attachments = []; updated = true; }
+            if (updated) {
+                await msg.save();
+                realtime.toContainer(containerId, 'message', {
+                    id: msg.id, container_id: containerId, sender_id: msg.senderId, sender_name: msg.senderName,
+                    sender_avatar_url: msg.senderAvatarUrl, text: msg.body, type: msg.type,
+                    attachments: msg.attachments, reactions: msg.reactions, sent_at: Number(msg.timestamp), status: msg.status,
+                });
+            }
+        } catch (e) {
+            console.error('[interaction]', action_id, 'failed:', e.message);
+        }
+        res.json({ success: true, updated });
+    } catch (e) { console.error('[message-actions]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
 // --- Apps platform: admin management (Phase 2) ---
@@ -3657,6 +3879,7 @@ app.get('/api/admin/apps', auth.requireAuth, async (req, res) => {
             id: a.id, name: a.name, description: a.description, icon_url: a.icon_url,
             client_id: a.client_id, redirect_uris: a.redirect_uris, scopes: a.scopes,
             is_first_party: a.is_first_party, status: a.status, createdAt: a.createdAt,
+            event_subscriptions: a.event_subscriptions || [], events_webhook_url: a.events_webhook_url,
         })));
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
@@ -3705,6 +3928,30 @@ app.put('/api/admin/apps/:id/status', auth.requireAuth, async (req, res) => {
         await app_.save();
         await logAudit(req.user, status === 'suspended' ? 'app.suspended' : 'app.reactivated', 'app', app_.id, app_.name);
         res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+const KNOWN_APP_EVENTS = ['app_mention'];
+
+/** Configure the Events-API-style webhook: which events this app wants
+ *  pushed to it (currently just @mention), and where. Leaving the webhook
+ *  url blank disables events without affecting slash commands/chat:write —
+ *  they're independent capabilities. */
+app.put('/api/admin/apps/:id/events', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const app_ = await App.findByPk(req.params.id);
+        if (!app_) return res.status(404).json({ error: 'not_found' });
+        const { events_webhook_url, event_subscriptions } = req.body;
+        if (events_webhook_url && !isValidWebhookUrl(events_webhook_url)) {
+            return res.status(400).json({ error: 'bad_request', message: 'events_webhook_url must be https:// (or http://localhost for local testing)' });
+        }
+        const subs = Array.isArray(event_subscriptions) ? event_subscriptions.filter((e) => KNOWN_APP_EVENTS.includes(e)) : [];
+        app_.events_webhook_url = events_webhook_url || null;
+        app_.event_subscriptions = subs;
+        await app_.save();
+        await logAudit(req.user, 'app.events_updated', 'app', app_.id, app_.name);
+        res.json({ success: true, events_webhook_url: app_.events_webhook_url, event_subscriptions: app_.event_subscriptions });
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 

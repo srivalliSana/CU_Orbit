@@ -114,3 +114,8 @@ export const createPoll = (
 
 export const votePoll = (pollId: string, optionIndex: number) =>
   client.post<PollSummary>(`/polls/${pollId}/vote`, { optionIndex }).then((res) => res.data);
+
+export const sendMessageAction = (messageId: string, actionId: string, value?: string) =>
+  client
+    .post<{ success: boolean; updated: boolean }>(`/messages/${messageId}/actions`, { action_id: actionId, value })
+    .then((res) => res.data);

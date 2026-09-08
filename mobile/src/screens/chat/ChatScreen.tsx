@@ -27,7 +27,7 @@ export default function ChatScreen({ route, navigation }: Props) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { containerId, title, kind, scrollToMessageId } = route.params;
-  const { data: messages, isLoading, error, refetch, send, react, remove, hide, edit, pin, star, vote } = useMessages(containerId);
+  const { data: messages, isLoading, error, refetch, send, react, remove, hide, edit, pin, star, vote, action } = useMessages(containerId);
   const { typingName, notifyTyping } = useTyping(containerId);
   const selfId = useAuthStore((s) => s.user?.id);
   const selfRole = useAuthStore((s) => s.user?.role);
@@ -191,6 +191,7 @@ export default function ChatScreen({ route, navigation }: Props) {
             onStar={(starred) => star.mutate({ messageId: item.id, starred })}
             onOpenProfile={(userId) => setProfileUserId(userId)}
             onVote={item.poll ? (optionIndex) => vote.mutate({ pollId: item.poll!.id, optionIndex }) : undefined}
+            onAction={(actionId, value) => action.mutate({ messageId: item.id, actionId, value })}
             currentUserId={selfId}
             onOpenDm={(chat) => navigation.push("Chat", { containerId: chat.id, title: chat.title, kind: "dm" })}
           />

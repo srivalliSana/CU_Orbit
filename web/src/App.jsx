@@ -350,8 +350,10 @@ export default function App() {
 
       {settingsOpen && (
         <SettingsPanel
+          user={user}
           onClose={() => setSettingsOpen(false)}
           onSignOut={() => { signOut(); location.reload(); }}
+          onUpdated={(u) => setUser(u)}
         />
       )}
 

@@ -11,6 +11,7 @@ export interface User {
   status_emoji?: string;
   status_text?: string;
   is_active?: boolean;
+  dnd_until?: string | null;
 }
 
 export interface MessagePreview {
@@ -74,7 +75,15 @@ export interface Message {
   text: string;
   sent_at: number;
   type: string;
-  attachments: Array<{ type: string; url: string; name?: string; mimeType?: string }>;
+  attachments: Array<{
+    type: string;
+    url?: string;
+    name?: string;
+    mimeType?: string;
+    // Present only on an "actions" block (a bot's interactive buttons) —
+    // mutually exclusive with url/name/mimeType above.
+    buttons?: Array<{ action_id: string; text: string; value?: string; style?: "primary" | "danger" }>;
+  }>;
   reactions: Reaction[];
   status: string;
   is_pinned?: boolean;

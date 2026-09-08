@@ -17,12 +17,25 @@ export function useChatActions() {
   });
 
   const setMute = useMutation({
-    mutationFn: (params: { containerId: string; muted: boolean }) =>
-      setConversationPref(params.containerId, "mute", params.muted),
+    mutationFn: (params: { containerId: string; muted: boolean; durationMinutes?: number }) =>
+      setConversationPref(params.containerId, "mute", params.muted, params.durationMinutes),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["home"] });
     },
   });
+
+  const promptMuteDuration = (item: ChatRowItem) => {
+    Alert.alert(
+      "Mute notifications",
+      undefined,
+      [
+        { text: "For 1 hour", onPress: () => setMute.mutate({ containerId: item.id, muted: true, durationMinutes: 60 }) },
+        { text: "For 8 hours", onPress: () => setMute.mutate({ containerId: item.id, muted: true, durationMinutes: 480 }) },
+        { text: "Until I turn it back on", onPress: () => setMute.mutate({ containerId: item.id, muted: true }) },
+        { text: "Cancel", style: "cancel" },
+      ]
+    );
+  };
 
   const onLongPress = (item: ChatRowItem) => {
     Alert.alert(
@@ -34,8 +47,8 @@ export function useChatActions() {
           onPress: () => setPin.mutate({ containerId: item.id, pinned: !item.isPinned }),
         },
         {
-          text: item.isMuted ? "Unmute notifications" : "Mute notifications",
-          onPress: () => setMute.mutate({ containerId: item.id, muted: !item.isMuted }),
+          text: item.isMuted ? "Unmute notifications" : "Mute notifications…",
+          onPress: () => (item.isMuted ? setMute.mutate({ containerId: item.id, muted: false }) : promptMuteDuration(item)),
         },
         { text: "Cancel", style: "cancel" },
       ]

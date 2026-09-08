@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 
@@ -28,6 +28,7 @@ export default function MessageBubble({
   onStar,
   onOpenProfile,
   onVote,
+  onAction,
   highlighted,
   currentUserId,
   onOpenDm,
@@ -47,6 +48,7 @@ export default function MessageBubble({
   onStar?: (starred: boolean) => void;
   onOpenProfile?: (userId: string) => void;
   onVote?: (optionIndex: number) => void;
+  onAction?: (actionId: string, value: string | undefined) => void;
   currentUserId?: string;
   onOpenDm?: (chat: { id: string; kind: "dm"; title: string }) => void;
 }) {
@@ -257,6 +259,9 @@ export default function MessageBubble({
             )}
           </Text>
         ) : null}
+
+        <ActionButtonsRow message={message} isOwn={isOwn} onAction={onAction} styles={styles} colors={colors} />
+
         <View style={styles.metaRow}>
           {message.edited_at ? <Text style={styles.edited}>edited</Text> : null}
           <Text style={styles.time}>{clockLabel(message.sent_at)}</Text>
@@ -362,6 +367,47 @@ function VoiceBubble({ uri, styles }: { uri: string; styles: ReturnType<typeof m
       </View>
       <Text style={styles.voiceDuration}>{`${m}:${String(s).padStart(2, "0")}`}</Text>
     </Pressable>
+  );
+}
+
+/** A bot's interactive buttons — an "actions" attachment block. Tapping one
+ *  forwards the click to the owning app and, if it answers with new text/
+ *  buttons, the message updates in place via the normal message list
+ *  refresh (the caller's onAction already invalidates on success). */
+function ActionButtonsRow({
+  message,
+  isOwn,
+  onAction,
+  styles,
+  colors,
+}: {
+  message: Message;
+  isOwn: boolean;
+  onAction?: (actionId: string, value: string | undefined) => void;
+  styles: ReturnType<typeof makeStyles>;
+  colors: ReturnType<typeof useThemeColors>;
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const block = message.attachments?.find((a) => a.type === "actions");
+  if (!block?.buttons?.length || !onAction) return null;
+
+  const press = (button: NonNullable<typeof block.buttons>[number]) => {
+    setBusyId(button.action_id);
+    Promise.resolve(onAction(button.action_id, button.value)).finally(() => setBusyId(null));
+  };
+
+  return (
+    <View style={styles.actionsRow}>
+      {block.buttons.map((b) => {
+        const bg = b.style === "danger" ? "#dc2626" : b.style === "primary" ? colors.primary : isOwn ? "rgba(255,255,255,0.2)" : colors.background;
+        const fg = b.style === "danger" || b.style === "primary" ? "#fff" : isOwn ? "#fff" : colors.text;
+        return (
+          <Pressable key={b.action_id} onPress={() => press(b)} disabled={busyId === b.action_id} style={[styles.actionButton, { backgroundColor: bg }]}>
+            {busyId === b.action_id ? <ActivityIndicator size="small" color={fg} /> : <Text style={[styles.actionButtonText, { color: fg }]}>{b.text}</Text>}
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -719,5 +765,24 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   viewerSaveText: {
     color: "#fff",
     fontWeight: "600",
+  },
+  actionsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 6,
+  },
+  actionButton: {
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(0,0,0,0.08)",
+    minWidth: 44,
+    alignItems: "center",
+  },
+  actionButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
 });

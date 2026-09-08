@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { clockLabel } from '../lib/format';
 import { renderMessageText } from '../lib/markdown';
-import { deleteMessage, editMessage, getReads, hideMessage, reactToMessage, setMessagePinned, starMessage, unstarMessage, votePoll } from '../api/chat';
+import { deleteMessage, editMessage, getReads, hideMessage, reactToMessage, sendMessageAction, setMessagePinned, starMessage, unstarMessage, votePoll } from '../api/chat';
 import Avatar from './Avatar';
 import EmojiPicker from './EmojiPicker';
 import PollVotesModal from './PollVotesModal';
@@ -30,6 +30,48 @@ function Ticks({ status }) {
   if (status === 'read') return <span className="text-sky-300" aria-label="Read">✓✓</span>;
   if (status === 'delivered') return <span className="opacity-70" aria-label="Delivered">✓✓</span>;
   return <span className="opacity-70" aria-label="Sent">✓</span>;
+}
+
+/** A bot's interactive buttons — an "actions" attachment block. Clicking one
+ *  forwards the click to the app and, if it responds with new text/buttons,
+ *  updates in place (the click both fires the interaction and refreshes). */
+function ActionButtons({ message: m, own, onChanged }) {
+  const [busyId, setBusyId] = useState(null);
+  const block = (m.attachments || []).find((a) => a.type === 'actions');
+  if (!block?.buttons?.length) return null;
+
+  const click = async (button) => {
+    setBusyId(button.action_id);
+    try {
+      await sendMessageAction(m.id, button.action_id, button.value);
+      onChanged?.();
+    } catch { /* best-effort */ } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1.5" onClick={(e) => e.stopPropagation()}>
+      {block.buttons.map((b) => (
+        <button
+          key={b.action_id}
+          onClick={() => click(b)}
+          disabled={busyId === b.action_id}
+          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
+            b.style === 'danger'
+              ? 'bg-red-600 text-white hover:bg-red-700'
+              : b.style === 'primary'
+              ? 'bg-blue-600 text-white hover:bg-blue-700'
+              : own
+              ? 'bg-white/20 text-white hover:bg-white/30'
+              : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200'
+          }`}
+        >
+          {busyId === b.action_id ? '…' : b.text}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 export default function MessageBubble({
@@ -411,6 +453,8 @@ export default function MessageBubble({
               </div>
             ) : null
           )}
+
+          <ActionButtons message={m} own={own} onChanged={onChanged} />
 
           <div className={`mt-0.5 flex items-center justify-end gap-1 text-[10px] ${own ? 'text-blue-100' : 'text-slate-400'}`}>
             {m.edited_at ? <span className="italic">edited</span> : null}

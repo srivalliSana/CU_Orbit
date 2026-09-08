@@ -8,6 +8,7 @@ import {
   hideMessage,
   reactToMessage,
   sendMessage,
+  sendMessageAction,
   setMessagePinned,
   starMessage,
   unstarMessage,
@@ -98,5 +99,13 @@ export function useMessages(containerId: string) {
     },
   });
 
-  return { ...query, send, react, remove, hide, edit, pin, star, vote };
+  const action = useMutation({
+    mutationFn: (params: { messageId: string; actionId: string; value?: string }) =>
+      sendMessageAction(params.messageId, params.actionId, params.value),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["messages", containerId] });
+    },
+  });
+
+  return { ...query, send, react, remove, hide, edit, pin, star, vote, action };
 }

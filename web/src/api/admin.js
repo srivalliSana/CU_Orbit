@@ -53,6 +53,9 @@ export const createSlashCommand = (appId, data) =>
 
 export const deleteSlashCommand = (id) => api(`/api/admin/slash-commands/${id}`, { method: 'DELETE' });
 
+export const setAppEvents = (id, data) =>
+  api(`/api/admin/apps/${id}/events`, { method: 'PUT', body: JSON.stringify(data) });
+
 export const getOAuthAuthorizeInfo = (params) => api(`/api/oauth/authorize-info?${new URLSearchParams(params)}`);
 
 export const authorizeOAuthApp = (data) => api('/api/oauth/authorize', { method: 'POST', body: JSON.stringify(data) });

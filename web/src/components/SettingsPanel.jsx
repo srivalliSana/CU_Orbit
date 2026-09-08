@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { getThemeMode, setThemeMode } from '../lib/theme';
+import { setDoNotDisturb } from '../api/chat';
 
 const THEME_OPTIONS = [
   { value: 'system', label: 'System default' },
@@ -7,13 +8,33 @@ const THEME_OPTIONS = [
   { value: 'dark', label: 'Dark' },
 ];
 
-/** Theme + privacy settings, shown from the profile panel. */
-export default function SettingsPanel({ onClose, onSignOut }) {
+const DND_OPTIONS = [
+  { minutes: 60, label: 'For 1 hour' },
+  { minutes: 480, label: 'For 8 hours' },
+  { minutes: 1440, label: 'Until tomorrow' },
+];
+
+/** Theme + notifications + privacy settings, shown from the profile panel. */
+export default function SettingsPanel({ user, onClose, onSignOut, onUpdated }) {
   const [mode, setMode] = useState(getThemeMode());
+  const [dndBusy, setDndBusy] = useState(false);
 
   const choose = (value) => {
     setThemeMode(value);
     setMode(value);
+  };
+
+  const dndUntil = user?.dnd_until ? new Date(user.dnd_until) : null;
+  const dndActive = dndUntil && dndUntil.getTime() > Date.now();
+
+  const applyDnd = async (minutes) => {
+    setDndBusy(true);
+    try {
+      const { dnd_until } = await setDoNotDisturb(minutes);
+      onUpdated?.({ ...user, dnd_until });
+    } finally {
+      setDndBusy(false);
+    }
   };
 
   return (
@@ -38,6 +59,46 @@ export default function SettingsPanel({ onClose, onSignOut }) {
               {mode === opt.value && <span className="text-blue-600">✓</span>}
             </button>
           ))}
+        </div>
+
+        <h3 className="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">Notifications</h3>
+        <div className="mt-2 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm text-slate-700 dark:text-slate-200">Do not disturb</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {dndActive
+                  ? `Paused until ${dndUntil.toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}`
+                  : 'All push notifications on this account are on.'}
+              </p>
+            </div>
+            {dndActive && (
+              <button
+                onClick={() => applyDnd(0)}
+                disabled={dndBusy}
+                className="shrink-0 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-300"
+              >
+                Turn off
+              </button>
+            )}
+          </div>
+          {!dndActive && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {DND_OPTIONS.map((opt) => (
+                <button
+                  key={opt.minutes}
+                  onClick={() => applyDnd(opt.minutes)}
+                  disabled={dndBusy}
+                  className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-300"
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+          <p className="mt-2 text-xs text-slate-500">
+            Individual channels and DMs can be muted from their row in the sidebar.
+          </p>
         </div>
 
         <h3 className="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">Privacy</h3>

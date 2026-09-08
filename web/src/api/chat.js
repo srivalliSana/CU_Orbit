@@ -105,3 +105,19 @@ export const markConversationRead = (containerId) =>
     .catch(() => {});   // best-effort; never block the UI
 
 export const getReads = (messageId) => api(`/api/messages/${messageId}/reads`);
+
+// --- Per-conversation prefs (pin/mute/hide) + global DND ---
+
+export const setConversationPref = (containerId, action, value, durationMinutes) =>
+  api(`/api/conversations/${encodeURIComponent(containerId)}/prefs`, {
+    method: 'POST',
+    body: JSON.stringify({ action, value, duration_minutes: durationMinutes }),
+  });
+
+export const setDoNotDisturb = (minutes) =>
+  api('/api/users/me/dnd', { method: 'POST', body: JSON.stringify({ minutes }) });
+
+// --- Interactive message buttons (Apps platform) ---
+
+export const sendMessageAction = (messageId, actionId, value) =>
+  api(`/api/messages/${messageId}/actions`, { method: 'POST', body: JSON.stringify({ action_id: actionId, value }) });

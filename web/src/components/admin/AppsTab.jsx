@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import {
   createApp, createSlashCommand, deleteSlashCommand, getAppInstallations, getApps,
-  getSlashCommands, revokeInstallation, setAppStatus,
+  getSlashCommands, revokeInstallation, setAppEvents, setAppStatus,
 } from '../../api/admin';
+
+const EVENT_OPTIONS = [
+  { id: 'app_mention', label: '@mention — notify the app when its bot is @mentioned' },
+];
 
 const SCOPE_OPTIONS = [
   { id: 'commands', label: 'Slash commands' },
@@ -236,8 +240,64 @@ function AppRow({ app, expanded, onToggle, onStatusChanged }) {
           </div>
           <InstallationsSection appId={app.id} />
           <SlashCommandsSection appId={app.id} />
+          <EventsSection app={app} onChanged={onStatusChanged} />
         </div>
       )}
+    </div>
+  );
+}
+
+/** Events API config — button interactions reuse this same webhook, so
+ *  there's no separate "interactivity URL" field, unlike Slack's split
+ *  Events/Interactivity URLs. */
+function EventsSection({ app, onChanged }) {
+  const [url, setUrl] = useState(app.events_webhook_url || '');
+  const [subs, setSubs] = useState(app.event_subscriptions || []);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [saved, setSaved] = useState(false);
+
+  const toggle = (id) => setSubs((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await setAppEvents(app.id, { events_webhook_url: url, event_subscriptions: subs });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
+      onChanged?.();
+    } catch (e) {
+      setError(e.message || 'Could not save.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <p className="mb-1 text-[11px] font-medium text-slate-500">
+        Events — also where interactive button clicks are delivered
+      </p>
+      <input
+        value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://.../events"
+        className="mb-2 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 font-mono text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+      />
+      <div className="mb-2 flex flex-col gap-1.5">
+        {EVENT_OPTIONS.map((e) => (
+          <label key={e.id} className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+            <input type="checkbox" checked={subs.includes(e.id)} onChange={() => toggle(e.id)} />
+            {e.label}
+          </label>
+        ))}
+      </div>
+      {error && <p className="mb-1 text-[11px] text-red-600">{error}</p>}
+      <button
+        onClick={save} disabled={busy}
+        className="rounded-lg bg-blue-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+      >
+        {saved ? 'Saved' : busy ? 'Saving…' : 'Save events config'}
+      </button>
     </div>
   );
 }

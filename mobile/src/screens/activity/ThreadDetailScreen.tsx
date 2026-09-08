@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { getThread, markThreadRead } from "../../api/threads";
-import { reactToMessage, sendMessage, deleteMessage, hideMessage, editMessage, setMessagePinned, starMessage, unstarMessage } from "../../api/messages";
+import { reactToMessage, sendMessage, sendMessageAction, deleteMessage, hideMessage, editMessage, setMessagePinned, starMessage, unstarMessage } from "../../api/messages";
 import MessageBubble from "../../components/MessageBubble";
 import Composer, { type SendPayload } from "../../components/Composer";
 import { useAuthStore } from "../../state/authStore";
@@ -40,6 +40,10 @@ export default function ThreadDetailScreen({ route }: Props) {
   const pin = useMutation({ mutationFn: (vars: { id: string; pinned: boolean }) => setMessagePinned(vars.id, vars.pinned), onSuccess: invalidate });
   const star = useMutation({
     mutationFn: (vars: { id: string; starred: boolean }) => (vars.starred ? starMessage(vars.id) : unstarMessage(vars.id)),
+    onSuccess: invalidate,
+  });
+  const action = useMutation({
+    mutationFn: (vars: { id: string; actionId: string; value?: string }) => sendMessageAction(vars.id, vars.actionId, vars.value),
     onSuccess: invalidate,
   });
   const send = useMutation({
@@ -78,6 +82,7 @@ export default function ThreadDetailScreen({ route }: Props) {
     onEdit: (body: string) => edit.mutate({ id: message.id, body }),
     onPin: (pinned: boolean) => pin.mutate({ id: message.id, pinned }),
     onStar: (starred: boolean) => star.mutate({ id: message.id, starred }),
+    onAction: (actionId: string, value: string | undefined) => action.mutate({ id: message.id, actionId, value }),
   });
 
   return (
