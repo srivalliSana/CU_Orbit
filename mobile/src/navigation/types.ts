@@ -4,6 +4,7 @@ export type HomeStackParamList = {
   List: undefined;
   Chat: { containerId: string; title: string; kind: "channel" | "dm"; scrollToMessageId?: string };
   Threads: undefined;
+  ThreadDetail: { parentId: string };
   Mentions: undefined;
   CreateChannel: undefined;
   NewDirectMessage: undefined;

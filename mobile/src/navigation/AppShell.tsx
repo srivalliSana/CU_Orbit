@@ -8,6 +8,7 @@ import type { DrawerContentComponentProps } from "@react-navigation/drawer";
 import HomeScreen from "../screens/home/HomeScreen";
 import ChatScreen from "../screens/chat/ChatScreen";
 import ThreadsScreen from "../screens/activity/ThreadsScreen";
+import ThreadDetailScreen from "../screens/activity/ThreadDetailScreen";
 import MentionsScreen from "../screens/activity/MentionsScreen";
 import CreateChannelScreen from "../screens/channels/CreateChannelScreen";
 import ChannelInfoScreen from "../screens/channels/ChannelInfoScreen";
@@ -30,6 +31,7 @@ function HomeStackNavigator() {
       <HomeStack.Screen name="List" component={HomeScreen} options={{ title: "Let's Connect" }} />
       <HomeStack.Screen name="Chat" component={ChatScreen} />
       <HomeStack.Screen name="Threads" component={ThreadsScreen} options={{ title: "Threads" }} />
+      <HomeStack.Screen name="ThreadDetail" component={ThreadDetailScreen} options={{ title: "Thread" }} />
       <HomeStack.Screen name="Mentions" component={MentionsScreen} options={{ title: "Mentions" }} />
       <HomeStack.Screen
         name="CreateChannel"

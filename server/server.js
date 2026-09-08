@@ -245,6 +245,10 @@ const Message = sequelize.define('Message', {
     // quoted reply should still render even if the original is later edited
     // or soft-deleted.
     reply_to: { type: DataTypes.JSON, allowNull: true },
+    // Real, indexed reference to the same message reply_to.id already
+    // carries as a snapshot — this is what the Threads feature actually
+    // queries by; reply_to stays the display-time quote preview.
+    parent_message_id: { type: DataTypes.STRING, allowNull: true },
     // Forwarded messages carry the original sender's name for a "Forwarded
     // from X" label; the body/attachments are already a plain copy.
     forwarded_from: { type: DataTypes.JSON, allowNull: true },
@@ -258,7 +262,21 @@ const Message = sequelize.define('Message', {
     indexes: [
         { fields: ['channelId', 'timestamp'] },
         { fields: ['dm_id', 'timestamp'] },
+        { fields: ['parent_message_id'] },
     ],
+});
+
+/** Per-user "last opened this thread" marker — Threads' unread state. A
+ *  thread has no single global read/unread state (that's what the old,
+ *  never-used Thread model got wrong: one has_unread boolean can't mean
+ *  "read for you, unread for them" at the same time). */
+const ThreadRead = sequelize.define('ThreadRead', {
+    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    parent_message_id: { type: DataTypes.STRING, allowNull: false },
+    user_id: { type: DataTypes.STRING, allowNull: false },
+    last_read_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+}, {
+    indexes: [{ unique: true, fields: ['parent_message_id', 'user_id'] }],
 });
 
 /**
@@ -2125,36 +2143,60 @@ app.get('/api/messages/:containerId', auth.requireAuth, async (req, res) => {
         const polls = pollIds.length ? await Poll.findAll({ where: { id: { [Op.in]: pollIds } } }) : [];
         const pollSummaries = new Map();
         for (const poll of polls) pollSummaries.set(poll.id, await pollSummary(poll, req.user.id));
-        res.json(messages.map(m => ({
-            id: m.id,
-            channel_id: m.channelId,
-            dm_id: m.dm_id,
-            sender_id: m.senderId,
-            sender_name: m.senderName,
-            sender_avatar_url: m.senderAvatarUrl,
-            text: m.body,
-            sent_at: m.timestamp,
-            type: m.type,
-            is_starred: starred.has(m.id),
-            attachments: m.attachments || [],
-            reactions: m.reactions || [],
-            status: m.status,
-            is_pinned: m.is_pinned,
-            edited_at: m.edited_at,
-            reply_to: m.reply_to,
-            forwarded_from: m.forwarded_from,
-            poll: m.type === 'poll' ? pollSummaries.get(m.poll_id) || null : undefined,
-            enriched_mentions: (m.mentions || []).map(mn => ({
-                user_id: mn.user ? mn.user.id : '',
-                display_name: mn.user ? mn.user.name : '',
-                phone: mn.mentioned_user_id
-            }))
-        })));
+        res.json(await Promise.all(messages.map((m) => serializeMessage(m, req.user.id, { starred, pollSummaries }))));
     } catch (e) {
         console.error(e);
         res.json([]);
     }
 });
+
+/**
+ * The wire shape every message list (channel/DM history, thread detail)
+ * sends to clients — camelCase Sequelize columns become the snake_case
+ * shape MessageBubble/the Message type expect on both web and mobile.
+ * Pulled out so a second endpoint (thread detail) can't silently drift from
+ * this one by hand-rolling its own mapping.
+ */
+async function serializeMessage(m, viewerId, { starred, pollSummaries } = {}) {
+    const isStarred = starred
+        ? starred.has(m.id)
+        : !!(await StarredMessage.findOne({ where: { user_id: viewerId, message_id: m.id } }));
+    let poll;
+    if (m.type === 'poll' && m.poll_id) {
+        poll = pollSummaries?.get(m.poll_id);
+        if (poll === undefined) {
+            const row = await Poll.findByPk(m.poll_id);
+            poll = row ? await pollSummary(row, viewerId) : null;
+        }
+    }
+    const mentions = m.mentions ?? await Mention.findAll({ where: { message_id: m.id }, include: [{ model: User, as: 'user', attributes: ['id', 'name', 'handle'] }] });
+    return {
+        id: m.id,
+        channel_id: m.channelId,
+        dm_id: m.dm_id,
+        sender_id: m.senderId,
+        sender_name: m.senderName,
+        sender_avatar_url: m.senderAvatarUrl,
+        text: m.body,
+        sent_at: m.timestamp,
+        type: m.type,
+        is_starred: isStarred,
+        attachments: m.attachments || [],
+        reactions: m.reactions || [],
+        status: m.status,
+        is_pinned: m.is_pinned,
+        edited_at: m.edited_at,
+        reply_to: m.reply_to,
+        forwarded_from: m.forwarded_from,
+        thread_reply_count: m.thread_reply_count || 0,
+        poll: m.type === 'poll' ? (poll || null) : undefined,
+        enriched_mentions: (mentions || []).map((mn) => ({
+            user_id: mn.user ? mn.user.id : '',
+            display_name: mn.user ? mn.user.name : '',
+            phone: mn.mentioned_user_id,
+        })),
+    };
+}
 
 /**
  * Message-content search, scoped to conversations the caller can actually
@@ -2221,17 +2263,27 @@ async function createMessage({ senderId, senderName, senderAvatarUrl, body, chan
     // Snapshotted server-side (not trusted from the client) so a reply
     // preview can't be spoofed to show text the quoted message never had.
     let reply_to = null;
+    let parent_message_id = null;
     if (replyToId) {
         const original = await Message.findByPk(replyToId);
-        if (original) reply_to = { id: original.id, sender_name: original.senderName, text: original.body };
+        if (original) {
+            reply_to = { id: original.id, sender_name: original.senderName, text: original.body };
+            // Replying to a reply still belongs to the same thread as its
+            // root — one flat thread per root message, matching Slack
+            // rather than fragmenting into a chain of sub-threads.
+            parent_message_id = original.parent_message_id || original.id;
+        }
     }
     const msg = await Message.create({
         senderId, senderName, body, channelId, type: type || 'text',
         senderAvatarUrl, dm_id: (channelId && channelId.includes('_')) ? channelId : null,
         attachments: mediaUrl ? [{ type: type, url: mediaUrl, name: mediaName, mimeType: mediaMimeType }] : [],
-        reply_to,
+        reply_to, parent_message_id,
         forwarded_from: forwardedFromName ? { sender_name: forwardedFromName } : null,
     });
+    if (parent_message_id) {
+        await Message.increment('thread_reply_count', { where: { id: parent_message_id } });
+    }
     // Mentions are keyed on User.id. This block previously ran entirely on
     // phone numbers — comparing normalized UUIDs, and looking up members by
     // phone with a UUID — so no mention resolved once identity moved.
@@ -2875,6 +2927,115 @@ app.post('/api/mentions/:id/read', auth.requireAuth, async (req, res) => {
         if (mention) { mention.is_read = true; await mention.save(); }
         res.json({ success: true });
     } catch (e) { res.status(500).json(e); }
+});
+
+// THREADS
+//
+// A thread's root is any Message that at least one other message points at
+// via parent_message_id; replying to a reply still points at the same root
+// (see createMessage), so a thread is always flat — no nested sub-threads.
+// Replies keep posting into the main channel timeline exactly as before
+// (unchanged behavior for the existing quote-reply feature); this only adds
+// a real "list of threads I'm part of" on top of that same data.
+
+/** Threads I'm part of — I sent the root, or I sent a reply in it. */
+app.get('/api/threads', auth.requireAuth, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const repliedIn = await Message.findAll({
+            where: { senderId: userId, parent_message_id: { [Op.ne]: null } },
+            attributes: ['parent_message_id'],
+        });
+        const ownRoots = await Message.findAll({
+            where: { senderId: userId, thread_reply_count: { [Op.gt]: 0 } },
+            attributes: ['id'],
+        });
+        const threadIds = [...new Set([
+            ...repliedIn.map((m) => m.parent_message_id),
+            ...ownRoots.map((m) => m.id),
+        ])];
+        if (!threadIds.length) return res.json([]);
+
+        const roots = await Message.findAll({ where: { id: { [Op.in]: threadIds } } });
+        const reads = await ThreadRead.findAll({ where: { user_id: userId, parent_message_id: { [Op.in]: threadIds } } });
+        const readAt = new Map(reads.map((r) => [r.parent_message_id, r.last_read_at]));
+
+        const results = await Promise.all(roots.map(async (root) => {
+            const containerId = root.channelId || root.dm_id;
+            // A channel left, or a channel that got deactivated, drops out
+            // of the list rather than showing a thread the user can no
+            // longer actually open.
+            if (!(await canAccessContainer(userId, containerId, req.user))) return null;
+
+            const lastReply = await Message.findOne({
+                where: { parent_message_id: root.id },
+                order: [['timestamp', 'DESC']],
+            });
+            const since = readAt.get(root.id);
+            const hasUnread = !!lastReply && lastReply.senderId !== userId
+                && (!since || Number(lastReply.timestamp) > since.getTime());
+
+            let channelName = null;
+            if (containerId && !containerId.includes('_')) {
+                channelName = (await Channel.findByPk(containerId, { attributes: ['name'] }))?.name || null;
+            }
+            return {
+                parent_message_id: root.id,
+                container_id: containerId,
+                channel_name: channelName,
+                is_dm: !!(containerId && containerId.includes('_')),
+                root_sender_name: root.senderName,
+                root_text: root.body,
+                root_sent_at: Number(root.timestamp),
+                reply_count: root.thread_reply_count,
+                last_reply: lastReply ? {
+                    sender_name: lastReply.senderName,
+                    text: lastReply.body,
+                    sent_at: Number(lastReply.timestamp),
+                } : null,
+                has_unread: hasUnread,
+            };
+        }));
+        res.json(
+            results
+                .filter((r) => r !== null)
+                .sort((a, b) => (b.last_reply?.sent_at || b.root_sent_at) - (a.last_reply?.sent_at || a.root_sent_at))
+        );
+    } catch (e) {
+        console.error('[threads] failed:', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
+/** One thread's full history — the root plus every reply, oldest first. */
+app.get('/api/threads/:parentId', auth.requireAuth, async (req, res) => {
+    try {
+        const root = await Message.findByPk(req.params.parentId);
+        if (!root) return res.status(404).json({ error: 'not_found' });
+        const containerId = root.channelId || root.dm_id;
+        if (!(await canAccessContainer(req.user.id, containerId, req.user))) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
+        const replies = await Message.findAll({
+            where: { parent_message_id: root.id, deleted_at: null },
+            order: [['timestamp', 'ASC']],
+        });
+        res.json({
+            root: await serializeMessage(root, req.user.id),
+            replies: await Promise.all(replies.map((m) => serializeMessage(m, req.user.id))),
+        });
+    } catch (e) {
+        console.error('[thread-detail] failed:', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
+/** Marks a thread read up to now — clears its unread state for this user only. */
+app.post('/api/threads/:parentId/read', auth.requireAuth, async (req, res) => {
+    try {
+        await ThreadRead.upsert({ parent_message_id: req.params.parentId, user_id: req.user.id, last_read_at: new Date() });
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
 // STATUS
