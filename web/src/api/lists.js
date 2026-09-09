@@ -37,6 +37,14 @@ export const deleteItem = (itemId) => api(`/api/items/${itemId}`, { method: 'DEL
 export const reorderItems = (listId, order) =>
   api(`/api/lists/${listId}/items/reorder`, { method: 'PUT', body: JSON.stringify({ order }) });
 
+export const getItemComments = (itemId) => api(`/api/items/${itemId}/comments`);
+
+export const addItemComment = (itemId, body) =>
+  api(`/api/items/${itemId}/comments`, { method: 'POST', body: JSON.stringify({ body }) });
+
+export const deleteItemComment = (commentId) =>
+  api(`/api/item-comments/${commentId}`, { method: 'DELETE' });
+
 export const importListCsv = (listId, { columns, rows }) =>
   api(`/api/lists/${listId}/import`, { method: 'POST', body: JSON.stringify({ columns, rows }) });
 

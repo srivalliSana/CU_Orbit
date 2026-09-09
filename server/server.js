@@ -558,6 +558,21 @@ const ListItem = sequelize.define('ListItem', {
     indexes: [{ fields: ['list_id'] }, { fields: ['parent_item_id'] }],
 });
 
+/** One comment on one list item — "every item has a dedicated thread"
+ *  (Slack's phrasing). Deliberately a lighter model than Message (no
+ *  attachments/reactions/edit-history yet) — text-only comments cover the
+ *  essential case; richer comments are a later pass if this gets used. */
+const ListItemComment = sequelize.define('ListItemComment', {
+    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    list_item_id: { type: DataTypes.UUID, allowNull: false },
+    user_id: { type: DataTypes.STRING, allowNull: false },
+    user_name: { type: DataTypes.STRING, allowNull: false },
+    user_avatar_url: { type: DataTypes.STRING, allowNull: true },
+    body: { type: DataTypes.TEXT, allowNull: false },
+}, {
+    indexes: [{ fields: ['list_item_id'] }],
+});
+
 const Status = sequelize.define('Status', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     userId: { type: DataTypes.STRING, allowNull: false },
@@ -3285,7 +3300,20 @@ app.get('/api/lists/:id', auth.requireAuth, async (req, res) => {
         if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
         const fields = await ListField.findAll({ where: { list_id: list.id }, order: [['position', 'ASC']] });
         const items = await ListItem.findAll({ where: { list_id: list.id }, order: [['position', 'ASC'], ['createdAt', 'ASC']] });
-        res.json({ list, fields, items });
+        // One grouped count query rather than one query per item/card.
+        const counts = items.length
+            ? await ListItemComment.findAll({
+                where: { list_item_id: { [Op.in]: items.map((i) => i.id) } },
+                attributes: ['list_item_id', [sequelize.fn('COUNT', sequelize.col('id')), 'count']],
+                group: ['list_item_id'],
+                raw: true,
+            })
+            : [];
+        const countByItem = new Map(counts.map((c) => [c.list_item_id, Number(c.count)]));
+        res.json({
+            list, fields,
+            items: items.map((it) => ({ ...it.get({ plain: true }), comment_count: countByItem.get(it.id) || 0 })),
+        });
     } catch (e) { console.error('[lists-detail]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
@@ -3304,6 +3332,8 @@ app.delete('/api/lists/:id', auth.requireAuth, async (req, res) => {
     try {
         const { list, error } = await loadListWithAccess(req.params.id, req.user.id, req.user);
         if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
+        const itemIds = (await ListItem.findAll({ where: { list_id: list.id }, attributes: ['id'] })).map((i) => i.id);
+        if (itemIds.length) await ListItemComment.destroy({ where: { list_item_id: { [Op.in]: itemIds } } });
         await ListItem.destroy({ where: { list_id: list.id } });
         await ListField.destroy({ where: { list_id: list.id } });
         await logAudit(req.user, 'list.deleted', 'list', list.id, list.name);
@@ -3434,6 +3464,8 @@ app.delete('/api/items/:id', auth.requireAuth, async (req, res) => {
         if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
         // Deleting a parent takes its subtasks with it — an orphaned subtask
         // pointing at a gone parent has nowhere to render.
+        const subtaskIds = (await ListItem.findAll({ where: { parent_item_id: item.id }, attributes: ['id'] })).map((i) => i.id);
+        await ListItemComment.destroy({ where: { list_item_id: { [Op.in]: [item.id, ...subtaskIds] } } });
         await ListItem.destroy({ where: { parent_item_id: item.id } });
         await item.destroy();
         res.json({ success: true });
@@ -3448,6 +3480,54 @@ app.put('/api/lists/:id/items/reorder', auth.requireAuth, async (req, res) => {
         await Promise.all(order.map((itemId, i) =>
             ListItem.update({ position: i }, { where: { id: itemId, list_id: list.id } })
         ));
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** Every item's "dedicated thread" — a flat, oldest-first comment list. */
+app.get('/api/items/:id/comments', auth.requireAuth, async (req, res) => {
+    try {
+        const item = await ListItem.findByPk(req.params.id);
+        if (!item) return res.status(404).json({ error: 'not_found' });
+        const { error } = await loadListWithAccess(item.list_id, req.user.id, req.user);
+        if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
+        const comments = await ListItemComment.findAll({ where: { list_item_id: item.id }, order: [['createdAt', 'ASC']] });
+        res.json(comments);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.post('/api/items/:id/comments', auth.requireAuth, async (req, res) => {
+    try {
+        const item = await ListItem.findByPk(req.params.id);
+        if (!item) return res.status(404).json({ error: 'not_found' });
+        const { error } = await loadListWithAccess(item.list_id, req.user.id, req.user);
+        if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
+        const body = String(req.body.body || '').trim();
+        if (!body) return res.status(400).json({ error: 'bad_request', message: 'body required' });
+        const sender = await User.findByPk(req.user.id);
+        const comment = await ListItemComment.create({
+            list_item_id: item.id, user_id: req.user.id,
+            user_name: sender?.name || req.user.email, user_avatar_url: sender?.avatarUrl || null,
+            body: body.slice(0, 4000),
+        });
+        res.json(comment);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.delete('/api/item-comments/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const comment = await ListItemComment.findByPk(req.params.id);
+        if (!comment) return res.status(404).json({ error: 'not_found' });
+        const item = await ListItem.findByPk(comment.list_item_id);
+        // Own comment, or a group admin cleaning up — same bar as message deletion elsewhere.
+        if (comment.user_id !== req.user.id && !isGroupAdmin(req.user)) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
+        if (item) {
+            const { error } = await loadListWithAccess(item.list_id, req.user.id, req.user);
+            if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
+        }
+        await comment.destroy();
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });

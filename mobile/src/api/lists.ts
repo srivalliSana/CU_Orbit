@@ -36,6 +36,17 @@ export interface ListItemRow {
   position: number;
   created_by: string;
   parent_item_id: string | null;
+  comment_count?: number;
+}
+
+export interface ListItemComment {
+  id: number;
+  list_item_id: string;
+  user_id: string;
+  user_name: string;
+  user_avatar_url: string | null;
+  body: string;
+  createdAt: string;
 }
 
 export interface ListDetail {
@@ -75,6 +86,15 @@ export const updateItem = (itemId: string, values: Record<string, unknown>) =>
   client.put<ListItemRow>(`/items/${itemId}`, { values }).then((res) => res.data);
 
 export const deleteItem = (itemId: string) => client.delete(`/items/${itemId}`).then((res) => res.data);
+
+export const getItemComments = (itemId: string) =>
+  client.get<ListItemComment[]>(`/items/${itemId}/comments`).then((res) => res.data);
+
+export const addItemComment = (itemId: string, body: string) =>
+  client.post<ListItemComment>(`/items/${itemId}/comments`, { body }).then((res) => res.data);
+
+export const deleteItemComment = (commentId: number) =>
+  client.delete(`/item-comments/${commentId}`).then((res) => res.data);
 
 export interface ImportColumn {
   fieldId?: string;

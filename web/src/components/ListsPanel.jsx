@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  createField, createItem, createList, deleteField, deleteItem, deleteList,
-  exportListCsv, getList, getLists, importListCsv, updateField, updateItem, updateList,
+  addItemComment, createField, createItem, createList, deleteField, deleteItem, deleteItemComment, deleteList,
+  exportListCsv, getItemComments, getList, getLists, importListCsv, updateField, updateItem, updateList,
 } from '../api/lists';
 import { parseCsv } from '../lib/csv';
+import Avatar from './Avatar';
+import { clockLabel } from '../lib/format';
 
 const FIELD_TYPES = [
   { id: 'text', label: 'Text' },
@@ -138,6 +140,7 @@ function ListDetail({ listId, onBack, onClose }) {
   const [view, setView] = useState('table');   // 'table' | 'board'
   const [groupFieldId, setGroupFieldId] = useState(null);   // which select/status/priority field the board groups by
   const [collapsedParents, setCollapsedParents] = useState(() => new Set());
+  const [detailItemId, setDetailItemId] = useState(null);
 
   const load = () => getList(listId).then(setData).catch((e) => setError(e.message));
   useEffect(() => { load(); }, [listId]);
@@ -277,6 +280,7 @@ function ListDetail({ listId, onBack, onClose }) {
                   fields,
                   onChanged: (patch) => setData((d) => ({ ...d, items: d.items.map((x) => (x.id === it.id ? { ...x, ...patch } : x)) })),
                   onDeleted: () => setData((d) => ({ ...d, items: d.items.filter((x) => x.id !== it.id) })),
+                  onOpenDetail: () => setDetailItemId(it.id),
                 });
                 return (
                   <React.Fragment key={item.id}>
@@ -322,6 +326,14 @@ function ListDetail({ listId, onBack, onClose }) {
           fields={fields}
           onDone={() => { setImportOpen(false); load(); }}
           onClose={() => setImportOpen(false)}
+        />
+      )}
+      {detailItemId && (
+        <ItemDetailModal
+          item={items.find((it) => it.id === detailItemId)}
+          fields={fields}
+          onChanged={(patch) => setData((d) => ({ ...d, items: d.items.map((x) => (x.id === detailItemId ? { ...x, ...patch } : x)) }))}
+          onClose={() => setDetailItemId(null)}
         />
       )}
     </>
@@ -484,7 +496,7 @@ function FieldHeader({ field, onChanged }) {
 
 function ItemRow({
   item, fields, onChanged, onDeleted, titleFieldId,
-  isSubtask, childCount, collapsed, onToggleCollapsed, onAddSubtask,
+  isSubtask, childCount, collapsed, onToggleCollapsed, onAddSubtask, onOpenDetail,
 }) {
   const remove = async () => {
     await deleteItem(item.id);
@@ -523,11 +535,18 @@ function ItemRow({
         </td>
       ))}
       <td className="border-b border-slate-100 px-1 py-1 text-center align-middle dark:border-slate-800">
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+        <div className="flex items-center justify-end gap-1">
+          <button
+            onClick={onOpenDetail}
+            title="Open — comments & details"
+            className={`flex items-center gap-0.5 text-slate-300 hover:text-blue-600 ${item.comment_count ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+          >
+            💬{item.comment_count > 0 && <span className="text-[10px] font-semibold">{item.comment_count}</span>}
+          </button>
           {!isSubtask && (
-            <button onClick={onAddSubtask} title="Add subtask" className="text-slate-300 hover:text-blue-600">＋</button>
+            <button onClick={onAddSubtask} title="Add subtask" className="text-slate-300 opacity-0 hover:text-blue-600 group-hover:opacity-100">＋</button>
           )}
-          <button onClick={remove} title="Delete item" className="text-slate-300 hover:text-red-600">×</button>
+          <button onClick={remove} title="Delete item" className="text-slate-300 opacity-0 hover:text-red-600 group-hover:opacity-100">×</button>
         </div>
       </td>
     </tr>
@@ -765,6 +784,116 @@ function ImportCsvModal({ listId, fields, onDone, onClose }) {
             </button>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** One item's full detail — every field, and its "dedicated thread"
+ *  (Slack's phrasing) of comments. Opened via the 💬 icon on a table row,
+ *  since the row's title cell is already a click-to-edit text field and
+ *  can't double as the open-detail trigger. */
+function ItemDetailModal({ item, fields, onChanged, onClose }) {
+  const [comments, setComments] = useState(null);
+  const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const load = () => getItemComments(item.id).then(setComments).catch(() => setComments([]));
+  useEffect(() => { load(); }, [item.id]);
+
+  const setValue = async (fieldId, value) => {
+    const values = { ...item.values, [fieldId]: value };
+    onChanged({ values });
+    try { await updateItem(item.id, { [fieldId]: value }); } catch { /* best-effort */ }
+  };
+
+  const send = async (e) => {
+    e.preventDefault();
+    if (!draft.trim()) return;
+    setSending(true);
+    try {
+      const comment = await addItemComment(item.id, draft.trim());
+      setComments((c) => [...(c || []), comment]);
+      onChanged({ comment_count: (item.comment_count || 0) + 1 });
+      setDraft('');
+    } catch { /* best-effort */ } finally {
+      setSending(false);
+    }
+  };
+
+  const removeComment = async (id) => {
+    await deleteItemComment(id).catch(() => {});
+    setComments((c) => (c || []).filter((x) => x.id !== id));
+    onChanged({ comment_count: Math.max(0, (item.comment_count || 1) - 1) });
+  };
+
+  if (!item) return null;
+  const titleField = fields.find((f) => f.is_title_field) || fields[0];
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-xl dark:bg-slate-900">
+        <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+          <h3 className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
+            {(titleField && item.values?.[titleField.id]) || 'Untitled item'}
+          </h3>
+          <button onClick={onClose} className="shrink-0 text-slate-400 hover:text-slate-600">✕</button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="space-y-2.5">
+            {fields.map((f) => (
+              <div key={f.id} className="flex items-center gap-3">
+                <span className="w-24 shrink-0 text-[11px] font-medium text-slate-500">
+                  {TYPE_ICON[f.type] || '✎'} {f.name}
+                </span>
+                <div className="min-w-0 flex-1 rounded-lg bg-slate-50 px-2 py-1 dark:bg-slate-800">
+                  <Cell field={f} value={item.values?.[f.id]} onChange={(v) => setValue(f.id, v)} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <h4 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Comments{comments?.length ? ` (${comments.length})` : ''}
+          </h4>
+          {!comments ? (
+            <p className="text-xs text-slate-400">Loading…</p>
+          ) : comments.length === 0 ? (
+            <p className="text-xs text-slate-400">No comments yet — start the discussion below.</p>
+          ) : (
+            <div className="space-y-3">
+              {comments.map((c) => (
+                <div key={c.id} className="group flex gap-2.5">
+                  <Avatar name={c.user_name} url={c.user_avatar_url} size={28} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{c.user_name}</span>
+                      <span className="text-[10px] text-slate-400">{clockLabel(new Date(c.createdAt).getTime())}</span>
+                      <button
+                        onClick={() => removeComment(c.id)}
+                        className="ml-auto text-[10px] text-slate-300 opacity-0 hover:text-red-600 group-hover:opacity-100"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                    <p className="whitespace-pre-wrap break-words text-sm text-slate-700 dark:text-slate-200">{c.body}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <form onSubmit={send} className="flex items-center gap-2 border-t border-slate-200 p-3 dark:border-slate-800">
+          <input
+            value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Add a comment…"
+            className="min-w-0 flex-1 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+          />
+          <button type="submit" disabled={sending || !draft.trim()} className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+            Send
+          </button>
+        </form>
       </div>
     </div>
   );

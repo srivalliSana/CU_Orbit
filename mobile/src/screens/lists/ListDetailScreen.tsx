@@ -137,6 +137,9 @@ export default function ListDetailScreen({ route, navigation }: Props) {
                 {subtasks > 0 && (
                   <Text style={[styles.subtaskBadge, { color: colors.textMuted }]}>☑ {subtasks}</Text>
                 )}
+                {!!item.comment_count && (
+                  <Text style={[styles.subtaskBadge, { color: colors.textMuted }]}>💬 {item.comment_count}</Text>
+                )}
               </View>
               {previewFields.length > 0 && (
                 <View style={styles.previewRow}>

@@ -3,7 +3,11 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Te
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
-import { createItem, deleteItem, getList, updateItem, type ListDetail, type ListField, type ListItemRow } from "../../api/lists";
+import {
+  addItemComment, createItem, deleteItem, deleteItemComment, getItemComments, getList, updateItem,
+  type ListDetail, type ListField, type ListItemComment, type ListItemRow,
+} from "../../api/lists";
+import Avatar from "../../components/Avatar";
 import OptionPickerModal from "../../components/lists/OptionPickerModal";
 import { useThemeColors } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
@@ -68,6 +72,22 @@ export default function ListItemScreen({ route, navigation }: Props) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["list", listId] }),
   });
 
+  const commentsQuery = useQuery({ queryKey: ["item-comments", itemId], queryFn: () => getItemComments(itemId) });
+  const addComment = useMutation({
+    mutationFn: (body: string) => addItemComment(itemId, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["item-comments", itemId] });
+      queryClient.invalidateQueries({ queryKey: ["list", listId] });
+    },
+  });
+  const removeComment = useMutation({
+    mutationFn: (commentId: number) => deleteItemComment(commentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["item-comments", itemId] });
+      queryClient.invalidateQueries({ queryKey: ["list", listId] });
+    },
+  });
+
   if (isLoading || !data || !item) {
     return (
       <View style={styles.center}>
@@ -105,6 +125,14 @@ export default function ListItemScreen({ route, navigation }: Props) {
           colors={colors}
         />
       )}
+
+      <CommentsSection
+        comments={commentsQuery.data}
+        onAdd={(body) => addComment.mutate(body)}
+        onRemove={(id) => removeComment.mutate(id)}
+        styles={styles}
+        colors={colors}
+      />
 
       <Pressable onPress={confirmDelete} style={styles.deleteButton}>
         <Text style={styles.deleteText}>Delete item</Text>
@@ -167,6 +195,69 @@ function SubtasksSection({
         />
         <Pressable onPress={submit} style={styles.subtaskAddButton}>
           <Text style={{ color: colors.primary, fontWeight: "700" }}>Add</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+/** Every item's "dedicated thread" (Slack's phrasing) — a flat, oldest-
+ *  first comment list, same shape as the web ItemDetailModal's thread. */
+function CommentsSection({
+  comments, onAdd, onRemove, styles, colors,
+}: {
+  comments?: ListItemComment[];
+  onAdd: (body: string) => void;
+  onRemove: (id: number) => void;
+  styles: ReturnType<typeof makeStyles>;
+  colors: ReturnType<typeof useThemeColors>;
+}) {
+  const [draft, setDraft] = useState("");
+
+  const submit = () => {
+    if (!draft.trim()) return;
+    onAdd(draft.trim());
+    setDraft("");
+  };
+
+  const confirmRemove = (id: number) => {
+    Alert.alert("Delete this comment?", undefined, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => onRemove(id) },
+    ]);
+  };
+
+  return (
+    <View style={styles.fieldBlock}>
+      <Text style={styles.fieldLabel}>💬 Comments{comments?.length ? ` (${comments.length})` : ""}</Text>
+      {!comments ? (
+        <Text style={{ color: colors.textMuted, fontSize: 13 }}>Loading…</Text>
+      ) : comments.length === 0 ? (
+        <Text style={{ color: colors.textMuted, fontSize: 13 }}>No comments yet — start the discussion below.</Text>
+      ) : (
+        comments.map((c) => (
+          <Pressable key={c.id} onLongPress={() => confirmRemove(c.id)} style={styles.commentRow}>
+            <Avatar name={c.user_name} url={c.user_avatar_url} size={26} />
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
+                <Text style={{ color: colors.text, fontSize: 12, fontWeight: "700" }}>{c.user_name}</Text>
+                <Text style={{ color: colors.textMuted, fontSize: 10 }}>
+                  {new Date(c.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </Text>
+              </View>
+              <Text style={{ color: colors.text, fontSize: 14 }}>{c.body}</Text>
+            </View>
+          </Pressable>
+        ))
+      )}
+      <View style={styles.subtaskAddRow}>
+        <TextInput
+          value={draft} onChangeText={setDraft} onSubmitEditing={submit}
+          placeholder="Add a comment" placeholderTextColor={colors.textMuted}
+          style={[styles.input, { flex: 1 }]}
+        />
+        <Pressable onPress={submit} style={styles.subtaskAddButton}>
+          <Text style={{ color: colors.primary, fontWeight: "700" }}>Send</Text>
         </Pressable>
       </View>
     </View>
@@ -271,4 +362,5 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   },
   subtaskAddRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
   subtaskAddButton: { paddingHorizontal: 8, paddingVertical: 10 },
+  commentRow: { flexDirection: "row", gap: 8, paddingVertical: 6 },
 });
