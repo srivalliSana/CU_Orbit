@@ -256,13 +256,13 @@ function ListDetail({ listId, onBack, onClose }) {
                     <FieldHeader field={f} listId={list.id} onChanged={load} />
                   </th>
                 ))}
-                <th className="sticky top-0 z-10 w-10 border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/80">
+                <th className="sticky top-0 z-10 min-w-[110px] border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/80">
                   <button
                     onClick={() => setAddingField(true)}
-                    title="Add field"
-                    className="flex h-full w-full items-center justify-center py-2 text-slate-400 hover:text-blue-600"
+                    title="Add a new column, e.g. Status or Priority"
+                    className="flex h-full w-full items-center justify-center gap-1 whitespace-nowrap py-2 text-xs font-semibold text-slate-500 hover:text-blue-600 dark:text-slate-400"
                   >
-                    +
+                    + Field
                   </button>
                 </th>
               </tr>
