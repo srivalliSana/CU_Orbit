@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Te
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
-import { deleteItem, getList, updateItem, type ListDetail, type ListField } from "../../api/lists";
+import { createItem, deleteItem, getList, updateItem, type ListDetail, type ListField, type ListItemRow } from "../../api/lists";
 import OptionPickerModal from "../../components/lists/OptionPickerModal";
 import { useThemeColors } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
@@ -58,6 +58,16 @@ export default function ListItemScreen({ route, navigation }: Props) {
     ]);
   };
 
+  const addSubtask = useMutation({
+    mutationFn: (title: string) => createItem(listId, titleFieldId ? { [titleFieldId]: title } : {}, itemId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["list", listId] }),
+  });
+
+  const removeSubtask = useMutation({
+    mutationFn: (subtaskId: string) => deleteItem(subtaskId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["list", listId] }),
+  });
+
   if (isLoading || !data || !item) {
     return (
       <View style={styles.center}>
@@ -67,6 +77,9 @@ export default function ListItemScreen({ route, navigation }: Props) {
   }
 
   const { fields } = data;
+  const titleField = fields.find((f) => f.is_title_field) || fields[0];
+  const titleFieldId = titleField?.id;
+  const subtasks = data.items.filter((it) => it.parent_item_id === itemId);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ padding: 16, gap: 16 }}>
@@ -80,6 +93,18 @@ export default function ListItemScreen({ route, navigation }: Props) {
           styles={styles}
         />
       ))}
+
+      {!item.parent_item_id && (
+        <SubtasksSection
+          subtasks={subtasks}
+          titleFieldId={titleFieldId}
+          onOpen={(id) => navigation.push("ListItem", { listId, itemId: id })}
+          onAdd={(title) => addSubtask.mutate(title)}
+          onRemove={(id) => removeSubtask.mutate(id)}
+          styles={styles}
+          colors={colors}
+        />
+      )}
 
       <Pressable onPress={confirmDelete} style={styles.deleteButton}>
         <Text style={styles.deleteText}>Delete item</Text>
@@ -97,6 +122,54 @@ export default function ListItemScreen({ route, navigation }: Props) {
         />
       )}
     </ScrollView>
+  );
+}
+
+function SubtasksSection({
+  subtasks, titleFieldId, onOpen, onAdd, onRemove, styles, colors,
+}: {
+  subtasks: ListItemRow[];
+  titleFieldId?: string;
+  onOpen: (id: string) => void;
+  onAdd: (title: string) => void;
+  onRemove: (id: string) => void;
+  styles: ReturnType<typeof makeStyles>;
+  colors: ReturnType<typeof useThemeColors>;
+}) {
+  const [draft, setDraft] = useState("");
+
+  const submit = () => {
+    if (!draft.trim()) return;
+    onAdd(draft.trim());
+    setDraft("");
+  };
+
+  return (
+    <View style={styles.fieldBlock}>
+      <Text style={styles.fieldLabel}>☑ Subtasks{subtasks.length ? ` (${subtasks.length})` : ""}</Text>
+      {subtasks.map((st) => (
+        <View key={st.id} style={styles.subtaskRow}>
+          <Pressable onPress={() => onOpen(st.id)} style={{ flex: 1 }}>
+            <Text style={{ color: colors.text, fontSize: 14 }} numberOfLines={1}>
+              {(titleFieldId && (st.values?.[titleFieldId] as string)) || "Untitled"}
+            </Text>
+          </Pressable>
+          <Pressable onPress={() => onRemove(st.id)} hitSlop={8}>
+            <Text style={{ color: colors.textMuted, fontSize: 14 }}>×</Text>
+          </Pressable>
+        </View>
+      ))}
+      <View style={styles.subtaskAddRow}>
+        <TextInput
+          value={draft} onChangeText={setDraft} onSubmitEditing={submit}
+          placeholder="Add a subtask" placeholderTextColor={colors.textMuted}
+          style={[styles.input, { flex: 1 }]}
+        />
+        <Pressable onPress={submit} style={styles.subtaskAddButton}>
+          <Text style={{ color: colors.primary, fontWeight: "700" }}>Add</Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -192,4 +265,10 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   placeholder: { color: colors.textMuted, fontSize: 14 },
   deleteButton: { alignItems: "center", paddingVertical: 14, marginTop: 8 },
   deleteText: { color: colors.danger, fontWeight: "700", fontSize: 14 },
+  subtaskRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, paddingVertical: 8,
+  },
+  subtaskAddRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
+  subtaskAddButton: { paddingHorizontal: 8, paddingVertical: 10 },
 });

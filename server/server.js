@@ -551,8 +551,11 @@ const ListItem = sequelize.define('ListItem', {
     values: { type: DataTypes.JSON, defaultValue: {} },
     position: { type: DataTypes.INTEGER, defaultValue: 0 },
     created_by: { type: DataTypes.STRING, allowNull: false },
+    // Null = a top-level item. One level of nesting only, matching Slack's
+    // own Lists — a subtask can't itself have subtasks.
+    parent_item_id: { type: DataTypes.UUID, allowNull: true },
 }, {
-    indexes: [{ fields: ['list_id'] }],
+    indexes: [{ fields: ['list_id'] }, { fields: ['parent_item_id'] }],
 });
 
 const Status = sequelize.define('Status', {
@@ -3394,9 +3397,17 @@ app.post('/api/lists/:id/items', auth.requireAuth, async (req, res) => {
     try {
         const { list, error } = await loadListWithAccess(req.params.id, req.user.id, req.user);
         if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
-        const maxPos = await ListItem.max('position', { where: { list_id: list.id } });
+        let parent_item_id = null;
+        if (req.body.parent_item_id) {
+            const parent = await ListItem.findOne({ where: { id: req.body.parent_item_id, list_id: list.id } });
+            if (!parent) return res.status(400).json({ error: 'bad_request', message: 'Unknown parent item' });
+            // One level of nesting only — a subtask of a subtask just attaches
+            // to that subtask's own parent instead of silently failing.
+            parent_item_id = parent.parent_item_id || parent.id;
+        }
+        const maxPos = await ListItem.max('position', { where: { list_id: list.id, parent_item_id } });
         const item = await ListItem.create({
-            list_id: list.id, values: req.body.values || {}, created_by: req.user.id,
+            list_id: list.id, values: req.body.values || {}, created_by: req.user.id, parent_item_id,
             position: (Number.isFinite(maxPos) ? maxPos : -1) + 1,
         });
         res.json(item);
@@ -3421,6 +3432,9 @@ app.delete('/api/items/:id', auth.requireAuth, async (req, res) => {
         if (!item) return res.status(404).json({ error: 'not_found' });
         const { error } = await loadListWithAccess(item.list_id, req.user.id, req.user);
         if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
+        // Deleting a parent takes its subtasks with it — an orphaned subtask
+        // pointing at a gone parent has nowhere to render.
+        await ListItem.destroy({ where: { parent_item_id: item.id } });
         await item.destroy();
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'server_error' }); }

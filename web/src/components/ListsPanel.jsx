@@ -135,6 +135,9 @@ function ListDetail({ listId, onBack, onClose }) {
   const [importOpen, setImportOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
+  const [view, setView] = useState('table');   // 'table' | 'board'
+  const [groupFieldId, setGroupFieldId] = useState(null);   // which select/status/priority field the board groups by
+  const [collapsedParents, setCollapsedParents] = useState(() => new Set());
 
   const load = () => getList(listId).then(setData).catch((e) => setError(e.message));
   useEffect(() => { load(); }, [listId]);
@@ -175,6 +178,27 @@ function ListDetail({ listId, onBack, onClose }) {
     setData((d) => ({ ...d, items: [...d.items, item] }));
   };
 
+  const addSubtask = async (parentId) => {
+    const item = await createItem(list.id, {}, parentId);
+    setData((d) => ({ ...d, items: [...d.items, item] }));
+    setCollapsedParents((s) => { const next = new Set(s); next.delete(parentId); return next; });
+  };
+
+  const toggleCollapsed = (itemId) => {
+    setCollapsedParents((s) => {
+      const next = new Set(s);
+      next.has(itemId) ? next.delete(itemId) : next.add(itemId);
+      return next;
+    });
+  };
+
+  const titleField = fields.find((f) => f.is_title_field) || fields[0];
+  const topLevelItems = items.filter((it) => !it.parent_item_id);
+  const childrenByParent = items.reduce((map, it) => {
+    if (it.parent_item_id) (map[it.parent_item_id] ||= []).push(it);
+    return map;
+  }, {});
+
   return (
     <>
       <header className="flex items-center gap-2 border-b border-slate-200 px-3 py-2.5 dark:border-slate-800">
@@ -193,6 +217,20 @@ function ListDetail({ listId, onBack, onClose }) {
             {list.name}
           </button>
         )}
+        <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
+          <button
+            onClick={() => setView('table')}
+            className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${view === 'table' ? 'bg-white text-slate-800 shadow-sm dark:bg-slate-700 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}`}
+          >
+            Table
+          </button>
+          <button
+            onClick={() => setView('board')}
+            className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${view === 'board' ? 'bg-white text-slate-800 shadow-sm dark:bg-slate-700 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}`}
+          >
+            Board
+          </button>
+        </div>
         <button onClick={() => setImportOpen(true)} className="shrink-0 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300">
           Import CSV
         </button>
@@ -208,45 +246,74 @@ function ListDetail({ listId, onBack, onClose }) {
         <button onClick={onClose} aria-label="Close" className="shrink-0 text-slate-400 hover:text-slate-600">✕</button>
       </header>
 
-      <div className="flex-1 overflow-auto p-3">
-        <table className="min-w-full border-separate border-spacing-0">
-          <thead>
-            <tr>
-              {fields.map((f) => (
-                <th key={f.id} className="sticky top-0 z-10 min-w-[160px] border-b border-r border-slate-200 bg-slate-50 px-2 py-2 text-left text-xs font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-800/80 dark:text-slate-300">
-                  <FieldHeader field={f} listId={list.id} onChanged={load} />
+      {view === 'table' ? (
+        <div className="flex-1 overflow-auto p-3">
+          <table className="min-w-full border-separate border-spacing-0">
+            <thead>
+              <tr>
+                {fields.map((f) => (
+                  <th key={f.id} className="sticky top-0 z-10 min-w-[160px] border-b border-r border-slate-200 bg-slate-50 px-2 py-2 text-left text-xs font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-800/80 dark:text-slate-300">
+                    <FieldHeader field={f} listId={list.id} onChanged={load} />
+                  </th>
+                ))}
+                <th className="sticky top-0 z-10 w-10 border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/80">
+                  <button
+                    onClick={() => setAddingField(true)}
+                    title="Add field"
+                    className="flex h-full w-full items-center justify-center py-2 text-slate-400 hover:text-blue-600"
+                  >
+                    +
+                  </button>
                 </th>
-              ))}
-              <th className="sticky top-0 z-10 w-10 border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/80">
-                <button
-                  onClick={() => setAddingField(true)}
-                  title="Add field"
-                  className="flex h-full w-full items-center justify-center py-2 text-slate-400 hover:text-blue-600"
-                >
-                  +
-                </button>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <ItemRow
-                key={item.id}
-                item={item}
-                fields={fields}
-                onChanged={(patch) => setData((d) => ({ ...d, items: d.items.map((it) => (it.id === item.id ? { ...it, ...patch } : it)) }))}
-                onDeleted={() => setData((d) => ({ ...d, items: d.items.filter((it) => it.id !== item.id) }))}
-              />
-            ))}
-          </tbody>
-        </table>
-        <button
-          onClick={addItem}
-          className="mt-1 rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-        >
-          + Add item
-        </button>
-      </div>
+              </tr>
+            </thead>
+            <tbody>
+              {topLevelItems.map((item) => {
+                const children = childrenByParent[item.id] || [];
+                const collapsed = collapsedParents.has(item.id);
+                const rowProps = (it) => ({
+                  key: it.id,
+                  item: it,
+                  fields,
+                  onChanged: (patch) => setData((d) => ({ ...d, items: d.items.map((x) => (x.id === it.id ? { ...x, ...patch } : x)) })),
+                  onDeleted: () => setData((d) => ({ ...d, items: d.items.filter((x) => x.id !== it.id) })),
+                });
+                return (
+                  <React.Fragment key={item.id}>
+                    <ItemRow
+                      {...rowProps(item)}
+                      titleFieldId={titleField?.id}
+                      childCount={children.length}
+                      collapsed={collapsed}
+                      onToggleCollapsed={() => toggleCollapsed(item.id)}
+                      onAddSubtask={() => addSubtask(item.id)}
+                    />
+                    {!collapsed && children.map((child) => (
+                      <ItemRow {...rowProps(child)} titleFieldId={titleField?.id} isSubtask />
+                    ))}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+          <button
+            onClick={addItem}
+            className="mt-1 rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            + Add item
+          </button>
+        </div>
+      ) : (
+        <BoardView
+          list={list}
+          fields={fields}
+          items={topLevelItems}
+          groupFieldId={groupFieldId}
+          onChangeGroupField={setGroupFieldId}
+          onAddGroupField={() => setAddingField(true)}
+          setData={setData}
+        />
+      )}
 
       {addingField && <AddFieldModal onCreate={addField} onClose={() => setAddingField(false)} />}
       {importOpen && (
@@ -258,6 +325,121 @@ function ListDetail({ listId, onBack, onClose }) {
         />
       )}
     </>
+  );
+}
+
+const GROUPABLE_TYPES = OPTION_TYPES;   // select / status / priority
+
+/** Kanban board — columns are one field's options (plus a "no value" catch-
+ *  all), cards drag between them via native HTML5 DnD (no extra dependency).
+ *  Grouping field is a local view choice, not persisted per-list, so
+ *  switching between Status/Priority boards costs nothing server-side. */
+function BoardView({ list, fields, items, groupFieldId, onChangeGroupField, onAddGroupField, setData }) {
+  const [draggingId, setDraggingId] = useState(null);
+  const groupableFields = fields.filter((f) => GROUPABLE_TYPES.includes(f.type));
+  const groupField = groupableFields.find((f) => f.id === groupFieldId) || groupableFields[0];
+
+  if (!groupField) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+        <p className="text-sm text-slate-500">
+          Board view groups items by a Status, Priority, or Dropdown field. This list doesn't have one yet.
+        </p>
+        <button onClick={onAddGroupField} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
+          Add a Status field
+        </button>
+      </div>
+    );
+  }
+
+  const NO_VALUE = '__none__';
+  const columns = [...groupField.options, { id: NO_VALUE, label: `No ${groupField.name}`, color: '#94a3b8' }];
+  const titleField = fields.find((f) => f.is_title_field) || fields[0];
+
+  const moveItem = async (itemId, columnId) => {
+    const value = columnId === NO_VALUE ? undefined : columnId;
+    setData((d) => ({
+      ...d,
+      items: d.items.map((it) => (it.id === itemId ? { ...it, values: { ...it.values, [groupField.id]: value } } : it)),
+    }));
+    try { await updateItem(itemId, { [groupField.id]: value }); } catch { /* best-effort */ }
+  };
+
+  const addToColumn = async (columnId) => {
+    const value = columnId === NO_VALUE ? undefined : columnId;
+    const item = await createItem(list.id, { [groupField.id]: value });
+    setData((d) => ({ ...d, items: [...d.items, item] }));
+  };
+
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden">
+      {groupableFields.length > 1 && (
+        <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-800">
+          <span className="text-xs text-slate-500">Group by</span>
+          <select
+            value={groupField.id}
+            onChange={(e) => onChangeGroupField(e.target.value)}
+            className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-700 outline-none dark:bg-slate-800 dark:text-slate-200"
+          >
+            {groupableFields.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+        </div>
+      )}
+      <div className="flex flex-1 gap-3 overflow-x-auto p-3">
+        {columns.map((col) => {
+          const colItems = items.filter((it) => (it.values?.[groupField.id] ?? NO_VALUE) === col.id);
+          return (
+            <div
+              key={col.id}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); const id = e.dataTransfer.getData('text/plain'); if (id) moveItem(id, col.id); }}
+              className="flex w-64 shrink-0 flex-col rounded-xl bg-slate-50 dark:bg-slate-800/60"
+            >
+              <div className="flex items-center gap-2 px-3 py-2.5">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: col.color }} />
+                <span className="truncate text-xs font-semibold text-slate-600 dark:text-slate-300">{col.label}</span>
+                <span className="ml-auto text-[11px] text-slate-400">{colItems.length}</span>
+              </div>
+              <div className="flex-1 space-y-2 overflow-y-auto px-2 pb-2">
+                {colItems.map((item) => (
+                  <div
+                    key={item.id}
+                    draggable
+                    onDragStart={(e) => { e.dataTransfer.setData('text/plain', item.id); setDraggingId(item.id); }}
+                    onDragEnd={() => setDraggingId(null)}
+                    className={`cursor-grab rounded-lg border border-slate-200 bg-white p-2.5 text-xs shadow-sm transition dark:border-slate-700 dark:bg-slate-900 ${draggingId === item.id ? 'opacity-40' : ''}`}
+                  >
+                    <p className="font-medium text-slate-800 dark:text-slate-100">
+                      {(titleField && item.values?.[titleField.id]) || 'Untitled'}
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {fields.filter((f) => f.id !== titleField?.id && f.id !== groupField.id).slice(0, 2).map((f) => {
+                        const v = item.values?.[f.id];
+                        if (v === undefined || v === null || v === '') return null;
+                        const opt = OPTION_TYPES.includes(f.type) ? (f.options || []).find((o) => o.id === v) : null;
+                        const text = opt ? opt.label : f.type === 'checkbox' ? (v ? '✓' : null) : String(v);
+                        if (!text) return null;
+                        return (
+                          <span key={f.id} className="truncate rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                            {text}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => addToColumn(col.id)}
+                className="mx-2 mb-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-medium text-slate-500 hover:bg-slate-200/60 dark:hover:bg-slate-700/60"
+              >
+                + Add item
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -300,7 +482,10 @@ function FieldHeader({ field, onChanged }) {
   );
 }
 
-function ItemRow({ item, fields, onChanged, onDeleted }) {
+function ItemRow({
+  item, fields, onChanged, onDeleted, titleFieldId,
+  isSubtask, childCount, collapsed, onToggleCollapsed, onAddSubtask,
+}) {
   const remove = async () => {
     await deleteItem(item.id);
     onDeleted();
@@ -315,14 +500,35 @@ function ItemRow({ item, fields, onChanged, onDeleted }) {
   };
 
   return (
-    <tr className="group">
+    <tr className={`group ${isSubtask ? 'bg-slate-50/60 dark:bg-slate-800/30' : ''}`}>
       {fields.map((f) => (
         <td key={f.id} className="border-b border-r border-slate-100 px-2 py-1 align-top dark:border-slate-800">
-          <Cell field={f} value={item.values?.[f.id]} onChange={(v) => setValue(f.id, v)} />
+          {f.id === titleFieldId ? (
+            <div className={`flex items-center gap-1 ${isSubtask ? 'pl-5' : ''}`}>
+              {!isSubtask && childCount > 0 && (
+                <button onClick={onToggleCollapsed} className="shrink-0 text-slate-400 hover:text-slate-600">
+                  {collapsed ? '▸' : '▾'}
+                </button>
+              )}
+              <div className="min-w-0 flex-1">
+                <Cell field={f} value={item.values?.[f.id]} onChange={(v) => setValue(f.id, v)} />
+              </div>
+              {!isSubtask && childCount > 0 && (
+                <span className="shrink-0 text-[10px] text-slate-400">{childCount}</span>
+              )}
+            </div>
+          ) : (
+            <Cell field={f} value={item.values?.[f.id]} onChange={(v) => setValue(f.id, v)} />
+          )}
         </td>
       ))}
       <td className="border-b border-slate-100 px-1 py-1 text-center align-middle dark:border-slate-800">
-        <button onClick={remove} title="Delete item" className="text-slate-300 opacity-0 hover:text-red-600 group-hover:opacity-100">×</button>
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+          {!isSubtask && (
+            <button onClick={onAddSubtask} title="Add subtask" className="text-slate-300 hover:text-blue-600">＋</button>
+          )}
+          <button onClick={remove} title="Delete item" className="text-slate-300 hover:text-red-600">×</button>
+        </div>
       </td>
     </tr>
   );

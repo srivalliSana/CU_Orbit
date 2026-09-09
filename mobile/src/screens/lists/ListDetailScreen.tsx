@@ -106,11 +106,13 @@ export default function ListDetailScreen({ route, navigation }: Props) {
   const { fields, items } = data;
   const titleField = fields.find((f) => f.is_title_field) || fields[0];
   const previewFields = fields.filter((f) => f.id !== titleField?.id).slice(0, 3);
+  const topLevelItems = items.filter((it) => !it.parent_item_id);
+  const subtaskCount = (parentId: string) => items.filter((it) => it.parent_item_id === parentId).length;
 
   return (
     <View style={styles.container}>
       <FlatList
-        data={items}
+        data={topLevelItems}
         keyExtractor={(it) => it.id}
         refreshing={isRefetching}
         onRefresh={refetch}
@@ -122,14 +124,20 @@ export default function ListDetailScreen({ route, navigation }: Props) {
         }
         renderItem={({ item }) => {
           const title = titleField ? fieldPreview(titleField, item) : null;
+          const subtasks = subtaskCount(item.id);
           return (
             <Pressable
               style={[styles.card, { borderColor: colors.border, backgroundColor: colors.surface }]}
               onPress={() => navigation.navigate("ListItem", { listId, itemId: item.id })}
             >
-              <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
-                {title || "Untitled"}
-              </Text>
+              <View style={styles.cardTitleRow}>
+                <Text style={[styles.cardTitle, { color: colors.text, flex: 1 }]} numberOfLines={1}>
+                  {title || "Untitled"}
+                </Text>
+                {subtasks > 0 && (
+                  <Text style={[styles.subtaskBadge, { color: colors.textMuted }]}>☑ {subtasks}</Text>
+                )}
+              </View>
               {previewFields.length > 0 && (
                 <View style={styles.previewRow}>
                   {previewFields.map((f) => {
@@ -170,7 +178,9 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 40 },
   card: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 8 },
+  cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   cardTitle: { fontSize: 15, fontWeight: "600" },
+  subtaskBadge: { fontSize: 11, fontWeight: "600" },
   previewRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
   previewChip: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, maxWidth: 160 },
   previewChipText: { fontSize: 11, fontWeight: "600" },

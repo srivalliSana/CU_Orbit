@@ -26,8 +26,8 @@ export const deleteField = (fieldId) => api(`/api/fields/${fieldId}`, { method: 
 export const reorderFields = (listId, order) =>
   api(`/api/lists/${listId}/fields/reorder`, { method: 'PUT', body: JSON.stringify({ order }) });
 
-export const createItem = (listId, values) =>
-  api(`/api/lists/${listId}/items`, { method: 'POST', body: JSON.stringify({ values }) });
+export const createItem = (listId, values, parentItemId) =>
+  api(`/api/lists/${listId}/items`, { method: 'POST', body: JSON.stringify({ values, parent_item_id: parentItemId }) });
 
 export const updateItem = (itemId, values) =>
   api(`/api/items/${itemId}`, { method: 'PUT', body: JSON.stringify({ values }) });
