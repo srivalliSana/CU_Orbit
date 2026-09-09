@@ -5,6 +5,7 @@ import { getHome } from './api/chat';
 import { getMentions } from './api/mentions';
 import { getWorkspaces } from './api/workspaces';
 import ChatList from './components/ChatList';
+import IconRail from './components/IconRail';
 import ChatWindow from './components/ChatWindow';
 import EmptyState from './components/EmptyState';
 import NewGroupModal from './components/NewGroupModal';
@@ -33,6 +34,7 @@ export default function App() {
   const [askNotify, setAskNotify] = useState(false);
   const [contact, setContact] = useState(null);   // { id?, email } shown in the side panel
   const [channelInfoId, setChannelInfoId] = useState(null);   // channel id shown in the side panel
+  const [chatFilter, setChatFilter] = useState('all');   // all | channels | dms — controlled here so the icon rail can drive it
   const [listsChannelId, setListsChannelId] = useState(null);   // channel id whose Lists workspace is open
   const [mentionsOpen, setMentionsOpen] = useState(false);
   const [mentionsUnread, setMentionsUnread] = useState(0);
@@ -273,6 +275,16 @@ export default function App() {
 
   return (
     <div className="relative flex h-screen overflow-hidden bg-slate-100 dark:bg-slate-950">
+      <IconRail
+        user={user}
+        filter={chatFilter}
+        onChangeFilter={(f) => { setChatFilter(f); setActive(null); }}
+        onOpenMentions={() => setMentionsOpen(true)}
+        mentionsUnread={mentionsUnread}
+        onOpenAdmin={() => setAdminOpen(true)}
+        isAdmin={user?.role === 'admin'}
+        onOpenProfile={() => setProfileOpen(true)}
+      />
       <ChatList
         user={user}
         chats={chatsData}
@@ -283,10 +295,8 @@ export default function App() {
         onSelect={setActive}
         onNewGroup={() => setNewGroup(true)}
         onOpenContact={(c) => { setChannelInfoId(null); setContact(c); }}
-        onOpenMentions={() => setMentionsOpen(true)}
-        mentionsUnread={mentionsUnread}
-        onOpenProfile={() => setProfileOpen(true)}
-        onOpenAdmin={user?.role === 'admin' ? () => setAdminOpen(true) : undefined}
+        tab={chatFilter}
+        onTabChange={setChatFilter}
         width={sidebarWidth}
       />
       <div
