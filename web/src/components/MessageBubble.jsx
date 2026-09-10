@@ -216,9 +216,15 @@ export default function MessageBubble({
           <>
           <div className="fixed inset-0 z-10" onClick={() => setActionsOpen(false)} />
           <div
-            className={`absolute right-2 z-20 w-44 overflow-hidden rounded-2xl bg-white py-1.5 shadow-xl ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700 ${
-              actionsFlip === 'up' ? '-top-2 -translate-y-full' : 'top-6'
-            }`}
+            className={`absolute z-20 w-44 overflow-hidden rounded-2xl bg-white py-1.5 shadow-xl ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700 ${
+              // Own messages sit near the chat pane's right edge, so anchoring
+              // to their right edge and expanding left is safe. Received
+              // messages sit near the left edge — anchoring right there
+              // pushed this 176px-wide menu left past the chat pane and
+              // under the sidebar, clipping it. Anchor to the bubble's own
+              // side instead of always the same side.
+              own ? 'right-2' : 'left-2'
+            } ${actionsFlip === 'up' ? '-top-2 -translate-y-full' : 'top-6'}`}
           >
             <div className="flex items-center justify-between px-2 pb-1.5">
               {QUICK_EMOJIS.map((e) => (

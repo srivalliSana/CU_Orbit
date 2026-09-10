@@ -274,7 +274,12 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
           return (
             <React.Fragment key={m.id}>
               {divider && (
-                <div className="my-4 flex justify-center">
+                // Sticky, not just inline: stays pinned at the top of the
+                // scroll area while its day's messages scroll past, then
+                // the next divider pushes it off — the same "today's date
+                // follows you" behavior WhatsApp/Telegram use, rather than
+                // the label just scrolling by like any other message.
+                <div className="sticky top-0 z-[5] my-4 flex justify-center bg-slate-50/95 py-1 backdrop-blur-sm dark:bg-slate-950/95">
                   <span className="rounded-full bg-slate-200 px-3 py-1 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                     {divider}
                   </span>
