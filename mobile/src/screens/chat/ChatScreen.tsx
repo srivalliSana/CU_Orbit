@@ -192,6 +192,7 @@ export default function ChatScreen({ route, navigation }: Props) {
             onOpenProfile={(userId) => setProfileUserId(userId)}
             onVote={item.poll ? (optionIndex) => vote.mutate({ pollId: item.poll!.id, optionIndex }) : undefined}
             onAction={(actionId, value) => action.mutate({ messageId: item.id, actionId, value })}
+            onJumpToMessage={jumpToMessage}
             currentUserId={selfId}
             onOpenDm={(chat) => navigation.push("Chat", { containerId: chat.id, title: chat.title, kind: "dm" })}
           />

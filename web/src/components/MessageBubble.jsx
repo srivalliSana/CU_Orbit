@@ -76,7 +76,7 @@ function ActionButtons({ message: m, own, onChanged }) {
 
 export default function MessageBubble({
   message, own, showSender, isGroup, canModerate, isSuperAdmin, onChanged,
-  onReply, onForward, onOpenProfile, currentUserId, onOpenDm,
+  onReply, onForward, onOpenProfile, currentUserId, onOpenDm, onJumpToMessage,
 }) {
   const m = message;
   const [reads, setReads] = useState(null);   // null = not requested
@@ -308,14 +308,16 @@ export default function MessageBubble({
           )}
 
           {m.reply_to && (
-            <div
-              className={`mb-1 rounded-lg border-l-2 px-2 py-1 text-xs ${
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onJumpToMessage?.(m.reply_to.id); }}
+              className={`mb-1 block w-full rounded-lg border-l-2 px-2 py-1 text-left text-xs transition hover:brightness-95 ${
                 own ? 'border-blue-200 bg-blue-500/30 text-blue-50' : 'border-blue-400 bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
               }`}
             >
               <p className="font-semibold">{m.reply_to.sender_name}</p>
               <p className="truncate">{m.reply_to.text || 'Attachment'}</p>
-            </div>
+            </button>
           )}
 
           {m.type === 'poll' && m.poll && (

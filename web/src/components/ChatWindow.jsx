@@ -296,6 +296,7 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
                   onChanged={refreshMessages}
                   onReply={setReplyTo}
                   onForward={setForwarding}
+                  onJumpToMessage={jumpToMessage}
                   onOpenProfile={onOpenProfile}
                   currentUserId={user?.id}
                   onOpenDm={onOpenDm}

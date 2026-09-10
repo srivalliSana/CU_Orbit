@@ -29,6 +29,7 @@ export default function MessageBubble({
   onOpenProfile,
   onVote,
   onAction,
+  onJumpToMessage,
   highlighted,
   currentUserId,
   onOpenDm,
@@ -49,6 +50,7 @@ export default function MessageBubble({
   onOpenProfile?: (userId: string) => void;
   onVote?: (optionIndex: number) => void;
   onAction?: (actionId: string, value: string | undefined) => void;
+  onJumpToMessage?: (messageId: string) => void;
   currentUserId?: string;
   onOpenDm?: (chat: { id: string; kind: "dm"; title: string }) => void;
 }) {
@@ -129,10 +131,13 @@ export default function MessageBubble({
         ) : null}
 
         {message.reply_to ? (
-          <View style={styles.replyQuote}>
+          <Pressable
+            onPress={() => onJumpToMessage?.(message.reply_to!.id)}
+            style={styles.replyQuote}
+          >
             <Text style={styles.replyQuoteSender}>{message.reply_to.sender_name}</Text>
             <Text style={styles.replyQuoteText} numberOfLines={1}>{message.reply_to.text || "Attachment"}</Text>
-          </View>
+          </Pressable>
         ) : null}
 
         {message.type === "poll" && message.poll ? (
