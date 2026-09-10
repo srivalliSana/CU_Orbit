@@ -6,6 +6,8 @@ import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import ReactionPicker from "./ReactionPicker";
 import EditMessageModal from "./EditMessageModal";
 import Avatar from "./Avatar";
+import LinkPreviewCard from "./LinkPreviewCard";
+import AddToListSheet from "./lists/AddToListSheet";
 import { renderMessageText } from "../lib/markdown";
 import { openFile, saveFile } from "../lib/fileActions";
 import { resolveMediaUrl } from "../constants/config";
@@ -57,6 +59,7 @@ export default function MessageBubble({
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [addToListVisible, setAddToListVisible] = useState(false);
   const [editVisible, setEditVisible] = useState(false);
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [votesVisible, setVotesVisible] = useState(false);
@@ -265,6 +268,8 @@ export default function MessageBubble({
           </Text>
         ) : null}
 
+        {message.text && message.type === "text" ? <LinkPreviewCard text={message.text} /> : null}
+
         <ActionButtonsRow message={message} isOwn={isOwn} onAction={onAction} styles={styles} colors={colors} />
 
         <View style={styles.metaRow}>
@@ -306,8 +311,19 @@ export default function MessageBubble({
         onReply={onReply}
         onForward={onForward}
         onStar={() => onStar?.(!message.is_starred)}
+        onAddToList={message.channel_id ? () => setAddToListVisible(true) : undefined}
         onClose={() => setPickerVisible(false)}
       />
+
+      {message.channel_id && (
+        <AddToListSheet
+          visible={addToListVisible}
+          channelId={message.channel_id}
+          messageId={message.id}
+          messageText={message.text}
+          onClose={() => setAddToListVisible(false)}
+        />
+      )}
 
       <EditMessageModal
         visible={editVisible}

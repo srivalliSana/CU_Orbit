@@ -7,6 +7,7 @@ import {
   addItemComment, createItem, deleteItem, deleteItemComment, getItemComments, getList, updateItem,
   type ListDetail, type ListField, type ListItemComment, type ListItemRow,
 } from "../../api/lists";
+import { getChannelMembers } from "../../api/channels";
 import Avatar from "../../components/Avatar";
 import OptionPickerModal from "../../components/lists/OptionPickerModal";
 import { useThemeColors } from "../../state/themeStore";
@@ -28,6 +29,12 @@ export default function ListItemScreen({ route, navigation }: Props) {
 
   const { data, isLoading } = useQuery({ queryKey: ["list", listId], queryFn: () => getList(listId) });
   const item = data?.items.find((it) => it.id === itemId);
+  const membersQuery = useQuery({
+    queryKey: ["channelMembers", data?.list.channel_id],
+    queryFn: () => getChannelMembers(data!.list.channel_id),
+    enabled: !!data?.list.channel_id,
+  });
+  const members = membersQuery.data ?? [];
 
   const save = useMutation({
     mutationFn: (values: Record<string, unknown>) => updateItem(itemId, values),
@@ -108,6 +115,7 @@ export default function ListItemScreen({ route, navigation }: Props) {
           key={field.id}
           field={field}
           value={item.values?.[field.id]}
+          members={members}
           onChange={(v) => save.mutate({ [field.id]: v })}
           onOpenPicker={() => setPickerField(field)}
           styles={styles}
@@ -142,7 +150,7 @@ export default function ListItemScreen({ route, navigation }: Props) {
         <OptionPickerModal
           visible
           title={pickerField.name}
-          options={pickerField.options}
+          options={pickerField.type === "assignee" ? members.map((m) => ({ id: m.id, label: m.name })) : pickerField.options}
           selectedId={item.values?.[pickerField.id] as string | undefined}
           allowClear
           onSelect={(id) => save.mutate({ [pickerField.id]: id || undefined })}
@@ -265,10 +273,11 @@ function CommentsSection({
 }
 
 function FieldRow({
-  field, value, onChange, onOpenPicker, styles,
+  field, value, members, onChange, onOpenPicker, styles,
 }: {
   field: ListField;
   value: string | number | boolean | undefined;
+  members: { id: string; name: string }[];
   onChange: (v: unknown) => void;
   onOpenPicker: () => void;
   styles: ReturnType<typeof makeStyles>;
@@ -310,6 +319,26 @@ function FieldRow({
     );
   }
 
+  if (field.type === "assignee") {
+    // A legacy free-text value won't match any member — show it plainly
+    // rather than silently reverting to "Unassigned".
+    const person = members.find((m) => m.id === value);
+    return (
+      <View style={styles.fieldBlock}>
+        {label}
+        <Pressable onPress={onOpenPicker} style={styles.pickerButton}>
+          {person ? (
+            <Text style={{ color: styles.input.color, fontSize: 14 }}>{person.name}</Text>
+          ) : value ? (
+            <Text style={{ color: styles.input.color, fontSize: 14 }}>{String(value)}</Text>
+          ) : (
+            <Text style={styles.placeholder}>Unassigned</Text>
+          )}
+        </Pressable>
+      </View>
+    );
+  }
+
   if (field.type === "long_text") {
     return (
       <View style={styles.fieldBlock}>
@@ -328,7 +357,7 @@ function FieldRow({
       <TextInput
         value={draft} onChangeText={setDraft} onBlur={() => onChange(draft)}
         keyboardType={field.type === "number" ? "numeric" : "default"}
-        placeholder={field.type === "date" ? "YYYY-MM-DD" : field.type === "assignee" ? "name or email" : undefined}
+        placeholder={field.type === "date" ? "YYYY-MM-DD" : undefined}
         placeholderTextColor={styles.placeholder.color as string}
         style={styles.input}
       />

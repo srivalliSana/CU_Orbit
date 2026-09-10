@@ -12,6 +12,7 @@ import NewGroupModal from './components/NewGroupModal';
 import ContactPanel from './components/ContactPanel';
 import ChannelInfoPanel from './components/ChannelInfoPanel';
 import ListsPanel from './components/ListsPanel';
+import ThreadsPanel from './components/ThreadsPanel';
 import MentionsPanel from './components/MentionsPanel';
 import ProfilePanel from './components/ProfilePanel';
 import SettingsPanel from './components/SettingsPanel';
@@ -35,6 +36,7 @@ export default function App() {
   const [contact, setContact] = useState(null);   // { id?, email } shown in the side panel
   const [channelInfoId, setChannelInfoId] = useState(null);   // channel id shown in the side panel
   const [chatFilter, setChatFilter] = useState('all');   // all | channels | dms — controlled here so the icon rail can drive it
+  const [threadsOpen, setThreadsOpen] = useState(false);
   const [listsChannelId, setListsChannelId] = useState(null);   // channel id whose Lists workspace is open
   const [mentionsOpen, setMentionsOpen] = useState(false);
   const [mentionsUnread, setMentionsUnread] = useState(0);
@@ -281,6 +283,7 @@ export default function App() {
         onChangeFilter={(f) => { setChatFilter(f); setActive(null); }}
         onOpenMentions={() => setMentionsOpen(true)}
         mentionsUnread={mentionsUnread}
+        onOpenThreads={() => setThreadsOpen(true)}
         onOpenAdmin={() => setAdminOpen(true)}
         isAdmin={user?.role === 'admin'}
         onOpenProfile={() => setProfileOpen(true)}
@@ -347,6 +350,15 @@ export default function App() {
 
       {listsChannelId && (
         <ListsPanel channelId={listsChannelId} onClose={() => setListsChannelId(null)} />
+      )}
+
+      {threadsOpen && (
+        <ThreadsPanel
+          user={user}
+          onClose={() => setThreadsOpen(false)}
+          onOpenDm={(dmChat) => { setThreadsOpen(false); setContact(null); setActive(dmChat); }}
+          onOpenProfile={(userId) => setProfileUserId(userId)}
+        />
       )}
 
       {mentionsOpen && (

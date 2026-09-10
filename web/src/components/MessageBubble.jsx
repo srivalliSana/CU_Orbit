@@ -5,6 +5,8 @@ import { deleteMessage, editMessage, getReads, hideMessage, reactToMessage, send
 import Avatar from './Avatar';
 import EmojiPicker from './EmojiPicker';
 import PollVotesModal from './PollVotesModal';
+import LinkPreviewCard from './LinkPreviewCard';
+import AddToListModal from './AddToListModal';
 import { saveFile } from '../lib/saveFile';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -90,6 +92,7 @@ export default function MessageBubble({
   const [starred, setStarred] = useState(!!m.is_starred);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [deleteMenuOpen, setDeleteMenuOpen] = useState(false);
+  const [addingToList, setAddingToList] = useState(false);
   const [viewingVotes, setViewingVotes] = useState(false);
 
   const reactionCounts = useMemo(() => {
@@ -246,6 +249,9 @@ export default function MessageBubble({
             <MenuItem icon="➡️" label="Forward" onClick={() => { setActionsOpen(false); onForward?.(m); }} />
             <MenuItem icon="📌" label={m.is_pinned ? 'Unpin' : 'Pin'} onClick={togglePin} disabled={busy} />
             <MenuItem icon={starred ? '⭐' : '☆'} label={starred ? 'Unstar' : 'Star'} onClick={toggleStar} />
+            {m.channel_id && (
+              <MenuItem icon="📋" label="Add to list" onClick={() => { setActionsOpen(false); setAddingToList(true); }} />
+            )}
             {canEdit && (
               <MenuItem icon="✏️" label="Edit" onClick={() => { setActionsOpen(false); setEditText(m.text); setEditing(true); }} />
             )}
@@ -275,6 +281,10 @@ export default function MessageBubble({
               </button>
             </div>
           </div>
+        )}
+
+        {addingToList && (
+          <AddToListModal channelId={m.channel_id} message={m} onClose={() => setAddingToList(false)} />
         )}
 
         {emojiPickerOpen && (
@@ -461,6 +471,8 @@ export default function MessageBubble({
               </div>
             ) : null
           )}
+
+          {m.text && m.type === 'text' && !editing && <LinkPreviewCard text={m.text} />}
 
           <ActionButtons message={m} own={own} onChanged={onChanged} />
 

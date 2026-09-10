@@ -20,6 +20,7 @@ export type HomeStackParamList = {
   };
   Lists: { channelId: string; channelName?: string };
   ListDetail: { listId: string; listName?: string };
+  ListBoard: { listId: string; listName?: string };
   ListItem: { listId: string; itemId: string };
   ListFields: { listId: string };
   ListImport: { listId: string };

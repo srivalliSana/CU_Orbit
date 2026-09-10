@@ -6,6 +6,8 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
+const dns = require('dns').promises;
+const net = require('net');
 require('dotenv').config();
 const { OAuth2Client } = require('google-auth-library');
 const nodemailer = require('nodemailer');
@@ -554,6 +556,10 @@ const ListItem = sequelize.define('ListItem', {
     // Null = a top-level item. One level of nesting only, matching Slack's
     // own Lists — a subtask can't itself have subtasks.
     parent_item_id: { type: DataTypes.UUID, allowNull: true },
+    // Set when this item was created via "Convert to list item" on a chat
+    // message — a soft reference back to it (like reply_to on Message),
+    // not a hard FK, so a later-deleted source message doesn't break this.
+    source_message_id: { type: DataTypes.UUID, allowNull: true },
 }, {
     indexes: [{ fields: ['list_id'] }, { fields: ['parent_item_id'] }],
 });
@@ -2325,37 +2331,78 @@ async function serializeMessage(m, viewerId, { starred, pollSummaries } = {}) {
  * else, so this can never surface a message from a container the user
  * couldn't open directly.
  */
+/** Pulls Slack-style from:/in:/before:/after: tokens out of a search query,
+ *  leaving the plain text behind — "from:priya standup" finds "standup"
+ *  sent by Priya, not the literal string "from:priya standup". */
+function parseSearchQuery(raw) {
+    const filters = { from: null, in: null, before: null, after: null };
+    const text = raw
+        .replace(/\b(from|in|before|after):("[^"]+"|\S+)/gi, (_, key, val) => {
+            filters[key.toLowerCase()] = val.replace(/^"|"$/g, '');
+            return '';
+        })
+        .trim()
+        .replace(/\s+/g, ' ');
+    return { text, filters };
+}
+
 app.get('/api/search', auth.requireAuth, async (req, res) => {
     try {
-        const q = String(req.query.q || '').trim();
-        if (q.length < 2) return res.json({ messages: [] });
+        const raw = String(req.query.q || '').trim();
+        const { text, filters } = parseSearchQuery(raw);
+        const hasFilter = filters.from || filters.in || filters.before || filters.after;
+        if (text.length < 2 && !hasFilter) return res.json({ messages: [] });
 
         const userId = req.user.id;
         // Optional: scope to one already-open conversation ("search in this chat").
         const scopeContainerId = req.query.container_id ? String(req.query.container_id) : null;
-        const before = req.query.before ? Number(req.query.before) : null;
+        const beforeCursor = req.query.before ? Number(req.query.before) : null;   // pagination, not the before: filter
         const limit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 100);
 
         const memberships = await ChannelMember.findAll({ where: { userId } });
         const channelIds = memberships.map((m) => m.channelId);
-        const allChannelIds = isGroupAdmin(req.user)
+        let allChannelIds = isGroupAdmin(req.user)
             ? (await Channel.findAll({ attributes: ['id'] })).map((c) => c.id)
             : channelIds;
 
+        // in:general — narrow to channels whose name matches, and (since a
+        // named channel can't be a DM) drop the DM branch of the OR below.
+        if (filters.in) {
+            const matched = await Channel.findAll({ where: { name: { [Op.like]: `%${filters.in}%` } }, attributes: ['id'] });
+            const matchedIds = new Set(matched.map((c) => c.id));
+            allChannelIds = allChannelIds.filter((id) => matchedIds.has(id));
+        }
+
         const where = {
-            body: { [Op.like]: `%${q}%` },
+            body: { [Op.like]: `%${text}%` },
             deleted_at: null,
-            [Op.or]: [
-                { channelId: { [Op.in]: allChannelIds } },
-                { dm_id: { [Op.like]: `%${userId}%` } },
-            ],
+            [Op.or]: filters.in
+                ? [{ channelId: { [Op.in]: allChannelIds } }]
+                : [
+                    { channelId: { [Op.in]: allChannelIds } },
+                    { dm_id: { [Op.like]: `%${userId}%` } },
+                ],
         };
+        if (filters.from) where.senderName = { [Op.like]: `%${filters.from}%` };
         if (scopeContainerId) {
             where[Op.and] = scopeContainerId.includes('_')
                 ? { dm_id: scopeContainerId }
                 : { channelId: scopeContainerId };
         }
-        if (before) where.timestamp = { [Op.lt]: before };
+        // Op.lt/Op.gte are Symbol keys — Object.keys() can't see them, so
+        // track presence with a plain boolean instead of relying on that.
+        const timestampBounds = {};
+        let hasTimestampBound = false;
+        if (beforeCursor) { timestampBounds[Op.lt] = beforeCursor; hasTimestampBound = true; }
+        if (filters.after) {
+            const d = new Date(filters.after);
+            if (!isNaN(d)) { timestampBounds[Op.gte] = d.getTime(); hasTimestampBound = true; }
+        }
+        if (filters.before) {
+            const d = new Date(filters.before);
+            if (!isNaN(d)) { timestampBounds[Op.lt] = Math.min(timestampBounds[Op.lt] ?? Infinity, d.getTime()); hasTimestampBound = true; }
+        }
+        if (hasTimestampBound) where.timestamp = timestampBounds;
 
         // Fetch one extra row past the page size purely to know whether a
         // next page exists, without a separate COUNT query.
@@ -3255,6 +3302,129 @@ app.post('/api/threads/:parentId/read', auth.requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
+// --- Link unfurling ---
+//
+// Any signed-in user can trigger this just by typing a URL into a message —
+// a much wider attack surface than the Apps platform's admin-registered
+// webhooks, so this gets real SSRF protection: resolve the hostname and
+// reject private/loopback/link-local ranges (closes the "fetch my own
+// internal service" and cloud-metadata-endpoint classes of attack), and
+// never follow a redirect (closes "public URL 302s to an internal one").
+
+const LINK_PREVIEW_CACHE = new Map();   // url -> { data, expiresAt }
+const LINK_PREVIEW_TTL_MS = 6 * 60 * 60 * 1000;
+const LINK_PREVIEW_MAX_CACHE = 500;
+
+function isPrivateIp(ip) {
+    const version = net.isIP(ip);
+    if (version === 4) {
+        const [a, b] = ip.split('.').map(Number);
+        if (a === 127 || a === 10 || a === 0) return true;
+        if (a === 169 && b === 254) return true;   // link-local, incl. cloud metadata (169.254.169.254)
+        if (a === 172 && b >= 16 && b <= 31) return true;
+        if (a === 192 && b === 168) return true;
+        return false;
+    }
+    if (version === 6) {
+        const lower = ip.toLowerCase();
+        if (lower === '::1') return true;
+        if (lower.startsWith('fc') || lower.startsWith('fd')) return true;   // unique local
+        if (lower.startsWith('fe80')) return true;   // link-local
+        return false;
+    }
+    return true;   // couldn't parse — refuse rather than guess
+}
+
+async function isSafeExternalUrl(url) {
+    if (!['http:', 'https:'].includes(url.protocol)) return false;
+    try {
+        const { address } = await dns.lookup(url.hostname);
+        return !isPrivateIp(address);
+    } catch {
+        return false;
+    }
+}
+
+/** Reads a response body up to a byte cap — a malicious/misconfigured
+ *  server could otherwise send gigabytes and exhaust memory. */
+async function readCapped(resp, maxBytes) {
+    const reader = resp.body?.getReader?.();
+    if (!reader) return '';
+    const decoder = new TextDecoder();
+    let text = '';
+    let total = 0;
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.length;
+        if (total > maxBytes) { reader.cancel().catch(() => {}); break; }
+        text += decoder.decode(value, { stream: true });
+    }
+    return text;
+}
+
+// A <meta> tag's property/name and content attributes can appear in either
+// order in real-world HTML — try both attribute orderings.
+const metaTag = (html, key) => {
+    const attrFirst = html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${key}["'][^>]+content=["']([^"']*)["']`, 'i'));
+    if (attrFirst) return attrFirst[1];
+    const contentFirst = html.match(new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']${key}["']`, 'i'));
+    return contentFirst ? contentFirst[1] : null;
+};
+
+const decodeEntities = (s) => s
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#0?39;/g, "'");
+
+app.get('/api/link-preview', auth.requireAuth, async (req, res) => {
+    try {
+        let url;
+        try { url = new URL(String(req.query.url || '')); } catch { return res.status(400).json({ error: 'bad_request' }); }
+
+        const cached = LINK_PREVIEW_CACHE.get(url.href);
+        if (cached && cached.expiresAt > Date.now()) return res.json(cached.data);
+
+        if (!(await isSafeExternalUrl(url))) return res.json({});
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 4000);
+        let resp;
+        try {
+            resp = await fetch(url.href, {
+                redirect: 'manual',   // never follow — see comment above
+                signal: controller.signal,
+                headers: { 'User-Agent': "Mozilla/5.0 (compatible; LetsConnectLinkPreview/1.0)" },
+            });
+        } finally {
+            clearTimeout(timeout);
+        }
+        if (resp.type === 'opaqueredirect' || (resp.status >= 300 && resp.status < 400) || !resp.ok) {
+            const empty = {};
+            LINK_PREVIEW_CACHE.set(url.href, { data: empty, expiresAt: Date.now() + LINK_PREVIEW_TTL_MS });
+            return res.json(empty);
+        }
+        const contentType = resp.headers.get('content-type') || '';
+        if (!contentType.includes('text/html')) return res.json({});
+
+        const html = await readCapped(resp, 300 * 1024);
+        const data = {
+            url: url.href,
+            site_name: metaTag(html, 'og:site_name') || url.hostname,
+            title: decodeEntities(metaTag(html, 'og:title') || html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] || url.hostname).trim().slice(0, 200),
+            description: decodeEntities(metaTag(html, 'og:description') || metaTag(html, 'description') || '').trim().slice(0, 300) || null,
+            image: metaTag(html, 'og:image') || null,
+        };
+
+        if (LINK_PREVIEW_CACHE.size >= LINK_PREVIEW_MAX_CACHE) {
+            LINK_PREVIEW_CACHE.delete(LINK_PREVIEW_CACHE.keys().next().value);
+        }
+        LINK_PREVIEW_CACHE.set(url.href, { data, expiresAt: Date.now() + LINK_PREVIEW_TTL_MS });
+        res.json(data);
+    } catch (e) {
+        res.json({});   // a broken/unreachable link is not an error the client needs to see
+    }
+});
+
 // --- Lists platform (Slack Lists equivalent) — Phase 1 ---
 //
 // A List belongs to one channel; access is exactly channel-membership,
@@ -3444,6 +3614,37 @@ app.post('/api/lists/:id/items', auth.requireAuth, async (req, res) => {
     } catch (e) { console.error('[lists-item-create]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
+/**
+ * "Convert to list item" — one click from a message's action menu. Server
+ * resolves the list's title field itself (rather than making the client
+ * fetch the list just to find it) so the client only ever needs the list
+ * id and the message id.
+ */
+app.post('/api/lists/:id/items/from-message', auth.requireAuth, async (req, res) => {
+    try {
+        const { list, error } = await loadListWithAccess(req.params.id, req.user.id, req.user);
+        if (error) return res.status(error).json({ error: error === 404 ? 'not_found' : 'forbidden' });
+        const msg = await Message.findByPk(req.body.message_id);
+        if (!msg) return res.status(404).json({ error: 'not_found', message: 'Message not found' });
+        // Defense in depth: the list's own access check above only proves
+        // the caller can see the list's channel, not necessarily this
+        // specific message's container (matters once DMs can hold lists too).
+        if (!(await canAccessContainer(req.user.id, msg.channelId || msg.dm_id, req.user))) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
+        const titleField = await ListField.findOne({ where: { list_id: list.id, is_title_field: true } });
+        const maxPos = await ListItem.max('position', { where: { list_id: list.id, parent_item_id: null } });
+        const item = await ListItem.create({
+            list_id: list.id,
+            values: titleField ? { [titleField.id]: (msg.body || 'Attachment').slice(0, 500) } : {},
+            source_message_id: msg.id,
+            created_by: req.user.id,
+            position: (Number.isFinite(maxPos) ? maxPos : -1) + 1,
+        });
+        res.json(item);
+    } catch (e) { console.error('[lists-item-from-message]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
 app.put('/api/items/:id', auth.requireAuth, async (req, res) => {
     try {
         const item = await ListItem.findByPk(req.params.id);
@@ -3613,11 +3814,24 @@ app.get('/api/lists/:id/export', auth.requireAuth, async (req, res) => {
         const fields = await ListField.findAll({ where: { list_id: list.id }, order: [['position', 'ASC']] });
         const items = await ListItem.findAll({ where: { list_id: list.id }, order: [['position', 'ASC'], ['createdAt', 'ASC']] });
 
+        // Assignee values are User ids (a real member picker, not free text) —
+        // resolve them to display names for the export the same way select/
+        // status/priority option ids resolve to their labels.
+        const assigneeIds = new Set();
+        for (const item of items) {
+            for (const f of fields) {
+                if (f.type === 'assignee' && item.values?.[f.id]) assigneeIds.add(item.values[f.id]);
+            }
+        }
+        const assigneeUsers = assigneeIds.size ? await User.findAll({ where: { id: { [Op.in]: [...assigneeIds] } }, attributes: ['id', 'name'] }) : [];
+        const assigneeName = new Map(assigneeUsers.map((u) => [u.id, u.name]));
+
         const optionLabel = (field, id) => (field.options || []).find((o) => o.id === id)?.label ?? id;
         const cellText = (field, raw) => {
             if (raw === undefined || raw === null) return '';
             if (field.type === 'checkbox') return raw ? 'true' : 'false';
             if (field.type === 'select' || field.type === 'status' || field.type === 'priority') return optionLabel(field, raw);
+            if (field.type === 'assignee') return assigneeName.get(raw) || String(raw);
             return String(raw);
         };
 

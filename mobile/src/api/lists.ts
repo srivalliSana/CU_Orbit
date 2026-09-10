@@ -82,6 +82,9 @@ export const deleteField = (fieldId: string) => client.delete(`/fields/${fieldId
 export const createItem = (listId: string, values: Record<string, unknown> = {}, parentItemId?: string) =>
   client.post<ListItemRow>(`/lists/${listId}/items`, { values, parent_item_id: parentItemId }).then((res) => res.data);
 
+export const addMessageToList = (listId: string, messageId: string) =>
+  client.post<ListItemRow>(`/lists/${listId}/items/from-message`, { message_id: messageId }).then((res) => res.data);
+
 export const updateItem = (itemId: string, values: Record<string, unknown>) =>
   client.put<ListItemRow>(`/items/${itemId}`, { values }).then((res) => res.data);
 

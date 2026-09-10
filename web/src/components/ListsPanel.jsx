@@ -6,6 +6,7 @@ import {
 import { parseCsv } from '../lib/csv';
 import Avatar from './Avatar';
 import { clockLabel } from '../lib/format';
+import { getChannelMembers } from '../api/channels';
 
 const FIELD_TYPES = [
   { id: 'text', label: 'Text' },
@@ -141,9 +142,14 @@ function ListDetail({ listId, onBack, onClose }) {
   const [groupFieldId, setGroupFieldId] = useState(null);   // which select/status/priority field the board groups by
   const [collapsedParents, setCollapsedParents] = useState(() => new Set());
   const [detailItemId, setDetailItemId] = useState(null);
+  const [members, setMembers] = useState([]);   // this list's channel members — backs the Assignee field picker
 
   const load = () => getList(listId).then(setData).catch((e) => setError(e.message));
   useEffect(() => { load(); }, [listId]);
+  useEffect(() => {
+    if (!data?.list?.channel_id) return;
+    getChannelMembers(data.list.channel_id).then(setMembers).catch(() => setMembers([]));
+  }, [data?.list?.channel_id]);
 
   if (error) {
     return (
@@ -278,6 +284,7 @@ function ListDetail({ listId, onBack, onClose }) {
                   key: it.id,
                   item: it,
                   fields,
+                  members,
                   onChanged: (patch) => setData((d) => ({ ...d, items: d.items.map((x) => (x.id === it.id ? { ...x, ...patch } : x)) })),
                   onDeleted: () => setData((d) => ({ ...d, items: d.items.filter((x) => x.id !== it.id) })),
                   onOpenDetail: () => setDetailItemId(it.id),
@@ -312,6 +319,7 @@ function ListDetail({ listId, onBack, onClose }) {
           list={list}
           fields={fields}
           items={topLevelItems}
+          members={members}
           groupFieldId={groupFieldId}
           onChangeGroupField={setGroupFieldId}
           onAddGroupField={() => setAddingField(true)}
@@ -332,6 +340,7 @@ function ListDetail({ listId, onBack, onClose }) {
         <ItemDetailModal
           item={items.find((it) => it.id === detailItemId)}
           fields={fields}
+          members={members}
           onChanged={(patch) => setData((d) => ({ ...d, items: d.items.map((x) => (x.id === detailItemId ? { ...x, ...patch } : x)) }))}
           onClose={() => setDetailItemId(null)}
         />
@@ -346,7 +355,7 @@ const GROUPABLE_TYPES = OPTION_TYPES;   // select / status / priority
  *  all), cards drag between them via native HTML5 DnD (no extra dependency).
  *  Grouping field is a local view choice, not persisted per-list, so
  *  switching between Status/Priority boards costs nothing server-side. */
-function BoardView({ list, fields, items, groupFieldId, onChangeGroupField, onAddGroupField, setData }) {
+function BoardView({ list, fields, items, members, groupFieldId, onChangeGroupField, onAddGroupField, setData }) {
   const [draggingId, setDraggingId] = useState(null);
   const groupableFields = fields.filter((f) => GROUPABLE_TYPES.includes(f.type));
   const groupField = groupableFields.find((f) => f.id === groupFieldId) || groupableFields[0];
@@ -429,7 +438,11 @@ function BoardView({ list, fields, items, groupFieldId, onChangeGroupField, onAd
                         const v = item.values?.[f.id];
                         if (v === undefined || v === null || v === '') return null;
                         const opt = OPTION_TYPES.includes(f.type) ? (f.options || []).find((o) => o.id === v) : null;
-                        const text = opt ? opt.label : f.type === 'checkbox' ? (v ? '✓' : null) : String(v);
+                        const assignee = f.type === 'assignee' ? (members || []).find((m) => m.id === v) : null;
+                        const text = opt ? opt.label
+                          : f.type === 'assignee' ? (assignee?.name || v)
+                          : f.type === 'checkbox' ? (v ? '✓' : null)
+                          : String(v);
                         if (!text) return null;
                         return (
                           <span key={f.id} className="truncate rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
@@ -495,7 +508,7 @@ function FieldHeader({ field, onChanged }) {
 }
 
 function ItemRow({
-  item, fields, onChanged, onDeleted, titleFieldId,
+  item, fields, members, onChanged, onDeleted, titleFieldId,
   isSubtask, childCount, collapsed, onToggleCollapsed, onAddSubtask, onOpenDetail,
 }) {
   const remove = async () => {
@@ -523,14 +536,14 @@ function ItemRow({
                 </button>
               )}
               <div className="min-w-0 flex-1">
-                <Cell field={f} value={item.values?.[f.id]} onChange={(v) => setValue(f.id, v)} />
+                <Cell field={f} value={item.values?.[f.id]} onChange={(v) => setValue(f.id, v)} members={members} />
               </div>
               {!isSubtask && childCount > 0 && (
                 <span className="shrink-0 text-[10px] text-slate-400">{childCount}</span>
               )}
             </div>
           ) : (
-            <Cell field={f} value={item.values?.[f.id]} onChange={(v) => setValue(f.id, v)} />
+            <Cell field={f} value={item.values?.[f.id]} onChange={(v) => setValue(f.id, v)} members={members} />
           )}
         </td>
       ))}
@@ -553,11 +566,29 @@ function ItemRow({
   );
 }
 
-function Cell({ field, value, onChange }) {
+function Cell({ field, value, onChange, members }) {
   const [draft, setDraft] = useState(value ?? '');
   useEffect(() => { setDraft(value ?? ''); }, [value]);
 
   const commit = () => { if (draft !== (value ?? '')) onChange(draft); };
+
+  if (field.type === 'assignee') {
+    const list = members || [];
+    const matched = list.find((m) => m.id === value);
+    // A legacy free-text value (from before this was a real picker) won't
+    // match any member id — keep it selectable/visible instead of the
+    // dropdown silently reverting to blank.
+    return (
+      <select
+        value={value || ''} onChange={(e) => onChange(e.target.value || undefined)}
+        className="w-full min-w-[130px] rounded bg-transparent px-1 py-0.5 text-xs text-slate-700 outline-none dark:text-slate-200"
+      >
+        <option value="">Unassigned</option>
+        {value && !matched && <option value={value}>{value}</option>}
+        {list.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+      </select>
+    );
+  }
 
   if (field.type === 'checkbox') {
     return <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} className="h-4 w-4" />;
@@ -606,11 +637,9 @@ function Cell({ field, value, onChange }) {
     );
   }
 
-  // text / assignee
   return (
     <input
       value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={commit}
-      placeholder={field.type === 'assignee' ? 'name or email' : undefined}
       className="w-full min-w-[130px] bg-transparent text-xs text-slate-700 outline-none dark:text-slate-200"
     />
   );
@@ -793,7 +822,7 @@ function ImportCsvModal({ listId, fields, onDone, onClose }) {
  *  (Slack's phrasing) of comments. Opened via the 💬 icon on a table row,
  *  since the row's title cell is already a click-to-edit text field and
  *  can't double as the open-detail trigger. */
-function ItemDetailModal({ item, fields, onChanged, onClose }) {
+function ItemDetailModal({ item, fields, members, onChanged, onClose }) {
   const [comments, setComments] = useState(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -848,7 +877,7 @@ function ItemDetailModal({ item, fields, onChanged, onClose }) {
                   {TYPE_ICON[f.type] || '✎'} {f.name}
                 </span>
                 <div className="min-w-0 flex-1 rounded-lg bg-slate-50 px-2 py-1 dark:bg-slate-800">
-                  <Cell field={f} value={item.values?.[f.id]} onChange={(v) => setValue(f.id, v)} />
+                  <Cell field={f} value={item.values?.[f.id]} onChange={(v) => setValue(f.id, v)} members={members} />
                 </div>
               </div>
             ))}

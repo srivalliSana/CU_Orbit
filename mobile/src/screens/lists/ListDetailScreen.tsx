@@ -7,18 +7,24 @@ import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { createItem, deleteList, exportListCsvText, getList, type ListField, type ListItemRow } from "../../api/lists";
+import { getChannelMembers } from "../../api/channels";
 import { useThemeColors } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "ListDetail">;
 
-/** One field:value preview line on an item card. */
-function fieldPreview(field: ListField, item: ListItemRow): string | null {
+/** One field:value preview line on an item card. `members` resolves an
+ *  assignee id to a display name — falls back to the raw stored value for
+ *  legacy free-text assignee data (from before this was a real picker). */
+function fieldPreview(field: ListField, item: ListItemRow, members: { id: string; name: string }[]): string | null {
   const raw = item.values?.[field.id];
   if (raw === undefined || raw === null || raw === "") return null;
   if (field.type === "checkbox") return raw ? "✓" : null;
   if (["select", "status", "priority"].includes(field.type)) {
     return field.options.find((o) => o.id === raw)?.label ?? null;
+  }
+  if (field.type === "assignee") {
+    return members.find((m) => m.id === raw)?.name ?? String(raw);
   }
   return String(raw);
 }
@@ -33,6 +39,12 @@ export default function ListDetailScreen({ route, navigation }: Props) {
     queryKey: ["list", listId],
     queryFn: () => getList(listId),
   });
+  const membersQuery = useQuery({
+    queryKey: ["channelMembers", data?.list.channel_id],
+    queryFn: () => getChannelMembers(data!.list.channel_id),
+    enabled: !!data?.list.channel_id,
+  });
+  const members = membersQuery.data ?? [];
 
   const addItem = useMutation({
     mutationFn: () => createItem(listId, {}),
@@ -68,6 +80,7 @@ export default function ListDetailScreen({ route, navigation }: Props) {
       data?.list.name || "List",
       undefined,
       [
+        { text: "Board view", onPress: () => navigation.navigate("ListBoard", { listId, listName: data?.list.name }) },
         { text: "Manage fields", onPress: () => navigation.navigate("ListFields", { listId }) },
         { text: "Import CSV", onPress: () => navigation.navigate("ListImport", { listId }) },
         { text: "Export CSV", onPress: exportCsv },
@@ -123,7 +136,7 @@ export default function ListDetailScreen({ route, navigation }: Props) {
           </View>
         }
         renderItem={({ item }) => {
-          const title = titleField ? fieldPreview(titleField, item) : null;
+          const title = titleField ? fieldPreview(titleField, item, members) : null;
           const subtasks = subtaskCount(item.id);
           return (
             <Pressable
@@ -144,7 +157,7 @@ export default function ListDetailScreen({ route, navigation }: Props) {
               {previewFields.length > 0 && (
                 <View style={styles.previewRow}>
                   {previewFields.map((f) => {
-                    const v = fieldPreview(f, item);
+                    const v = fieldPreview(f, item, members);
                     if (!v) return null;
                     const opt = ["select", "status", "priority"].includes(f.type)
                       ? f.options.find((o) => o.id === item.values?.[f.id])

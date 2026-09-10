@@ -19,6 +19,7 @@ export default function ReactionPicker({
   onReply,
   onForward,
   onStar,
+  onAddToList,
   onClose,
 }: {
   visible: boolean;
@@ -33,6 +34,7 @@ export default function ReactionPicker({
   onReply?: () => void;
   onForward?: () => void;
   onStar?: () => void;
+  onAddToList?: () => void;
   onClose: () => void;
 }) {
   const colors = useThemeColors();
@@ -109,6 +111,18 @@ export default function ReactionPicker({
           >
             <Text style={styles.actionText}>{isPinned ? "Unpin message" : "Pin message"}</Text>
           </Pressable>
+
+          {onAddToList ? (
+            <Pressable
+              style={styles.actionButton}
+              onPress={() => {
+                onAddToList();
+                onClose();
+              }}
+            >
+              <Text style={styles.actionText}>Add to list</Text>
+            </Pressable>
+          ) : null}
 
           {canEdit ? (
             <Pressable

@@ -29,6 +29,9 @@ export const reorderFields = (listId, order) =>
 export const createItem = (listId, values, parentItemId) =>
   api(`/api/lists/${listId}/items`, { method: 'POST', body: JSON.stringify({ values, parent_item_id: parentItemId }) });
 
+export const addMessageToList = (listId, messageId) =>
+  api(`/api/lists/${listId}/items/from-message`, { method: 'POST', body: JSON.stringify({ message_id: messageId }) });
+
 export const updateItem = (itemId, values) =>
   api(`/api/items/${itemId}`, { method: 'PUT', body: JSON.stringify({ values }) });
 

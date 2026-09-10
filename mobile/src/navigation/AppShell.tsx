@@ -11,6 +11,7 @@ import ThreadsScreen from "../screens/activity/ThreadsScreen";
 import ThreadDetailScreen from "../screens/activity/ThreadDetailScreen";
 import ListsScreen from "../screens/lists/ListsScreen";
 import ListDetailScreen from "../screens/lists/ListDetailScreen";
+import ListBoardScreen from "../screens/lists/ListBoardScreen";
 import ListItemScreen from "../screens/lists/ListItemScreen";
 import ListFieldsScreen from "../screens/lists/ListFieldsScreen";
 import ListImportScreen from "../screens/lists/ListImportScreen";
@@ -39,6 +40,7 @@ function HomeStackNavigator() {
       <HomeStack.Screen name="ThreadDetail" component={ThreadDetailScreen} options={{ title: "Thread" }} />
       <HomeStack.Screen name="Lists" component={ListsScreen} options={{ title: "Lists" }} />
       <HomeStack.Screen name="ListDetail" component={ListDetailScreen} options={{ title: "List" }} />
+      <HomeStack.Screen name="ListBoard" component={ListBoardScreen} options={{ title: "Board" }} />
       <HomeStack.Screen name="ListItem" component={ListItemScreen} options={{ title: "Item" }} />
       <HomeStack.Screen name="ListFields" component={ListFieldsScreen} options={{ title: "Manage fields" }} />
       <HomeStack.Screen name="ListImport" component={ListImportScreen} options={{ title: "Import CSV" }} />
