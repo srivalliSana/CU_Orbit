@@ -5,6 +5,7 @@ import Composer from './Composer';
 import ForwardModal from './ForwardModal';
 import PollComposerModal from './PollComposerModal';
 import { createPoll, getMessages, markConversationRead, sendMessage, uploadFile } from '../api/chat';
+import { cancelScheduledMessage, createScheduledMessage, getScheduledMessages } from '../api/scheduled';
 import { getChannelMembers } from '../api/channels';
 import { dayLabel, lastSeenLabel } from '../lib/format';
 import { join, leave, on, sendTyping } from '../api/socket';
@@ -162,6 +163,33 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
 
   // A different conversation starts with a clean composer, not a stale reply.
   useEffect(() => { setReplyTo(null); setEphemeralNotice(null); }, [chat.id]);
+
+  const [scheduled, setScheduled] = useState([]);
+  const [scheduledOpen, setScheduledOpen] = useState(false);
+  const loadScheduled = () => getScheduledMessages(chat.id).then(setScheduled).catch(() => {});
+  useEffect(() => { loadScheduled(); setScheduledOpen(false); }, [chat.id]);
+
+  const handleSchedule = async ({ text, file, enrichedMentions, replyToId, sendAt }) => {
+    try {
+      let mediaUrl, mediaName, type = 'text';
+      const mediaMimeType = file?.type;
+      if (file) {
+        const up = await uploadFile(file);
+        mediaUrl = up.url;
+        mediaName = up.name || file.name;
+        type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'voice' : 'file';
+      }
+      await createScheduledMessage({ containerId: chat.id, body: text, type, mediaUrl, mediaName, mediaMimeType, enrichedMentions, replyToId, sendAt });
+      loadScheduled();
+    } catch (e) {
+      setSendError(e.message || 'Could not schedule that message');
+    }
+  };
+
+  const cancelScheduled = async (id) => {
+    await cancelScheduledMessage(id).catch(() => {});
+    loadScheduled();
+  };
 
   const handleSend = async ({ text, file, enrichedMentions, replyToId }) => {
     setSendError(null);
@@ -326,10 +354,35 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
         </div>
       )}
 
+      {scheduled.length > 0 && (
+        <div className="border-t border-slate-200 dark:border-slate-800">
+          <button
+            onClick={() => setScheduledOpen((v) => !v)}
+            className="flex w-full items-center gap-2 px-4 py-1.5 text-left text-xs text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+          >
+            <span>🕐</span>
+            <span className="flex-1">{scheduled.length} message{scheduled.length === 1 ? '' : 's'} scheduled</span>
+            <span>{scheduledOpen ? '▾' : '▸'}</span>
+          </button>
+          {scheduledOpen && (
+            <div className="max-h-32 overflow-y-auto border-t border-slate-100 dark:border-slate-800">
+              {scheduled.map((s) => (
+                <div key={s.id} className="flex items-center gap-2 px-4 py-1.5 text-xs">
+                  <span className="shrink-0 text-slate-400">{new Date(s.send_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                  <span className="min-w-0 flex-1 truncate text-slate-600 dark:text-slate-300">{s.body || 'Attachment'}</span>
+                  <button onClick={() => cancelScheduled(s.id)} className="shrink-0 font-medium text-red-600 hover:underline">Cancel</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <Composer
         chatId={chat.id}
         isChannel={chat.kind === 'channel'}
         onSend={handleSend}
+        onSchedule={handleSchedule}
         onTyping={() => sendTyping(chat.id, user?.name)}
         replyTo={replyTo}
         onCancelReply={() => setReplyTo(null)}

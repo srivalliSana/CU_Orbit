@@ -368,6 +368,34 @@ const StarredMessage = sequelize.define('StarredMessage', {
 });
 
 /**
+ * "Send later" — a message queued to actually post at a future time. A
+ * lightweight setInterval sweep (see sendDueScheduledMessages below) polls
+ * for due rows and hands each one to the exact same createMessage() a
+ * normal send uses, so a scheduled message is indistinguishable from a
+ * live one once it lands — same mentions/push/realtime handling, no
+ * separate code path to keep in sync.
+ */
+const ScheduledMessage = sequelize.define('ScheduledMessage', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    sender_id: { type: DataTypes.STRING, allowNull: false },
+    sender_name: { type: DataTypes.STRING },
+    sender_avatar_url: { type: DataTypes.STRING },
+    channel_id: { type: DataTypes.STRING, allowNull: false },   // a channel id or a DM's "a_b" id, same as Message
+    body: { type: DataTypes.TEXT },
+    type: { type: DataTypes.STRING, defaultValue: 'text' },
+    media_url: { type: DataTypes.STRING },
+    media_name: { type: DataTypes.STRING },
+    media_mime_type: { type: DataTypes.STRING },
+    reply_to_id: { type: DataTypes.UUID, allowNull: true },
+    enriched_mentions: { type: DataTypes.JSON, allowNull: true },
+    send_at: { type: DataTypes.DATE, allowNull: false },
+    status: { type: DataTypes.ENUM('pending', 'sent', 'canceled', 'failed'), defaultValue: 'pending' },
+    sent_message_id: { type: DataTypes.UUID, allowNull: true },   // set once it actually posts
+}, {
+    indexes: [{ fields: ['status', 'send_at'] }, { fields: ['sender_id'] }],
+});
+
+/**
  * Per-recipient read state.
  *
  * Message.status is a single value, which is enough for a DM but cannot express
@@ -2706,6 +2734,103 @@ async function dispatchInteraction(app, installation, { actionId, value, user, c
         message_id: messageId, installation_id: installation.id,
     }, 3000);
 }
+
+// --- Scheduled messages ("Send later") ---
+
+app.post('/api/scheduled-messages', auth.requireAuth, async (req, res) => {
+    try {
+        const { channelId, body, type, mediaUrl, mediaName, mediaMimeType, replyToId, enrichedMentions, sendAt } = req.body;
+        if (!channelId || !(await canAccessContainer(req.user.id, channelId, req.user))) {
+            return res.status(403).json({ error: 'forbidden', message: 'Not a participant in this conversation' });
+        }
+        if (!body && !mediaUrl) return res.status(400).json({ error: 'bad_request', message: 'body or media required' });
+        const when = new Date(sendAt);
+        // A minute of slack rather than "> now" exactly — the composer's
+        // picker and the server's clock are never perfectly in sync.
+        if (isNaN(when) || when.getTime() < Date.now() + 60000) {
+            return res.status(400).json({ error: 'bad_request', message: 'sendAt must be at least a minute in the future' });
+        }
+        const sender = await User.findByPk(req.user.id);
+        const scheduled = await ScheduledMessage.create({
+            sender_id: req.user.id, sender_name: sender?.name || req.user.email, sender_avatar_url: sender?.avatarUrl,
+            channel_id: channelId, body: body || null, type: type || 'text',
+            media_url: mediaUrl || null, media_name: mediaName || null, media_mime_type: mediaMimeType || null,
+            reply_to_id: replyToId || null, enriched_mentions: enrichedMentions || null,
+            send_at: when, status: 'pending',
+        });
+        res.json(scheduled);
+    } catch (e) { console.error('[scheduled-create]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+/** Only the sender's own queued messages — never another member's, even a
+ *  channel admin's, since a scheduled send is private until it actually posts. */
+app.get('/api/scheduled-messages', auth.requireAuth, async (req, res) => {
+    try {
+        const where = { sender_id: req.user.id, status: 'pending' };
+        if (req.query.container_id) where.channel_id = String(req.query.container_id);
+        const rows = await ScheduledMessage.findAll({ where, order: [['send_at', 'ASC']] });
+        res.json(rows);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.put('/api/scheduled-messages/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const row = await ScheduledMessage.findOne({ where: { id: req.params.id, sender_id: req.user.id } });
+        if (!row) return res.status(404).json({ error: 'not_found' });
+        if (row.status !== 'pending') return res.status(400).json({ error: 'bad_request', message: 'Already sent or canceled' });
+        if (req.body.body !== undefined) row.body = req.body.body;
+        if (req.body.sendAt !== undefined) {
+            const when = new Date(req.body.sendAt);
+            if (isNaN(when) || when.getTime() < Date.now() + 60000) {
+                return res.status(400).json({ error: 'bad_request', message: 'sendAt must be at least a minute in the future' });
+            }
+            row.send_at = when;
+        }
+        await row.save();
+        res.json(row);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.delete('/api/scheduled-messages/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const row = await ScheduledMessage.findOne({ where: { id: req.params.id, sender_id: req.user.id } });
+        if (!row) return res.status(404).json({ error: 'not_found' });
+        if (row.status !== 'pending') return res.status(400).json({ error: 'bad_request', message: 'Already sent or canceled' });
+        row.status = 'canceled';
+        await row.save();
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** The sweep — finds due rows and posts them through the exact same
+ *  createMessage() a live send uses. Runs one at a time (not in parallel)
+ *  so a burst of due messages doesn't hammer the DB/socket layer at once;
+ *  a scheduled message landing a few seconds late is a non-issue, unlike
+ *  a live send needing to feel instant. */
+async function sendDueScheduledMessages() {
+    try {
+        const due = await ScheduledMessage.findAll({ where: { status: 'pending', send_at: { [Op.lte]: new Date() } } });
+        for (const row of due) {
+            try {
+                const msg = await createMessage({
+                    senderId: row.sender_id, senderName: row.sender_name, senderAvatarUrl: row.sender_avatar_url,
+                    body: row.body, channelId: row.channel_id, type: row.type,
+                    mediaUrl: row.media_url, mediaName: row.media_name, mediaMimeType: row.media_mime_type,
+                    replyToId: row.reply_to_id, enrichedMentions: row.enriched_mentions,
+                });
+                row.status = 'sent';
+                row.sent_message_id = msg.id;
+            } catch (e) {
+                console.error('[scheduled-send] failed for', row.id, e.message);
+                row.status = 'failed';
+            }
+            await row.save();
+        }
+    } catch (e) {
+        console.error('[scheduled-sweep]', e.message);
+    }
+}
+setInterval(sendDueScheduledMessages, 20000);
 
 app.post('/api/messages', auth.requireAuth, async (req, res) => {
     try {

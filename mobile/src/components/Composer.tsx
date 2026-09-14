@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, FlatList, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   RecordingPresets,
   requestRecordingPermissionsAsync,
@@ -46,6 +47,7 @@ const formatDuration = (totalSeconds: number) => {
 
 export default function Composer({
   onSend,
+  onSchedule,
   onTyping,
   channelId,
   kind,
@@ -54,6 +56,7 @@ export default function Composer({
   onCreatePoll,
 }: {
   onSend: (payload: SendPayload) => void;
+  onSchedule?: (payload: SendPayload & { sendAt: string }) => void;
   onTyping?: () => void;
   channelId?: string;
   kind?: "channel" | "dm";
@@ -73,6 +76,11 @@ export default function Composer({
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [formattingOpen, setFormattingOpen] = useState(false);
   const [selection, setSelection] = useState({ start: 0, end: 0 });
+  // "Send later" — text-only for now (no attachment support on mobile v1).
+  // Android's native picker is two sequential dialogs (date, then time);
+  // iOS's is one inline spinner with its own Cancel/Schedule buttons.
+  const [scheduleStep, setScheduleStep] = useState<"date" | "time" | null>(null);
+  const [scheduleDate, setScheduleDate] = useState(() => new Date(Date.now() + 60 * 60000));
   const lastTyped = useRef(0);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
@@ -109,6 +117,42 @@ export default function Composer({
     setTaggedUsers([]);
     setMentionQuery(null);
     onCancelReply?.();
+  };
+
+  const startScheduling = () => {
+    if (!text.trim() || !onSchedule) return;
+    setScheduleDate(new Date(Date.now() + 60 * 60000));
+    setScheduleStep("date");
+  };
+
+  const finishScheduling = (when: Date) => {
+    const body = text.trim();
+    const enrichedMentions = taggedUsers.filter((t) => body.includes(`@${t.display_name}`));
+    onSchedule?.({
+      body,
+      enrichedMentions: enrichedMentions.length ? enrichedMentions : undefined,
+      replyToId: replyTo?.id,
+      sendAt: when.toISOString(),
+    });
+    setText("");
+    setTaggedUsers([]);
+    setMentionQuery(null);
+    onCancelReply?.();
+  };
+
+  const onPickerChange = (event: { type: string }, picked?: Date) => {
+    if (Platform.OS === "android") {
+      setScheduleStep(null);
+      if (event.type === "dismissed" || !picked) return;
+      if (scheduleStep === "date") {
+        setScheduleDate(picked);
+        setScheduleStep("time");
+      } else {
+        finishScheduling(picked);
+      }
+    } else if (picked) {
+      setScheduleDate(picked);
+    }
   };
 
   const onChangeText = (value: string) => {
@@ -415,11 +459,46 @@ export default function Composer({
 
         <Pressable
           onPress={submitText}
+          onLongPress={startScheduling}
           disabled={!text.trim()}
           style={[styles.sendButton, !text.trim() && styles.sendButtonDisabled]}
         >
           <Text style={styles.sendText}>Send</Text>
         </Pressable>
+
+        {scheduleStep && Platform.OS === "android" && (
+          <DateTimePicker
+            value={scheduleDate}
+            mode={scheduleStep}
+            minimumDate={new Date()}
+            onChange={onPickerChange}
+          />
+        )}
+
+        {scheduleStep && Platform.OS === "ios" && (
+          <Modal visible transparent animationType="fade" onRequestClose={() => setScheduleStep(null)}>
+            <Pressable style={styles.scheduleBackdrop} onPress={() => setScheduleStep(null)}>
+              <Pressable style={styles.scheduleSheet} onPress={(e) => e.stopPropagation()}>
+                <Text style={styles.scheduleTitle}>Send later</Text>
+                <DateTimePicker
+                  value={scheduleDate}
+                  mode="datetime"
+                  display="spinner"
+                  minimumDate={new Date()}
+                  onChange={onPickerChange}
+                />
+                <View style={styles.scheduleActions}>
+                  <Pressable onPress={() => setScheduleStep(null)} style={styles.scheduleCancel}>
+                    <Text style={styles.scheduleCancelText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable onPress={() => { finishScheduling(scheduleDate); setScheduleStep(null); }} style={styles.scheduleConfirm}>
+                    <Text style={styles.scheduleConfirmText}>Schedule</Text>
+                  </Pressable>
+                </View>
+              </Pressable>
+            </Pressable>
+          </Modal>
+        )}
 
         <AttachmentPreviewModal
           visible={pending.length > 0}
@@ -638,5 +717,51 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   sendText: {
     color: colors.primaryText,
     fontWeight: "600",
+  },
+  scheduleBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "flex-end",
+  },
+  scheduleSheet: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 16,
+    alignItems: "center",
+  },
+  scheduleTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 4,
+  },
+  scheduleActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 8,
+    width: "100%",
+  },
+  scheduleCancel: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
+  },
+  scheduleCancelText: {
+    color: colors.textMuted,
+    fontWeight: "600",
+  },
+  scheduleConfirm: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+  },
+  scheduleConfirmText: {
+    color: colors.primaryText,
+    fontWeight: "700",
   },
 });

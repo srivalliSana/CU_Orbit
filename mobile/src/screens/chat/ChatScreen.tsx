@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Button, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Button, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
@@ -17,6 +17,7 @@ import ForwardModal from "../../components/ForwardModal";
 import UserProfileModal from "../../components/UserProfileModal";
 import PollComposerModal from "../../components/PollComposerModal";
 import { createPoll } from "../../api/messages";
+import { cancelScheduledMessage, createScheduledMessage, getScheduledMessages, type ScheduledMessageRow } from "../../api/scheduled";
 import { useThemeColors } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
 import type { Message } from "../../types/api";
@@ -34,6 +35,11 @@ export default function ChatScreen({ route, navigation }: Props) {
   const isSuperAdmin = selfRole === "admin";
   const [canModerate, setCanModerate] = useState(false);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [scheduled, setScheduled] = useState<ScheduledMessageRow[]>([]);
+  const [scheduledOpen, setScheduledOpen] = useState(false);
+  const loadScheduled = () => getScheduledMessages(containerId).then(setScheduled).catch(() => {});
+  useEffect(() => { loadScheduled(); setScheduledOpen(false); }, [containerId]);
+  const cancelScheduled = (id: string) => cancelScheduledMessage(id).catch(() => {}).finally(loadScheduled);
   const [forwarding, setForwarding] = useState<Message | null>(null);
   const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const [creatingPoll, setCreatingPoll] = useState(false);
@@ -211,8 +217,38 @@ export default function ChatScreen({ route, navigation }: Props) {
           </Text>
         </Pressable>
       ) : null}
+      {scheduled.length > 0 && (
+        <View style={styles.scheduledBanner}>
+          <Pressable onPress={() => setScheduledOpen((v) => !v)} style={styles.scheduledBannerRow}>
+            <Text style={styles.scheduledBannerText}>
+              🕐 {scheduled.length} message{scheduled.length === 1 ? "" : "s"} scheduled
+            </Text>
+            <Ionicons name={scheduledOpen ? "chevron-down" : "chevron-forward"} size={14} color={colors.textMuted} />
+          </Pressable>
+          {scheduledOpen && (
+            <ScrollView style={styles.scheduledList}>
+              {scheduled.map((s) => (
+                <View key={s.id} style={styles.scheduledRow}>
+                  <Text style={styles.scheduledTime}>
+                    {new Date(s.send_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </Text>
+                  <Text style={styles.scheduledText} numberOfLines={1}>{s.body || "Attachment"}</Text>
+                  <Pressable onPress={() => cancelScheduled(s.id)} hitSlop={8}>
+                    <Text style={styles.scheduledCancel}>Cancel</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+      )}
+
       <Composer
         onSend={(payload) => send.mutate(payload)}
+        onSchedule={async (payload) => {
+          await createScheduledMessage({ containerId, ...payload });
+          loadScheduled();
+        }}
         onTyping={notifyTyping}
         channelId={containerId}
         kind={kind}
@@ -255,6 +291,48 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   flex: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  scheduledBanner: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  scheduledBannerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  scheduledBannerText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#b45309",
+  },
+  scheduledList: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    maxHeight: 130,
+  },
+  scheduledRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  scheduledTime: {
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+  scheduledText: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.text,
+  },
+  scheduledCancel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.danger,
   },
   center: {
     flex: 1,
