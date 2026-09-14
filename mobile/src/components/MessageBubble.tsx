@@ -4,6 +4,7 @@ import { VideoView, useVideoPlayer } from "expo-video";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 
 import ReactionPicker from "./ReactionPicker";
+import { useCustomEmojiMap } from "./EmojiPicker";
 import EditMessageModal from "./EditMessageModal";
 import Avatar from "./Avatar";
 import LinkPreviewCard from "./LinkPreviewCard";
@@ -63,6 +64,7 @@ export default function MessageBubble({
   const [editVisible, setEditVisible] = useState(false);
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [votesVisible, setVotesVisible] = useState(false);
+  const customEmojiMap = useCustomEmojiMap();
 
   const reactionCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -279,21 +281,27 @@ export default function MessageBubble({
 
         {reactionCounts.length > 0 ? (
           <View style={styles.reactionsRow}>
-            {reactionCounts.map(([emoji, count]) => (
-              <Pressable
-                key={emoji}
-                style={styles.reactionChip}
-                onPress={() => onReact(emoji)}
-                onLongPress={() => {
-                  const names = message.reactions.filter((r) => r.emoji === emoji).map((r) => r.userName);
-                  Alert.alert(emoji, names.join("\n"));
-                }}
-              >
-                <Text style={styles.reactionText}>
-                  {emoji} {count > 1 ? count : ""}
-                </Text>
-              </Pressable>
-            ))}
+            {reactionCounts.map(([emoji, count]) => {
+              const customUrl = customEmojiMap.get(emoji);
+              return (
+                <Pressable
+                  key={emoji}
+                  style={[styles.reactionChip, { flexDirection: "row", alignItems: "center", gap: 3 }]}
+                  onPress={() => onReact(emoji)}
+                  onLongPress={() => {
+                    const names = message.reactions.filter((r) => r.emoji === emoji).map((r) => r.userName);
+                    Alert.alert(emoji, names.join("\n"));
+                  }}
+                >
+                  {customUrl ? (
+                    <Image source={{ uri: customUrl }} style={{ width: 14, height: 14 }} />
+                  ) : (
+                    <Text style={styles.reactionText}>{emoji}</Text>
+                  )}
+                  {count > 1 ? <Text style={styles.reactionText}>{count}</Text> : null}
+                </Pressable>
+              );
+            })}
           </View>
         ) : null}
       </Pressable>

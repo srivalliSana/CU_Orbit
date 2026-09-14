@@ -15,7 +15,7 @@ import { join, leave, on, sendTyping } from '../api/socket';
 const POLL_MS = 20000;
 const TYPING_TTL_MS = 4000;
 
-export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenChannelInfo, onOpenLists, onOpenProfile, onOpenDm, onBack, scrollToMessageId, onScrolledToMessage }) {
+export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenChannelInfo, onOpenLists, onOpenCanvas, onOpenWorkflows, onStartHuddle, onOpenProfile, onOpenDm, onBack, scrollToMessageId, onScrolledToMessage }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [typing, setTyping] = useState([]);
@@ -265,6 +265,21 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
             </p>
           </div>
         </button>
+        {chat.kind === 'dm' && (
+          <button
+            onClick={() => {
+              const otherId = chat.id.split('_').find((id) => id !== user?.id);
+              if (otherId) onStartHuddle?.(otherId, chat.title, chat.id);
+            }}
+            title="Start a huddle"
+            aria-label="Start a huddle"
+            className="shrink-0 rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+            </svg>
+          </button>
+        )}
         {chat.kind === 'channel' && (
           <button
             onClick={() => onOpenLists?.(chat.id)}
@@ -274,6 +289,30 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <rect x="4" y="4" width="16" height="16" rx="2" /><path d="M8 9h8M8 13h8M8 17h5" />
+            </svg>
+          </button>
+        )}
+        {chat.kind === 'channel' && (
+          <button
+            onClick={() => onOpenCanvas?.(chat.id)}
+            title="Canvas"
+            aria-label="Canvas"
+            className="shrink-0 rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 4h12l4 4v12H4z" /><path d="M16 4v4h4" /><path d="M8 12h8M8 16h5" />
+            </svg>
+          </button>
+        )}
+        {chat.kind === 'channel' && (
+          <button
+            onClick={() => onOpenWorkflows?.(chat.id)}
+            title="Workflows"
+            aria-label="Workflows"
+            className="shrink-0 rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z" />
             </svg>
           </button>
         )}

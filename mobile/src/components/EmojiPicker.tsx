@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { useThemeColors } from "../state/themeStore";
+import { getCustomEmojis, type CustomEmoji } from "../api/customEmojis";
+import { resolveMediaUrl } from "../constants/config";
 
 // A broad curated grid rather than a full Unicode emoji library (no new
 // dependency) — plus a text input that accepts anything typed via the
@@ -15,6 +17,19 @@ const EMOJI_GRID = [
   "👀", "🧠", "💀", "👻", "🤖", "🐱", "🐶", "🦄", "🍕", "☕", "🍺", "⚽",
 ];
 
+/** Team-uploaded emoji (managed from the website) — mobile can react with
+ *  them but uploading new ones is web-only for now, same split as the
+ *  Apps-platform admin screens. */
+export function useCustomEmojiMap() {
+  const [map, setMap] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    getCustomEmojis()
+      .then((rows) => setMap(new Map(rows.map((r) => [`:${r.name}:`, resolveMediaUrl(r.image_url) || r.image_url]))))
+      .catch(() => {});
+  }, []);
+  return map;
+}
+
 export default function EmojiPicker({
   visible,
   onPick,
@@ -27,6 +42,12 @@ export default function EmojiPicker({
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [custom, setCustom] = useState("");
+  const [teamEmoji, setTeamEmoji] = useState<CustomEmoji[] | null>(null);
+
+  useEffect(() => {
+    if (!visible) return;
+    getCustomEmojis().then(setTeamEmoji).catch(() => setTeamEmoji([]));
+  }, [visible]);
 
   const submitCustom = () => {
     const emoji = custom.trim();
@@ -52,6 +73,19 @@ export default function EmojiPicker({
               </Pressable>
             ))}
           </View>
+          {teamEmoji && teamEmoji.length > 0 ? (
+            <>
+              <Text style={styles.sectionLabel}>Team emoji</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.teamRow}>
+                {teamEmoji.map((e) => (
+                  <Pressable key={e.id} style={styles.teamCell} onPress={() => onPick(`:${e.name}:`)}>
+                    <Image source={{ uri: resolveMediaUrl(e.image_url) || e.image_url }} style={styles.teamImage} />
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </>
+          ) : null}
+
           <View style={styles.customRow}>
             <TextInput
               value={custom}
@@ -111,6 +145,32 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   },
   emoji: {
     fontSize: 22,
+  },
+  sectionLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    color: colors.textMuted,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  teamRow: {
+    flexDirection: "row",
+  },
+  teamCell: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 4,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+  },
+  teamImage: {
+    width: 24,
+    height: 24,
+    resizeMode: "contain",
   },
   customRow: {
     flexDirection: "row",

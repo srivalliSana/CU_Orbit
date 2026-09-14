@@ -63,3 +63,8 @@ export function on(event, handler) {
 
 export const sendTyping = (containerId, name) =>
   socket?.emit('typing', { containerId, name });
+
+/** Fires a custom socket event (e.g. huddle signaling) — a thin escape
+ *  hatch alongside the specific helpers above, for events that don't need
+ *  their own named export. */
+export const emit = (event, payload) => connect()?.emit(event, payload);

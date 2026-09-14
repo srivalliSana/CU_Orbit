@@ -3,7 +3,7 @@ import { clockLabel } from '../lib/format';
 import { renderMessageText } from '../lib/markdown';
 import { deleteMessage, editMessage, getReads, hideMessage, reactToMessage, sendMessageAction, setMessagePinned, starMessage, unstarMessage, votePoll } from '../api/chat';
 import Avatar from './Avatar';
-import EmojiPicker from './EmojiPicker';
+import EmojiPicker, { useCustomEmojiMap } from './EmojiPicker';
 import PollVotesModal from './PollVotesModal';
 import LinkPreviewCard from './LinkPreviewCard';
 import AddToListModal from './AddToListModal';
@@ -94,6 +94,7 @@ export default function MessageBubble({
   const [deleteMenuOpen, setDeleteMenuOpen] = useState(false);
   const [addingToList, setAddingToList] = useState(false);
   const [viewingVotes, setViewingVotes] = useState(false);
+  const customEmojiMap = useCustomEmojiMap();
 
   const reactionCounts = useMemo(() => {
     const counts = new Map();
@@ -486,16 +487,18 @@ export default function MessageBubble({
             <div className="mt-1 flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
               {reactionCounts.map(([emoji, count]) => {
                 const names = (m.reactions || []).filter((r) => r.emoji === emoji).map((r) => r.userName).join(', ');
+                const customUrl = customEmojiMap.get(emoji);
                 return (
                   <button
                     key={emoji}
                     onClick={() => react(emoji)}
                     title={names}
-                    className={`rounded-full px-1.5 py-0.5 text-[11px] ${
+                    className={`flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] ${
                       own ? 'bg-blue-500/40' : 'bg-slate-100 dark:bg-slate-700'
                     }`}
                   >
-                    {emoji} {count > 1 ? count : ''}
+                    {customUrl ? <img src={customUrl} alt={emoji} className="h-3.5 w-3.5 object-contain" /> : emoji}
+                    {count > 1 ? count : ''}
                   </button>
                 );
               })}

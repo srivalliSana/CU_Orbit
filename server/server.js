@@ -349,6 +349,16 @@ const PollVote = sequelize.define('PollVote', {
  * read the container at all: hiding something from your own view is never
  * restricted by author/moderator rules.
  */
+/** A team-uploaded reaction emoji, addressed by :shortcode: the same way
+ *  Slack's custom emoji work — stored as just another uploaded file
+ *  (reuses the existing /uploads pipeline), never as raw image bytes here. */
+const CustomEmoji = sequelize.define('CustomEmoji', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    name: { type: DataTypes.STRING, unique: true, allowNull: false },   // stored without colons, e.g. "partyblob"
+    image_url: { type: DataTypes.STRING, allowNull: false },
+    created_by: { type: DataTypes.STRING, allowNull: false },
+});
+
 const HiddenMessage = sequelize.define('HiddenMessage', {
     id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
     user_id: { type: DataTypes.STRING, allowNull: false },
@@ -535,6 +545,51 @@ const SlashCommand = sequelize.define('SlashCommand', {
     description: { type: DataTypes.STRING, defaultValue: '' },
     usage_hint: { type: DataTypes.STRING, defaultValue: '' },
     webhook_url: { type: DataTypes.STRING, allowNull: false },
+});
+
+/**
+ * Canvas — one persistent doc/wiki page pinned to a channel (Slack's
+ * "channel canvas"). Plain text with the same lightweight markdown the
+ * rest of the app already renders (bold/italic/links/@mentions) — not a
+ * rich block editor. Last-write-wins on save; no realtime collaborative
+ * editing (no operational-transform/CRDT layer here) — good enough for
+ * "the pinned doc for this channel," which is edited far less often than
+ * a chat is typed into.
+ */
+const Canvas = sequelize.define('Canvas', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    channel_id: { type: DataTypes.UUID, allowNull: false, unique: true },   // one canvas per channel, v1
+    title: { type: DataTypes.STRING, defaultValue: 'Untitled canvas' },
+    body: { type: DataTypes.TEXT('long'), defaultValue: '' },
+    created_by: { type: DataTypes.STRING, allowNull: false },
+    updated_by: { type: DataTypes.STRING, allowNull: true },
+});
+
+/**
+ * Workflow Builder — no-code automation, scoped as one trigger + one
+ * action per workflow rather than Slack's full multi-step visual canvas.
+ * trigger_config/action_config shapes, by type:
+ *   message_contains -> { keyword }
+ *   member_joined    -> {}
+ *   schedule         -> { hour, minute, days: [0-6, 0=Sun] }  (server-local time)
+ *   post_message     -> { body }              ({{user}} substitutes the triggering user's name)
+ *   add_list_item    -> { list_id, body }     (body becomes the new item's title field)
+ */
+const Workflow = sequelize.define('Workflow', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    channel_id: { type: DataTypes.UUID, allowNull: false },
+    name: { type: DataTypes.STRING, allowNull: false },
+    created_by: { type: DataTypes.STRING, allowNull: false },
+    is_active: { type: DataTypes.BOOLEAN, defaultValue: true },
+    trigger_type: { type: DataTypes.ENUM('message_contains', 'member_joined', 'schedule'), allowNull: false },
+    trigger_config: { type: DataTypes.JSON, defaultValue: {} },
+    action_type: { type: DataTypes.ENUM('post_message', 'add_list_item'), allowNull: false },
+    action_config: { type: DataTypes.JSON, defaultValue: {} },
+    // Prevents a `schedule` trigger firing twice in the same minute-wide
+    // sweep window; unused by the other trigger types (they're event-driven).
+    last_run_at: { type: DataTypes.DATE, allowNull: true },
+}, {
+    indexes: [{ fields: ['channel_id'] }, { fields: ['trigger_type', 'is_active'] }],
 });
 
 /**
@@ -2609,6 +2664,13 @@ async function createMessage({ senderId, senderName, senderAvatarUrl, body, chan
             });
         });
     }
+    // Channels only (a DM's container id contains '_') — and never for a
+    // workflow's own post, which would let a badly-configured workflow
+    // (trigger keyword happens to appear in its own action's message)
+    // re-trigger itself forever.
+    if (channelId && !channelId.includes('_') && !senderName?.startsWith('⚡ ')) {
+        triggerWorkflows(channelId, 'message_contains', { text: body, triggerUserName: senderName });
+    }
     return msg;
 }
 
@@ -2831,6 +2893,134 @@ async function sendDueScheduledMessages() {
     }
 }
 setInterval(sendDueScheduledMessages, 20000);
+
+// --- Workflow Builder ---
+//
+// One trigger + one action per workflow (not Slack's full multi-step visual
+// canvas) — still genuinely no-code: pick a trigger, fill in its config,
+// pick an action, fill in its config, done.
+
+/** Runs as its creator (a real user, so an avatar tap never dangles) with a
+ *  ⚡-prefixed display name so an automated post still reads as automated. */
+async function executeWorkflowAction(workflow, ctx) {
+    try {
+        const substitute = (s) => String(s || '').replace(/\{\{user\}\}/g, ctx.triggerUserName || 'someone');
+        if (workflow.action_type === 'post_message') {
+            const body = substitute(workflow.action_config?.body).trim();
+            if (!body) return;
+            await createMessage({
+                senderId: workflow.created_by, senderName: `⚡ ${workflow.name}`, senderAvatarUrl: null,
+                body, channelId: workflow.channel_id, type: 'text',
+            });
+        } else if (workflow.action_type === 'add_list_item') {
+            const listId = workflow.action_config?.list_id;
+            if (!listId) return;
+            const titleField = await ListField.findOne({ where: { list_id: listId, is_title_field: true } });
+            const body = substitute(workflow.action_config?.body).trim();
+            if (!body) return;
+            const maxPos = await ListItem.max('position', { where: { list_id: listId, parent_item_id: null } });
+            await ListItem.create({
+                list_id: listId, values: titleField ? { [titleField.id]: body.slice(0, 500) } : {},
+                created_by: workflow.created_by, position: (Number.isFinite(maxPos) ? maxPos : -1) + 1,
+            });
+        }
+    } catch (e) {
+        console.error('[workflow-action]', workflow.id, e.message);
+    }
+}
+
+/** Fire-and-forget from the caller's perspective — a workflow misfiring or
+ *  running slow must never delay the message send / channel join that
+ *  triggered it. */
+async function triggerWorkflows(channelId, triggerType, ctx = {}) {
+    try {
+        const workflows = await Workflow.findAll({ where: { channel_id: channelId, trigger_type: triggerType, is_active: true } });
+        for (const wf of workflows) {
+            if (triggerType === 'message_contains') {
+                const keyword = String(wf.trigger_config?.keyword || '').toLowerCase().trim();
+                if (!keyword || !(ctx.text || '').toLowerCase().includes(keyword)) continue;
+            }
+            executeWorkflowAction(wf, ctx);
+        }
+    } catch (e) {
+        console.error('[workflow-trigger]', e.message);
+    }
+}
+
+/** The `schedule` trigger's sweep — evaluated once a minute, guarded by
+ *  last_run_at so a workflow can't double-fire within the same window. */
+async function runScheduledWorkflows() {
+    try {
+        const now = new Date();
+        const workflows = await Workflow.findAll({ where: { trigger_type: 'schedule', is_active: true } });
+        for (const wf of workflows) {
+            const cfg = wf.trigger_config || {};
+            if (Number(cfg.hour) !== now.getHours() || Number(cfg.minute) !== now.getMinutes()) continue;
+            if (Array.isArray(cfg.days) && cfg.days.length && !cfg.days.includes(now.getDay())) continue;
+            if (wf.last_run_at && now.getTime() - new Date(wf.last_run_at).getTime() < 55000) continue;
+            wf.last_run_at = now;
+            await wf.save();
+            executeWorkflowAction(wf, {});
+        }
+    } catch (e) {
+        console.error('[workflow-schedule]', e.message);
+    }
+}
+setInterval(runScheduledWorkflows, 30000);
+
+app.get('/api/channels/:channelId/workflows', auth.requireAuth, async (req, res) => {
+    try {
+        if (!(await canViewChannel(req.user.id, req.params.channelId, req.user))) return res.status(403).json({ error: 'forbidden' });
+        const rows = await Workflow.findAll({ where: { channel_id: req.params.channelId }, order: [['createdAt', 'DESC']] });
+        res.json(rows);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+const WORKFLOW_TRIGGER_TYPES = ['message_contains', 'member_joined', 'schedule'];
+const WORKFLOW_ACTION_TYPES = ['post_message', 'add_list_item'];
+
+app.post('/api/channels/:channelId/workflows', auth.requireAuth, async (req, res) => {
+    try {
+        if (!(await canViewChannel(req.user.id, req.params.channelId, req.user))) return res.status(403).json({ error: 'forbidden' });
+        const { name, trigger_type, trigger_config, action_type, action_config } = req.body;
+        if (!name || !String(name).trim()) return res.status(400).json({ error: 'bad_request', message: 'name required' });
+        if (!WORKFLOW_TRIGGER_TYPES.includes(trigger_type)) return res.status(400).json({ error: 'bad_request', message: 'invalid trigger_type' });
+        if (!WORKFLOW_ACTION_TYPES.includes(action_type)) return res.status(400).json({ error: 'bad_request', message: 'invalid action_type' });
+        const workflow = await Workflow.create({
+            channel_id: req.params.channelId, name: String(name).trim().slice(0, 120), created_by: req.user.id,
+            trigger_type, trigger_config: trigger_config || {}, action_type, action_config: action_config || {},
+        });
+        await logAudit(req.user, 'workflow.created', 'workflow', workflow.id, workflow.name);
+        res.json(workflow);
+    } catch (e) { console.error('[workflow-create]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+app.put('/api/workflows/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const workflow = await Workflow.findByPk(req.params.id);
+        if (!workflow) return res.status(404).json({ error: 'not_found' });
+        if (!(await canViewChannel(req.user.id, workflow.channel_id, req.user))) return res.status(403).json({ error: 'forbidden' });
+        if (req.body.name !== undefined) workflow.name = String(req.body.name).trim().slice(0, 120) || workflow.name;
+        if (req.body.is_active !== undefined) workflow.is_active = !!req.body.is_active;
+        if (req.body.trigger_type !== undefined && WORKFLOW_TRIGGER_TYPES.includes(req.body.trigger_type)) workflow.trigger_type = req.body.trigger_type;
+        if (req.body.trigger_config !== undefined) workflow.trigger_config = req.body.trigger_config;
+        if (req.body.action_type !== undefined && WORKFLOW_ACTION_TYPES.includes(req.body.action_type)) workflow.action_type = req.body.action_type;
+        if (req.body.action_config !== undefined) workflow.action_config = req.body.action_config;
+        await workflow.save();
+        res.json(workflow);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.delete('/api/workflows/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const workflow = await Workflow.findByPk(req.params.id);
+        if (!workflow) return res.status(404).json({ error: 'not_found' });
+        if (!(await canViewChannel(req.user.id, workflow.channel_id, req.user))) return res.status(403).json({ error: 'forbidden' });
+        await logAudit(req.user, 'workflow.deleted', 'workflow', workflow.id, workflow.name);
+        await workflow.destroy();
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
 
 app.post('/api/messages', auth.requireAuth, async (req, res) => {
     try {
@@ -3550,6 +3740,59 @@ app.get('/api/link-preview', auth.requireAuth, async (req, res) => {
     } catch (e) {
         res.json({});   // a broken/unreachable link is not an error the client needs to see
     }
+});
+
+// --- Canvas (one pinned doc per channel) ---
+
+/** Null, not 404, when no canvas exists yet — "not created" is a normal
+ *  state for a channel, not an error. */
+app.get('/api/channels/:channelId/canvas', auth.requireAuth, async (req, res) => {
+    try {
+        if (!(await canViewChannel(req.user.id, req.params.channelId, req.user))) return res.status(403).json({ error: 'forbidden' });
+        const canvas = await Canvas.findOne({ where: { channel_id: req.params.channelId } });
+        res.json(canvas || null);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.post('/api/channels/:channelId/canvas', auth.requireAuth, async (req, res) => {
+    try {
+        if (!(await canViewChannel(req.user.id, req.params.channelId, req.user))) return res.status(403).json({ error: 'forbidden' });
+        const existing = await Canvas.findOne({ where: { channel_id: req.params.channelId } });
+        if (existing) return res.json(existing);   // idempotent — a double-click "Create" isn't an error
+        const canvas = await Canvas.create({
+            channel_id: req.params.channelId,
+            title: String(req.body.title || 'Untitled canvas').slice(0, 255),
+            body: String(req.body.body || ''),
+            created_by: req.user.id, updated_by: req.user.id,
+        });
+        res.json(canvas);
+    } catch (e) { console.error('[canvas-create]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+app.put('/api/canvas/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const canvas = await Canvas.findByPk(req.params.id);
+        if (!canvas) return res.status(404).json({ error: 'not_found' });
+        if (!(await canViewChannel(req.user.id, canvas.channel_id, req.user))) return res.status(403).json({ error: 'forbidden' });
+        if (req.body.title !== undefined) canvas.title = String(req.body.title).slice(0, 255) || canvas.title;
+        if (req.body.body !== undefined) canvas.body = String(req.body.body);
+        canvas.updated_by = req.user.id;
+        await canvas.save();
+        res.json(canvas);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.delete('/api/canvas/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const canvas = await Canvas.findByPk(req.params.id);
+        if (!canvas) return res.status(404).json({ error: 'not_found' });
+        // Deleting the shared channel doc is a bigger action than editing it —
+        // same bar as deleting a channel: a channel admin or workspace admin.
+        const membership = await ChannelMember.findOne({ where: { channelId: canvas.channel_id, userId: req.user.id } });
+        if (!isGroupAdmin(req.user) && membership?.role !== 'admin') return res.status(403).json({ error: 'forbidden' });
+        await canvas.destroy();
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
 // --- Lists platform (Slack Lists equivalent) — Phase 1 ---
@@ -4926,6 +5169,7 @@ app.post('/api/channels/:id/members', auth.requireAuth, async (req, res) => {
             if (channel) await channel.increment('member_count');
             const added = await User.findByPk(userId, { attributes: ['name'] });
             await Message.create({ channelId: req.params.id, senderId: adder.id, senderName: adder.name, body: `${adder.name} added ${added?.name || 'a member'}`, type: 'system', timestamp: Date.now() });
+            triggerWorkflows(req.params.id, 'member_joined', { triggerUserName: added?.name || 'a member' });
         } else if (role !== undefined && role !== member.role) {
             // Not a fresh add — this is a promote/demote of someone already
             // in the channel, which findOrCreate's `defaults` silently
@@ -5088,6 +5332,7 @@ app.post('/api/channels/join-by-link', auth.requireAuth, async (req, res) => {
             await channel.increment('member_count');
             const user = await User.findByPk(userId);
             await Message.create({ channelId: channel.id, senderId: userId, senderName: user?.name || 'Someone', body: `${user?.name || 'Someone'} joined via invite link`, type: 'system', timestamp: Date.now() });
+            triggerWorkflows(channel.id, 'member_joined', { triggerUserName: user?.name || 'Someone' });
         }
         res.json({ success: true, channel });
     } catch (e) { res.status(500).json(e); }
@@ -5113,6 +5358,60 @@ app.get('/api/channels/:id/typing', auth.requireAuth, async (req, res) => {
 // "Upload files (unlimited / 50MB / 10MB)" — tiered by role.
 const FILE_SIZE_LIMIT_MEMBER = 10 * 1024 * 1024;
 const FILE_SIZE_LIMIT_CHANNEL_ADMIN = 50 * 1024 * 1024;
+
+// --- Custom emoji ---
+
+const EMOJI_NAME_RE = /^[a-z0-9_]{2,32}$/;
+const EMOJI_MAX_BYTES = 256 * 1024;
+const EMOJI_MIME_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+
+app.get('/api/custom-emojis', auth.requireAuth, async (req, res) => {
+    try {
+        const rows = await CustomEmoji.findAll({ order: [['name', 'ASC']] });
+        res.json(rows);
+    } catch (e) { res.json([]); }
+});
+
+app.post('/api/custom-emojis', auth.requireAuth, upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'bad_request', message: 'file required' });
+        const name = String(req.body.name || '').trim().toLowerCase();
+        if (!EMOJI_NAME_RE.test(name)) {
+            fs.unlink(req.file.path, () => {});
+            return res.status(400).json({ error: 'bad_request', message: 'Name must be 2-32 lowercase letters, numbers, or underscores.' });
+        }
+        if (!EMOJI_MIME_TYPES.includes(req.file.mimetype)) {
+            fs.unlink(req.file.path, () => {});
+            return res.status(400).json({ error: 'bad_request', message: 'Only PNG, JPEG, GIF, or WebP images are allowed.' });
+        }
+        if (req.file.size > EMOJI_MAX_BYTES) {
+            fs.unlink(req.file.path, () => {});
+            return res.status(413).json({ error: 'file_too_large', message: 'Custom emoji images are limited to 256KB.' });
+        }
+        if (await CustomEmoji.findOne({ where: { name } })) {
+            fs.unlink(req.file.path, () => {});
+            return res.status(409).json({ error: 'conflict', message: `:${name}: already exists` });
+        }
+        const emoji = await CustomEmoji.create({
+            name, image_url: `/uploads/${req.file.filename}`, created_by: req.user.id,
+        });
+        await logAudit(req.user, 'emoji.uploaded', 'emoji', emoji.id, `:${name}:`);
+        res.json(emoji);
+    } catch (e) { console.error('[custom-emoji-upload]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+app.delete('/api/custom-emojis/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const emoji = await CustomEmoji.findByPk(req.params.id);
+        if (!emoji) return res.status(404).json({ error: 'not_found' });
+        if (emoji.created_by !== req.user.id && !isGroupAdmin(req.user)) {
+            return res.status(403).json({ error: 'forbidden' });
+        }
+        await logAudit(req.user, 'emoji.removed', 'emoji', emoji.id, `:${emoji.name}:`);
+        await emoji.destroy();
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
 
 app.post('/api/upload', auth.requireAuth, upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).send('No file uploaded.');

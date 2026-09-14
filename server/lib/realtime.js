@@ -98,6 +98,34 @@ function init(httpServer, deps = {}) {
             socket.to(roomFor(containerId)).emit('typing', { containerId, userId, name });
         });
 
+        // --- Huddles (1:1 voice/video) ---
+        //
+        // Pure signaling relay — the server never touches the actual audio/
+        // video (that's a direct peer-to-peer WebRTC connection between the
+        // two browsers, using public STUN only since no TURN server is
+        // provisioned). This just hands each side's SDP offer/answer and ICE
+        // candidates to the other person, the same way a phone network
+        // relays a ringtone without listening to the call.
+        socket.on('huddle:invite', ({ toUserId, containerId, fromUserName }) => {
+            if (!toUserId) return;
+            io.to(`user:${toUserId}`).emit('huddle:incoming', { containerId, fromUserId: userId, fromUserName });
+        });
+
+        socket.on('huddle:signal', ({ toUserId, signal }) => {
+            if (!toUserId) return;
+            io.to(`user:${toUserId}`).emit('huddle:signal', { fromUserId: userId, signal });
+        });
+
+        socket.on('huddle:decline', ({ toUserId }) => {
+            if (!toUserId) return;
+            io.to(`user:${toUserId}`).emit('huddle:declined', { fromUserId: userId });
+        });
+
+        socket.on('huddle:end', ({ toUserId }) => {
+            if (!toUserId) return;
+            io.to(`user:${toUserId}`).emit('huddle:ended', { fromUserId: userId });
+        });
+
         socket.on('disconnect', () => {
             const left = (connections.get(userId) || 1) - 1;
             if (left <= 0) {

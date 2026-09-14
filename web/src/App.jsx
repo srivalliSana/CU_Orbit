@@ -12,6 +12,9 @@ import NewGroupModal from './components/NewGroupModal';
 import ContactPanel from './components/ContactPanel';
 import ChannelInfoPanel from './components/ChannelInfoPanel';
 import ListsPanel from './components/ListsPanel';
+import CanvasPanel from './components/CanvasPanel';
+import WorkflowsPanel from './components/WorkflowsPanel';
+import HuddleManager from './components/HuddleManager';
 import ThreadsPanel from './components/ThreadsPanel';
 import MentionsPanel from './components/MentionsPanel';
 import ProfilePanel from './components/ProfilePanel';
@@ -38,6 +41,8 @@ export default function App() {
   const [chatFilter, setChatFilter] = useState('all');   // all | channels | dms — controlled here so the icon rail can drive it
   const [threadsOpen, setThreadsOpen] = useState(false);
   const [listsChannelId, setListsChannelId] = useState(null);   // channel id whose Lists workspace is open
+  const [canvasChannelId, setCanvasChannelId] = useState(null);   // channel id whose Canvas is open
+  const [workflowsChannelId, setWorkflowsChannelId] = useState(null);   // channel id whose Workflows panel is open
   const [mentionsOpen, setMentionsOpen] = useState(false);
   const [mentionsUnread, setMentionsUnread] = useState(0);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -68,6 +73,7 @@ export default function App() {
     };
   }, []);
   const resizing = useRef(false);
+  const huddleRef = useRef(null);
   const seen = useRef(null);   // last-seen unread snapshot, for notifications
   const queryClient = useQueryClient();
 
@@ -319,6 +325,9 @@ export default function App() {
             onOpenContact={(c) => { setChannelInfoId(null); setContact(c); }}
             onOpenChannelInfo={(id) => { setContact(null); setChannelInfoId(id); }}
             onOpenLists={(id) => setListsChannelId(id)}
+            onOpenCanvas={(id) => setCanvasChannelId(id)}
+            onOpenWorkflows={(id) => setWorkflowsChannelId(id)}
+            onStartHuddle={(toUserId, toUserName, containerId) => huddleRef.current?.start(toUserId, toUserName, containerId)}
             onOpenProfile={(userId) => setProfileUserId(userId)}
             onOpenDm={(dmChat) => { setContact(null); setActive(dmChat); }}
             onBack={() => setActive(null)}
@@ -351,6 +360,16 @@ export default function App() {
       {listsChannelId && (
         <ListsPanel channelId={listsChannelId} onClose={() => setListsChannelId(null)} />
       )}
+
+      {canvasChannelId && (
+        <CanvasPanel channelId={canvasChannelId} onClose={() => setCanvasChannelId(null)} />
+      )}
+
+      {workflowsChannelId && (
+        <WorkflowsPanel channelId={workflowsChannelId} onClose={() => setWorkflowsChannelId(null)} />
+      )}
+
+      <HuddleManager ref={huddleRef} user={user} />
 
       {threadsOpen && (
         <ThreadsPanel

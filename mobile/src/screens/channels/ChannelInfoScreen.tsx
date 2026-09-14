@@ -346,6 +346,12 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
             >
               <Text style={styles.navRowText}>📋 Lists</Text>
             </Pressable>
+            <Pressable
+              style={styles.navRow}
+              onPress={() => navigation.navigate("Canvas", { channelId })}
+            >
+              <Text style={styles.navRowText}>📝 Canvas</Text>
+            </Pressable>
           </View>
 
           {isSuperAdmin && channel ? (
