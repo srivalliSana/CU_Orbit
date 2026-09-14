@@ -276,7 +276,7 @@ function FieldRow({
   field, value, members, onChange, onOpenPicker, styles,
 }: {
   field: ListField;
-  value: string | number | boolean | undefined;
+  value: string | number | boolean | string[] | undefined;
   members: { id: string; name: string }[];
   onChange: (v: unknown) => void;
   onOpenPicker: () => void;
@@ -296,6 +296,37 @@ function FieldRow({
         <View style={styles.checkboxRow}>
           {label}
           <Switch value={!!value} onValueChange={onChange} />
+        </View>
+      </View>
+    );
+  }
+
+  if (field.type === "multi_select") {
+    const selected = new Set(Array.isArray(value) ? value : []);
+    const toggle = (id: string) => {
+      const next = new Set(selected);
+      next.has(id) ? next.delete(id) : next.add(id);
+      onChange([...next]);
+    };
+    return (
+      <View style={styles.fieldBlock}>
+        {label}
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+          {field.options.map((o) => {
+            const on = selected.has(o.id);
+            return (
+              <Pressable
+                key={o.id}
+                onPress={() => toggle(o.id)}
+                style={[
+                  styles.chip,
+                  on ? { backgroundColor: `${o.color}22` } : { backgroundColor: "transparent", borderWidth: 1, borderColor: o.color, borderStyle: "dashed" },
+                ]}
+              >
+                <Text style={[styles.chipText, { color: o.color }]}>{o.label}</Text>
+              </Pressable>
+            );
+          })}
         </View>
       </View>
     );

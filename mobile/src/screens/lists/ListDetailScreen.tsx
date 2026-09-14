@@ -23,6 +23,11 @@ function fieldPreview(field: ListField, item: ListItemRow, members: { id: string
   if (["select", "status", "priority"].includes(field.type)) {
     return field.options.find((o) => o.id === raw)?.label ?? null;
   }
+  if (field.type === "multi_select") {
+    const ids = Array.isArray(raw) ? raw : [];
+    if (!ids.length) return null;
+    return ids.map((id) => field.options.find((o) => o.id === id)?.label || id).join(", ");
+  }
   if (field.type === "assignee") {
     return members.find((m) => m.id === raw)?.name ?? String(raw);
   }

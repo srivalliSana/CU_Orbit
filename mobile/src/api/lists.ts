@@ -1,7 +1,7 @@
 import { client } from "./client";
 
 export type ListFieldType =
-  | "text" | "long_text" | "select" | "status" | "priority" | "date" | "assignee" | "checkbox" | "number";
+  | "text" | "long_text" | "select" | "multi_select" | "status" | "priority" | "date" | "assignee" | "checkbox" | "number";
 
 export interface ListFieldOption {
   id: string;
@@ -32,7 +32,7 @@ export interface ListField {
 export interface ListItemRow {
   id: string;
   list_id: string;
-  values: Record<string, string | number | boolean | undefined>;
+  values: Record<string, string | number | boolean | string[] | undefined>;
   position: number;
   created_by: string;
   parent_item_id: string | null;

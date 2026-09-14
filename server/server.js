@@ -526,13 +526,15 @@ const List = sequelize.define('List', {
 });
 
 /** One column definition. `options` holds the {id,label,color}[] choices for
- *  select/status/priority fields — empty/ignored for every other type. */
+ *  select/status/priority/multi_select fields — empty/ignored for every
+ *  other type. multi_select stores its value as an array of option ids
+ *  instead of a single one — the only field type that does. */
 const ListField = sequelize.define('ListField', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     list_id: { type: DataTypes.UUID, allowNull: false },
     name: { type: DataTypes.STRING, allowNull: false },
     type: {
-        type: DataTypes.ENUM('text', 'long_text', 'select', 'status', 'priority', 'date', 'assignee', 'checkbox', 'number'),
+        type: DataTypes.ENUM('text', 'long_text', 'select', 'multi_select', 'status', 'priority', 'date', 'assignee', 'checkbox', 'number'),
         defaultValue: 'text',
     },
     options: { type: DataTypes.JSON, defaultValue: [] },
@@ -3430,7 +3432,8 @@ app.get('/api/link-preview', auth.requireAuth, async (req, res) => {
 // A List belongs to one channel; access is exactly channel-membership,
 // reusing canViewChannel rather than inventing a separate permission model.
 
-const LIST_FIELD_TYPES = ['text', 'long_text', 'select', 'status', 'priority', 'date', 'assignee', 'checkbox', 'number'];
+const LIST_FIELD_TYPES = ['text', 'long_text', 'select', 'multi_select', 'status', 'priority', 'date', 'assignee', 'checkbox', 'number'];
+const LIST_OPTION_TYPES = ['select', 'multi_select', 'status', 'priority'];
 
 app.get('/api/channels/:channelId/lists', auth.requireAuth, async (req, res) => {
     try {
@@ -3733,15 +3736,26 @@ app.delete('/api/item-comments/:id', auth.requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
-/** Coerces a raw CSV cell string into the shape each field type stores —
- *  select/status/priority keep the raw label text (resolved against the
- *  field's options client-side/at render time) since a fresh import's
- *  options were just derived from these same values. */
-function coerceImportValue(type, raw) {
+/** Coerces a raw CSV cell string into the shape each field type stores.
+ *  select/status/priority/multi_select need `field` (its options) to turn
+ *  the cell's plain label text into the option id(s) that Cell rendering
+ *  actually matches against — without this, an imported dropdown value
+ *  would never match any option and would silently render blank. */
+function coerceImportValue(type, raw, field) {
     const s = String(raw ?? '').trim();
     if (!s) return undefined;
     if (type === 'checkbox') return ['true', '1', 'yes', 'y', 'done', 'x'].includes(s.toLowerCase());
     if (type === 'number') { const n = Number(s); return Number.isFinite(n) ? n : undefined; }
+    if (type === 'multi_select') {
+        const ids = s.split(/[,;]/).map((label) => label.trim().toLowerCase())
+            .filter(Boolean)
+            .map((label) => (field?.options || []).find((o) => o.label.toLowerCase() === label)?.id)
+            .filter(Boolean);
+        return ids.length ? ids : undefined;
+    }
+    if (type === 'select' || type === 'status' || type === 'priority') {
+        return (field?.options || []).find((o) => o.label.toLowerCase() === s.toLowerCase())?.id;
+    }
     return s.slice(0, 2000);
 }
 
@@ -3763,21 +3777,39 @@ app.post('/api/lists/:id/import', auth.requireAuth, async (req, res) => {
         maxPos = Number.isFinite(maxPos) ? maxPos : -1;
         const fieldIds = [];
         const fieldTypes = [];
-        for (const col of columns) {
+        const fieldObjs = [];   // the ListField itself, needed for option-like types to resolve label -> id below
+        for (let i = 0; i < columns.length; i++) {
+            const col = columns[i];
             if (col.fieldId) {
                 const existing = await ListField.findOne({ where: { id: col.fieldId, list_id: list.id } });
                 if (!existing) return res.status(400).json({ error: 'bad_request', message: `Unknown fieldId ${col.fieldId}` });
                 fieldIds.push(existing.id);
                 fieldTypes.push(existing.type);
+                fieldObjs.push(existing);
             } else {
                 maxPos += 1;
                 const type = LIST_FIELD_TYPES.includes(col.type) ? col.type : 'text';
+                // A new option-like column has no options yet — derive them
+                // from this column's own distinct cell values, otherwise
+                // every imported value would fail to match anything.
+                let options = normalizeFieldOptions(col.options);
+                if (LIST_OPTION_TYPES.includes(type) && !options.length) {
+                    const seen = new Set();
+                    for (const row of rows) {
+                        const raw = String(row[i] ?? '').trim();
+                        if (!raw) continue;
+                        const labels = type === 'multi_select' ? raw.split(/[,;]/) : [raw];
+                        for (const label of labels) { const t = label.trim(); if (t) seen.add(t); }
+                    }
+                    options = normalizeFieldOptions([...seen]);
+                }
                 const created = await ListField.create({
                     list_id: list.id, name: String(col.name || 'Column').trim().slice(0, 60) || 'Column',
-                    type, options: normalizeFieldOptions(col.options), position: maxPos,
+                    type, options, position: maxPos,
                 });
                 fieldIds.push(created.id);
                 fieldTypes.push(created.type);
+                fieldObjs.push(created);
             }
         }
 
@@ -3786,7 +3818,7 @@ app.post('/api/lists/:id/import', auth.requireAuth, async (req, res) => {
         const toCreate = rows.map((row) => {
             const values = {};
             fieldIds.forEach((fid, i) => {
-                const coerced = coerceImportValue(fieldTypes[i], row[i]);
+                const coerced = coerceImportValue(fieldTypes[i], row[i], fieldObjs[i]);
                 if (coerced !== undefined) values[fid] = coerced;
             });
             itemPos += 1;
@@ -3830,6 +3862,7 @@ app.get('/api/lists/:id/export', auth.requireAuth, async (req, res) => {
         const cellText = (field, raw) => {
             if (raw === undefined || raw === null) return '';
             if (field.type === 'checkbox') return raw ? 'true' : 'false';
+            if (field.type === 'multi_select') return (Array.isArray(raw) ? raw : []).map((id) => optionLabel(field, id)).join(', ');
             if (field.type === 'select' || field.type === 'status' || field.type === 'priority') return optionLabel(field, raw);
             if (field.type === 'assignee') return assigneeName.get(raw) || String(raw);
             return String(raw);

@@ -12,6 +12,7 @@ const FIELD_TYPES = [
   { id: 'text', label: 'Text' },
   { id: 'long_text', label: 'Long text' },
   { id: 'select', label: 'Dropdown' },
+  { id: 'multi_select', label: 'Multi-select' },
   { id: 'status', label: 'Status' },
   { id: 'priority', label: 'Priority' },
   { id: 'date', label: 'Date' },
@@ -21,11 +22,17 @@ const FIELD_TYPES = [
 ];
 
 const TYPE_ICON = {
-  text: '✎', long_text: '≡', select: '▾', status: '◔', priority: '!',
+  text: '✎', long_text: '≡', select: '▾', multi_select: '▤', status: '◔', priority: '!',
   date: '📅', assignee: '👤', checkbox: '☑', number: '#',
 };
 
+// Single-value dropdown types — Cell renders these as a plain <select>,
+// and only these can group a Board view into columns (a multi-value field
+// can't cleanly own one column each).
 const OPTION_TYPES = ['select', 'status', 'priority'];
+// Every type that needs the options editor in Add/Edit field — single- and
+// multi-value alike.
+const ALL_OPTION_TYPES = [...OPTION_TYPES, 'multi_select'];
 
 /** Full-screen Lists workspace for one channel — list-of-lists, then a
  *  spreadsheet-style table for whichever list is open. Everything here is
@@ -440,6 +447,7 @@ function BoardView({ list, fields, items, members, groupFieldId, onChangeGroupFi
                         const opt = OPTION_TYPES.includes(f.type) ? (f.options || []).find((o) => o.id === v) : null;
                         const assignee = f.type === 'assignee' ? (members || []).find((m) => m.id === v) : null;
                         const text = opt ? opt.label
+                          : f.type === 'multi_select' ? (Array.isArray(v) ? v : []).map((id) => f.options?.find((o) => o.id === id)?.label || id).join(', ')
                           : f.type === 'assignee' ? (assignee?.name || v)
                           : f.type === 'checkbox' ? (v ? '✓' : null)
                           : String(v);
@@ -612,6 +620,32 @@ function Cell({ field, value, onChange, members }) {
     );
   }
 
+  if (field.type === 'multi_select') {
+    const selected = new Set(Array.isArray(value) ? value : []);
+    const toggle = (id) => {
+      const next = new Set(selected);
+      next.has(id) ? next.delete(id) : next.add(id);
+      onChange([...next]);
+    };
+    return (
+      <div className="flex flex-wrap gap-1">
+        {(field.options || []).map((o) => {
+          const on = selected.has(o.id);
+          return (
+            <button
+              key={o.id}
+              onClick={() => toggle(o.id)}
+              className="rounded px-1.5 py-0.5 text-[11px] font-medium transition"
+              style={on ? { backgroundColor: `${o.color}30`, color: o.color } : { backgroundColor: 'transparent', color: '#94a3b8', border: '1px dashed #cbd5e1' }}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   if (OPTION_TYPES.includes(field.type)) {
     const opt = (field.options || []).find((o) => o.id === value);
     return (
@@ -656,7 +690,7 @@ function AddFieldModal({ onCreate, onClose }) {
     if (!name.trim()) return;
     setBusy(true);
     try {
-      const options = OPTION_TYPES.includes(type)
+      const options = ALL_OPTION_TYPES.includes(type)
         ? optionsText.split('\n').map((s) => s.trim()).filter(Boolean)
         : undefined;
       await onCreate({ name: name.trim(), type, options });
@@ -681,7 +715,7 @@ function AddFieldModal({ onCreate, onClose }) {
         >
           {FIELD_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
         </select>
-        {OPTION_TYPES.includes(type) && (
+        {ALL_OPTION_TYPES.includes(type) && (
           <>
             <label className="text-[11px] font-medium text-slate-500">Options (one per line)</label>
             <textarea

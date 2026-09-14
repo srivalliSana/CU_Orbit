@@ -14,6 +14,7 @@ const FIELD_TYPES: { id: ListFieldType; label: string; icon: string }[] = [
   { id: "text", label: "Text", icon: "✎" },
   { id: "long_text", label: "Long text", icon: "≡" },
   { id: "select", label: "Dropdown", icon: "▾" },
+  { id: "multi_select", label: "Multi-select", icon: "▤" },
   { id: "status", label: "Status", icon: "◔" },
   { id: "priority", label: "Priority", icon: "!" },
   { id: "date", label: "Date", icon: "📅" },
@@ -21,7 +22,7 @@ const FIELD_TYPES: { id: ListFieldType; label: string; icon: string }[] = [
   { id: "checkbox", label: "Checkbox", icon: "☑" },
   { id: "number", label: "Number", icon: "#" },
 ];
-const OPTION_TYPES: ListFieldType[] = ["select", "status", "priority"];
+const OPTION_TYPES: ListFieldType[] = ["select", "multi_select", "status", "priority"];
 
 export default function ListFieldsScreen({ route }: Props) {
   const { listId } = route.params;
