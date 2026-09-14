@@ -14,6 +14,7 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
   const [q, setQ] = useState('');
   const [people, setPeople] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
   const [messageResults, setMessageResults] = useState([]);
   const searchSeq = useRef(0);
   const queryClient = useQueryClient();
@@ -103,11 +104,22 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
             placeholder="Search"
-            aria-label="Search conversations"
+            title="Try from:, in:, before:, or after: to filter results"
+            aria-label="Search conversations. Supports from:, in:, before:, and after: filters"
             className="w-full rounded-lg bg-slate-100 py-2 pl-9 pr-3 text-sm outline-none ring-blue-500/40 placeholder:text-slate-400 transition focus:bg-white focus:ring-2 dark:bg-slate-800/70 dark:text-slate-100 dark:focus:bg-slate-800"
           />
         </div>
+        {searchFocused && q.trim().length === 0 && (
+          <p className="mt-1.5 px-0.5 text-[11px] text-slate-400">
+            Try <code className="rounded bg-slate-100 px-1 py-0.5 dark:bg-slate-800">from:name</code>{' '}
+            <code className="rounded bg-slate-100 px-1 py-0.5 dark:bg-slate-800">in:channel</code>{' '}
+            <code className="rounded bg-slate-100 px-1 py-0.5 dark:bg-slate-800">before:2026-01-01</code>{' '}
+            <code className="rounded bg-slate-100 px-1 py-0.5 dark:bg-slate-800">after:2026-01-01</code>
+          </p>
+        )}
         <div className="mt-2.5 flex gap-1.5">
           {['all', 'channels', 'dms'].map((t) => (
             <button

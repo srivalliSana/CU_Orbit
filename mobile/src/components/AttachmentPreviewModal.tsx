@@ -17,6 +17,7 @@ export default function AttachmentPreviewModal({
   uploading,
   onCancel,
   onConfirm,
+  onLongPressConfirm,
 }: {
   visible: boolean;
   attachments: PendingAttachment[];
@@ -25,6 +26,7 @@ export default function AttachmentPreviewModal({
   uploading: boolean;
   onCancel: () => void;
   onConfirm: () => void;
+  onLongPressConfirm?: () => void;
 }) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -65,7 +67,7 @@ export default function AttachmentPreviewModal({
             <Pressable style={styles.cancelButton} onPress={onCancel} disabled={uploading}>
               <Text style={styles.cancelText}>Cancel</Text>
             </Pressable>
-            <Pressable style={styles.sendButton} onPress={onConfirm} disabled={uploading}>
+            <Pressable style={styles.sendButton} onPress={onConfirm} onLongPress={onLongPressConfirm} disabled={uploading}>
               {uploading ? (
                 <ActivityIndicator color={colors.primaryText} />
               ) : (

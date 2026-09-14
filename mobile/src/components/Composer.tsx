@@ -120,12 +120,42 @@ export default function Composer({
   };
 
   const startScheduling = () => {
-    if (!text.trim() || !onSchedule) return;
+    if ((!text.trim() && pending.length === 0) || !onSchedule) return;
     setScheduleDate(new Date(Date.now() + 60 * 60000));
     setScheduleStep("date");
   };
 
-  const finishScheduling = (when: Date) => {
+  // Handles both flows: attachments staged in the preview modal, or plain
+  // typed text — whichever the user actually has pending when the picker
+  // resolves, since the two composing paths (type vs. attach) are mutually
+  // exclusive in practice (the attachment modal is a blocking sheet).
+  const finishScheduling = async (when: Date) => {
+    if (pending.length > 0) {
+      setUploading(true);
+      try {
+        for (let i = 0; i < pending.length; i++) {
+          const { file, type } = pending[i];
+          const { url, name } = await uploadFile(file);
+          onSchedule?.({
+            body: i === 0 ? caption : "",
+            type,
+            mediaUrl: url,
+            mediaName: name || file.name,
+            mediaMimeType: file.mimeType,
+            replyToId: i === 0 ? replyTo?.id : undefined,
+            sendAt: when.toISOString(),
+          });
+        }
+        setPending([]);
+        setCaption("");
+        onCancelReply?.();
+      } catch (e) {
+        Alert.alert("Upload failed", e instanceof Error ? e.message : "Couldn't schedule that attachment.");
+      } finally {
+        setUploading(false);
+      }
+      return;
+    }
     const body = text.trim();
     const enrichedMentions = taggedUsers.filter((t) => body.includes(`@${t.display_name}`));
     onSchedule?.({
@@ -508,6 +538,7 @@ export default function Composer({
           uploading={uploading}
           onCancel={cancelPending}
           onConfirm={confirmPending}
+          onLongPressConfirm={onSchedule ? startScheduling : undefined}
         />
       </View>
     </View>

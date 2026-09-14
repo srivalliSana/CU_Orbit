@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -23,6 +23,20 @@ export default function ThreadDetailScreen({ route }: Props) {
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({ queryKey: ["thread", parentId], queryFn: () => getThread(parentId) });
+  const listRef = useRef<FlatList<Message>>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+
+  const jumpToMessage = (id: string) => {
+    if (!data) return;
+    setHighlightId(id);
+    setTimeout(() => setHighlightId((cur) => (cur === id ? null : cur)), 1800);
+    if (id === data.root.id) {
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+      return;
+    }
+    const index = data.replies.findIndex((m) => m.id === id);
+    if (index !== -1) listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+  };
 
   useEffect(() => {
     markThreadRead(parentId).finally(() => queryClient.invalidateQueries({ queryKey: ["threads"] }));
@@ -83,14 +97,22 @@ export default function ThreadDetailScreen({ route }: Props) {
     onPin: (pinned: boolean) => pin.mutate({ id: message.id, pinned }),
     onStar: (starred: boolean) => star.mutate({ id: message.id, starred }),
     onAction: (actionId: string, value: string | undefined) => action.mutate({ id: message.id, actionId, value }),
+    onJumpToMessage: jumpToMessage,
+    highlighted: highlightId === message.id,
   });
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <FlatList
+        ref={listRef}
         data={replies}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
+        onScrollToIndexFailed={(info) => {
+          setTimeout(() => {
+            listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+          }, 50);
+        }}
         ListHeaderComponent={
           <View>
             <MessageBubble message={root} {...rowActions(root)} />
