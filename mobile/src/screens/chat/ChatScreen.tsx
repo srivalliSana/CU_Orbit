@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Button, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Button, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
@@ -47,6 +47,39 @@ export default function ChatScreen({ route, navigation }: Props) {
   const [ephemeralNotice, setEphemeralNotice] = useState<{ app_name: string; text: string } | null>(null);
   const listRef = useRef<FlatList<Message>>(null);
   const pinnedMessage = messages?.find((m) => m.is_pinned);
+
+  // Keep the newest message visible above the keyboard: scroll to the end
+  // whenever the keyboard opens (about to type), and whenever a new message
+  // lands that's either our own outgoing send or arrives while the keyboard
+  // is already up — matches WhatsApp's "don't yank the view while the user
+  // is reading old history" behavior instead of force-scrolling on every
+  // incoming message.
+  const keyboardVisible = useRef(false);
+  const lastMessageId = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, () => {
+      keyboardVisible.current = true;
+      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      keyboardVisible.current = false;
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    const last = messages?.[messages.length - 1];
+    if (!last || last.id === lastMessageId.current) return;
+    lastMessageId.current = last.id;
+    if (last.sender_id === selfId || keyboardVisible.current) {
+      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    }
+  }, [messages, selfId]);
 
   const jumpToMessage = (id: string) => {
     const index = messages?.findIndex((m) => m.id === id) ?? -1;
@@ -154,8 +187,12 @@ export default function ChatScreen({ route, navigation }: Props) {
   return (
     <KeyboardAvoidingView
       style={styles.flex}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={90}
+      // "padding" on iOS; "height" on Android — SDK 57's mandatory
+      // edge-to-edge mode means the OS no longer auto-resizes the window
+      // when the keyboard opens, so Android needs the same explicit
+      // shrink-to-make-room behavior iOS gets from "padding".
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
       {pinnedMessage ? (
         <Pressable style={styles.pinnedBar} onPress={() => jumpToMessage(pinnedMessage.id)}>

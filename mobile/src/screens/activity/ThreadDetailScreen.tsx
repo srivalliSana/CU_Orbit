@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
@@ -42,6 +42,35 @@ export default function ThreadDetailScreen({ route }: Props) {
   useEffect(() => {
     markThreadRead(parentId).finally(() => queryClient.invalidateQueries({ queryKey: ["threads"] }));
   }, [parentId, queryClient]);
+
+  // Same "keep the newest reply visible above the keyboard" behavior as
+  // the main ChatScreen — see there for why both events are needed.
+  const keyboardVisible = useRef(false);
+  const lastReplyId = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, () => {
+      keyboardVisible.current = true;
+      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      keyboardVisible.current = false;
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    const last = data?.replies[data.replies.length - 1];
+    if (!last || last.id === lastReplyId.current) return;
+    lastReplyId.current = last.id;
+    if (last.sender_id === selfId || keyboardVisible.current) {
+      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    }
+  }, [data, selfId]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["thread", parentId] });
@@ -114,7 +143,10 @@ export default function ThreadDetailScreen({ route }: Props) {
   });
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
       <FlatList
         ref={listRef}
         data={replies}
