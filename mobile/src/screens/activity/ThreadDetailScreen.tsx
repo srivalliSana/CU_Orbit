@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { getThread, markThreadRead } from "../../api/threads";
+import { apiErrorMessage } from "../../api/client";
 import { reactToMessage, sendMessage, sendMessageAction, deleteMessage, hideMessage, editMessage, setMessagePinned, starMessage, unstarMessage } from "../../api/messages";
 import MessageBubble from "../../components/MessageBubble";
 import Composer, { type SendPayload } from "../../components/Composer";
@@ -22,7 +23,7 @@ export default function ThreadDetailScreen({ route }: Props) {
   const isSuperAdmin = useAuthStore((s) => s.user?.role === "admin");
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({ queryKey: ["thread", parentId], queryFn: () => getThread(parentId) });
+  const { data, isLoading, error, refetch } = useQuery({ queryKey: ["thread", parentId], queryFn: () => getThread(parentId) });
   const listRef = useRef<FlatList<Message>>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
 
@@ -75,10 +76,21 @@ export default function ThreadDetailScreen({ route }: Props) {
     onSuccess: invalidate,
   });
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>{apiErrorMessage(error, "Couldn't load this thread.")}</Text>
+        <Pressable onPress={() => refetch()} style={styles.retryButton}>
+          <Text style={styles.retryText}>Try again</Text>
+        </Pressable>
       </View>
     );
   }
@@ -143,7 +155,12 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: 24,
+    gap: 12,
   },
+  errorText: { color: colors.danger, fontSize: 14, textAlign: "center" },
+  retryButton: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 10, backgroundColor: colors.primary },
+  retryText: { color: colors.primaryText, fontWeight: "700", fontSize: 13 },
   list: {
     paddingVertical: 8,
   },

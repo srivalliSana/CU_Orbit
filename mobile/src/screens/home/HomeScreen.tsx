@@ -153,6 +153,7 @@ export default function HomeScreen({ navigation }: Props) {
         value={query}
         onChangeText={setQuery}
         placeholder="Jump to a channel, DM, or file"
+        placeholderTextColor={colors.textMuted}
         style={styles.search}
       />
       <FlatList

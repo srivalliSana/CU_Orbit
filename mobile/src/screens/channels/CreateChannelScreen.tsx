@@ -36,6 +36,7 @@ export default function CreateChannelScreen({ navigation }: Props) {
         value={name}
         onChangeText={setName}
         placeholder="e.g. bca-2024-project"
+        placeholderTextColor={colors.textMuted}
         style={styles.input}
         maxLength={80}
       />
@@ -45,6 +46,7 @@ export default function CreateChannelScreen({ navigation }: Props) {
         value={description}
         onChangeText={setDescription}
         placeholder="What is this channel for?"
+        placeholderTextColor={colors.textMuted}
         style={styles.input}
         maxLength={140}
       />

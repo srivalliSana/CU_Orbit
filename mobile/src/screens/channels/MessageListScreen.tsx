@@ -28,19 +28,23 @@ export default function MessageListScreen({ route, navigation }: Props) {
   const { containerId, mode, title, chatTitle, chatKind } = route.params;
   const [category, setCategory] = useState("image");
   const [items, setItems] = useState<(StarredMessage & { links?: string[] })[] | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     navigation.setOptions({ title });
   }, [navigation, title]);
 
-  useEffect(() => {
+  const load = () => {
     setItems(null);
+    setLoadError(false);
     const fetcher =
       mode === "pinned" ? getPinnedMessages(containerId)
       : mode === "starred" ? getStarredMessages(containerId)
       : getSharedMedia(containerId, category);
-    fetcher.then(setItems).catch(() => setItems([]));
-  }, [mode, category, containerId]);
+    fetcher.then(setItems).catch(() => { setItems([]); setLoadError(true); });
+  };
+
+  useEffect(load, [mode, category, containerId]);
 
   return (
     <View style={styles.container}>
@@ -60,6 +64,13 @@ export default function MessageListScreen({ route, navigation }: Props) {
 
       {items === null ? (
         <ActivityIndicator style={styles.loading} color={colors.primary} />
+      ) : loadError ? (
+        <View style={styles.errorBlock}>
+          <Text style={styles.errorText}>Couldn't load this — check your connection.</Text>
+          <Pressable onPress={load} style={styles.retryButton}>
+            <Text style={styles.retryText}>Try again</Text>
+          </Pressable>
+        </View>
       ) : (
         <FlatList
           data={items}
@@ -148,6 +159,10 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   },
   list: { padding: 12, gap: 8 },
   empty: { textAlign: "center", color: colors.textMuted, marginTop: 24 },
+  errorBlock: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24, gap: 12 },
+  errorText: { color: colors.danger, fontSize: 14, textAlign: "center" },
+  retryButton: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 10, backgroundColor: colors.primary },
+  retryText: { color: colors.primaryText, fontWeight: "700", fontSize: 13 },
   row: {
     backgroundColor: colors.surface,
     borderRadius: 10,

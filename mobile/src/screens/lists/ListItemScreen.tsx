@@ -8,6 +8,7 @@ import {
   type ListDetail, type ListField, type ListItemComment, type ListItemRow,
 } from "../../api/lists";
 import { getChannelMembers } from "../../api/channels";
+import { apiErrorMessage } from "../../api/client";
 import Avatar from "../../components/Avatar";
 import OptionPickerModal from "../../components/lists/OptionPickerModal";
 import { useThemeColors } from "../../state/themeStore";
@@ -27,7 +28,7 @@ export default function ListItemScreen({ route, navigation }: Props) {
   const queryClient = useQueryClient();
   const [pickerField, setPickerField] = useState<ListField | null>(null);
 
-  const { data, isLoading } = useQuery({ queryKey: ["list", listId], queryFn: () => getList(listId) });
+  const { data, isLoading, error, refetch } = useQuery({ queryKey: ["list", listId], queryFn: () => getList(listId) });
   const item = data?.items.find((it) => it.id === itemId);
   const membersQuery = useQuery({
     queryKey: ["channelMembers", data?.list.channel_id],
@@ -95,10 +96,29 @@ export default function ListItemScreen({ route, navigation }: Props) {
     },
   });
 
-  if (isLoading || !data || !item) {
+  if (isLoading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>{apiErrorMessage(error, "Couldn't load this item.")}</Text>
+        <Pressable onPress={() => refetch()} style={styles.retryButton}>
+          <Text style={styles.retryText}>Try again</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (!item) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>This item no longer exists — it may have been deleted.</Text>
       </View>
     );
   }
@@ -398,7 +418,10 @@ function FieldRow({
 
 const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24, gap: 12 },
+  errorText: { color: colors.danger, fontSize: 14, textAlign: "center" },
+  retryButton: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 10, backgroundColor: colors.primary },
+  retryText: { color: colors.primaryText, fontWeight: "700", fontSize: 13 },
   fieldBlock: { gap: 6 },
   fieldLabel: { fontSize: 12, fontWeight: "700", color: colors.textMuted, textTransform: "uppercase" },
   checkboxRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },

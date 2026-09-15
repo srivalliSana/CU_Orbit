@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Button, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -110,21 +110,26 @@ export default function ProfileScreen({ navigation }: Props) {
       ) : (
         <View style={styles.form}>
           <Text style={styles.label}>Name</Text>
-          <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Your name" />
+          <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Your name" placeholderTextColor={colors.textMuted} />
           <Text style={styles.label}>Status</Text>
-          <TextInput style={styles.input} value={statusText} onChangeText={setStatusText} placeholder="What's on your mind?" />
+          <TextInput style={styles.input} value={statusText} onChangeText={setStatusText} placeholder="What's on your mind?" placeholderTextColor={colors.textMuted} />
           <Text style={styles.label}>Bio</Text>
           <TextInput
             style={[styles.input, styles.bioInput]}
             value={bio}
             onChangeText={setBio}
             placeholder="A little about you"
+            placeholderTextColor={colors.textMuted}
             multiline
           />
           {error && <Text style={styles.errorText}>{error}</Text>}
           <View style={styles.formButtons}>
-            <Button title="Cancel" onPress={() => setEditing(false)} disabled={saving} />
-            <Button title={saving ? "Saving…" : "Save"} onPress={save} disabled={saving} color={colors.primary} />
+            <Pressable onPress={() => setEditing(false)} disabled={saving} style={[styles.formButton, saving && styles.formButtonDisabled]}>
+              <Text style={styles.formButtonText}>Cancel</Text>
+            </Pressable>
+            <Pressable onPress={save} disabled={saving} style={[styles.formButton, styles.formButtonPrimary, saving && styles.formButtonDisabled]}>
+              <Text style={styles.formButtonTextPrimary}>{saving ? "Saving…" : "Save"}</Text>
+            </Pressable>
           </View>
         </View>
       )}
@@ -152,7 +157,9 @@ export default function ProfileScreen({ navigation }: Props) {
       )}
 
       <View style={styles.spacer} />
-      <Button title="Sign out" color={colors.danger} onPress={signOut} />
+      <Pressable onPress={signOut} style={styles.signOutButton}>
+        <Text style={styles.signOutButtonText}>Sign out</Text>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -243,8 +250,43 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   },
   formButtons: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    gap: 10,
     marginTop: 16,
+  },
+  formButton: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 11,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
+  },
+  formButtonPrimary: {
+    backgroundColor: colors.primary,
+  },
+  formButtonDisabled: {
+    opacity: 0.5,
+  },
+  formButtonText: {
+    color: colors.text,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  formButtonTextPrimary: {
+    color: colors.primaryText,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  signOutButton: {
+    alignItems: "center",
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  signOutButtonText: {
+    color: colors.danger,
+    fontWeight: "700",
+    fontSize: 14,
   },
   spacer: {
     height: 24,

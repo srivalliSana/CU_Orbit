@@ -1,7 +1,7 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createDrawerNavigator } from "@react-navigation/drawer";
-import { Button, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { DrawerContentComponentProps } from "@react-navigation/drawer";
 
@@ -145,15 +145,49 @@ function Tabs() {
 function DrawerContent({ navigation }: DrawerContentComponentProps) {
   const { user, signOut } = useAuthSession();
   const colors = useThemeColors();
+  const styles = drawerStyles(colors);
   return (
     <View style={{ flex: 1, padding: 24, paddingTop: 56, backgroundColor: colors.background }}>
       <View style={{ marginBottom: 24 }}>
-        <Button title="Home" onPress={() => navigation.navigate("Tabs", { screen: "HomeTab" })} />
+        <Pressable
+          onPress={() => navigation.navigate("Tabs", { screen: "HomeTab" })}
+          style={styles.button}
+        >
+          <Text style={styles.buttonText}>Home</Text>
+        </Pressable>
       </View>
-      <Button title={`Sign out (${user?.name ?? ""})`} color={colors.danger} onPress={signOut} />
+      <Pressable onPress={signOut} style={styles.signOutButton}>
+        <Text style={styles.signOutButtonText}>Sign out ({user?.name ?? ""})</Text>
+      </Pressable>
     </View>
   );
 }
+
+const drawerStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
+  button: {
+    alignItems: "center",
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
+  },
+  buttonText: {
+    color: colors.text,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  signOutButton: {
+    alignItems: "center",
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  signOutButtonText: {
+    color: colors.danger,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+});
 
 const Drawer = createDrawerNavigator<DrawerParamList>();
 export default function AppShell() {

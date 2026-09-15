@@ -6,6 +6,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { createItem, getList, updateItem, type ListField, type ListItemRow } from "../../api/lists";
 import OptionPickerModal from "../../components/lists/OptionPickerModal";
+import { apiErrorMessage } from "../../api/client";
 import { useThemeColors } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
 
@@ -29,7 +30,7 @@ export default function ListBoardScreen({ route, navigation }: Props) {
   const [fieldPickerOpen, setFieldPickerOpen] = useState(false);
   const [movingItem, setMovingItem] = useState<ListItemRow | null>(null);
 
-  const { data, isLoading } = useQuery({ queryKey: ["list", listId], queryFn: () => getList(listId) });
+  const { data, isLoading, error, refetch } = useQuery({ queryKey: ["list", listId], queryFn: () => getList(listId) });
 
   const setValue = useMutation({
     mutationFn: (vars: { itemId: string; fieldId: string; value: string | undefined }) =>
@@ -54,10 +55,21 @@ export default function ListBoardScreen({ route, navigation }: Props) {
     navigation.setOptions({ title: data?.list ? `${data.list.icon} ${data.list.name}` : listName || "Board" });
   }, [navigation, data?.list.name, data?.list.icon, listName]);
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>{apiErrorMessage(error, "Couldn't load this board.")}</Text>
+        <Pressable onPress={() => refetch()} style={styles.retryButton}>
+          <Text style={styles.retryText}>Try again</Text>
+        </Pressable>
       </View>
     );
   }
@@ -157,7 +169,10 @@ export default function ListBoardScreen({ route, navigation }: Props) {
 
 const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24, gap: 12 },
+  errorText: { color: colors.danger, fontSize: 14, textAlign: "center" },
+  retryButton: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 10, backgroundColor: colors.primary },
+  retryText: { color: colors.primaryText, fontWeight: "700", fontSize: 13 },
   groupByRow: {
     flexDirection: "row", alignItems: "center", gap: 6,
     paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border,

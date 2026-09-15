@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Button, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { joinChannelByLink } from "../../api/channels";
@@ -48,7 +48,9 @@ export default function JoinChannelScreen({ route, navigation }: Props) {
     return (
       <View style={styles.center}>
         <Text style={styles.errorText}>{message}</Text>
-        <Button title="Back to Home" onPress={() => navigation.replace("List")} />
+        <Pressable onPress={() => navigation.replace("List")} style={styles.actionButton}>
+          <Text style={styles.actionButtonText}>Back to Home</Text>
+        </Pressable>
       </View>
     );
   }
@@ -61,7 +63,9 @@ export default function JoinChannelScreen({ route, navigation }: Props) {
           #{channel?.name ?? "This channel"} requires admin approval to join — you'll get access once
           approved.
         </Text>
-        <Button title="Back to Home" onPress={() => navigation.replace("List")} />
+        <Pressable onPress={() => navigation.replace("List")} style={styles.actionButton}>
+          <Text style={styles.actionButtonText}>Back to Home</Text>
+        </Pressable>
       </View>
     );
   }
@@ -69,14 +73,16 @@ export default function JoinChannelScreen({ route, navigation }: Props) {
   return (
     <View style={styles.center}>
       <Text style={styles.title}>Joined #{channel?.name ?? "channel"}</Text>
-      <Button
-        title="Open channel"
+      <Pressable
         onPress={() =>
           channel
             ? navigation.replace("Chat", { containerId: channel.id, title: channel.name, kind: "channel" })
             : navigation.replace("List")
         }
-      />
+        style={styles.actionButton}
+      >
+        <Text style={styles.actionButtonText}>Open channel</Text>
+      </Pressable>
     </View>
   );
 }
@@ -104,5 +110,17 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     fontSize: 14,
     color: colors.danger,
     textAlign: "center",
+  },
+  actionButton: {
+    marginTop: 4,
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  actionButtonText: {
+    color: colors.primaryText,
+    fontWeight: "700",
+    fontSize: 14,
   },
 });

@@ -22,7 +22,11 @@ export default function CanvasScreen({ route, navigation }: Props) {
   const [bodyDraft, setBodyDraft] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const load = () => getCanvas(channelId).then(setCanvas).catch(() => setCanvas(null));
+  const [loadError, setLoadError] = useState(false);
+  const load = () => {
+    setLoadError(false);
+    getCanvas(channelId).then(setCanvas).catch(() => { setCanvas(null); setLoadError(true); });
+  };
   useEffect(() => { load(); }, [channelId]);
 
   const startCreate = async () => {
@@ -93,6 +97,18 @@ export default function CanvasScreen({ route, navigation }: Props) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (canvas === null && loadError) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.emptyTitle}>Couldn't load this canvas.</Text>
+        <Text style={styles.emptySubtitle}>Check your connection and try again.</Text>
+        <Pressable onPress={load} style={styles.createButton}>
+          <Text style={styles.createButtonText}>Try again</Text>
+        </Pressable>
       </View>
     );
   }

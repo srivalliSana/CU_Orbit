@@ -5,6 +5,10 @@ import { useAuthStore } from "../state/authStore";
 
 export const client = axios.create({
   baseURL: API_BASE_URL,
+  // Without a cap, a stalled request (dead wifi, a campus network that
+  // drops the connection mid-request) leaves the UI on an indefinite
+  // spinner instead of surfacing a real, retriable error.
+  timeout: 15000,
 });
 
 client.interceptors.request.use((config) => {

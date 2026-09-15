@@ -297,6 +297,8 @@ export default function MessageBubble({
 
         <div
           onClick={showReads}
+          onDoubleClick={(e) => { e.stopPropagation(); if (!m.pending) onReply?.(m); }}
+          title="Double-click to reply"
           className={`rounded-2xl px-3 py-2 shadow-sm ${own && isGroup && !m.pending ? 'cursor-pointer' : ''} ${
             own
               ? 'rounded-br-md bg-blue-600 text-white'

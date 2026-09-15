@@ -2,6 +2,16 @@ import { useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
+import { Ionicons } from "@expo/vector-icons";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  Extrapolation,
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 
 import ReactionPicker from "./ReactionPicker";
 import { useCustomEmojiMap } from "./EmojiPicker";
@@ -66,6 +76,40 @@ export default function MessageBubble({
   const [votesVisible, setVotesVisible] = useState(false);
   const customEmojiMap = useCustomEmojiMap();
 
+  // WhatsApp-style swipe-right-to-reply: drag reveals a reply icon behind
+  // the bubble; releasing past REPLY_THRESHOLD fires onReply, otherwise it
+  // springs back. Disabled (no-op) when the caller doesn't support replying
+  // (e.g. inside a thread detail view).
+  const translateX = useSharedValue(0);
+  const REPLY_THRESHOLD = 56;
+  const swipeGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(!!onReply)
+        .activeOffsetX([-1000, 10])
+        .failOffsetY([-12, 12])
+        .onUpdate((e) => {
+          translateX.value = Math.max(0, Math.min(e.translationX, 80));
+        })
+        .onEnd(() => {
+          if (translateX.value > REPLY_THRESHOLD && onReply) {
+            runOnJS(onReply)();
+          }
+          translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
+        }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [onReply]
+  );
+  const swipeBubbleStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+  const swipeIconStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(translateX.value, [0, REPLY_THRESHOLD], [0, 1], Extrapolation.CLAMP),
+    transform: [
+      { scale: interpolate(translateX.value, [0, REPLY_THRESHOLD], [0.5, 1], Extrapolation.CLAMP) },
+    ],
+  }));
+
   const reactionCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const r of message.reactions) counts.set(r.emoji, (counts.get(r.emoji) ?? 0) + 1);
@@ -121,6 +165,12 @@ export default function MessageBubble({
   return (
     <View style={[styles.row, isOwn ? styles.rowOwn : styles.rowOther]}>
       {message.is_pinned ? <Text style={styles.pinnedLabel}>📌 Pinned</Text> : null}
+      <GestureDetector gesture={swipeGesture}>
+        <View style={styles.swipeWrap}>
+          <Animated.View style={[styles.swipeReplyIcon, swipeIconStyle]}>
+            <Ionicons name="arrow-undo" size={18} color={colors.primary} />
+          </Animated.View>
+          <Animated.View style={swipeBubbleStyle}>
       <Pressable
         onLongPress={() => setPickerVisible(true)}
         style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther, highlighted && styles.bubbleHighlighted]}
@@ -305,6 +355,9 @@ export default function MessageBubble({
           </View>
         ) : null}
       </Pressable>
+          </Animated.View>
+        </View>
+      </GestureDetector>
 
       <ReactionPicker
         visible={pickerVisible}
@@ -456,6 +509,21 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     fontWeight: "700",
     color: colors.textMuted,
     marginBottom: 2,
+  },
+  swipeWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    maxWidth: "100%",
+  },
+  swipeReplyIcon: {
+    position: "absolute",
+    left: -30,
+    top: "50%",
+    marginTop: -12,
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
   },
   bubble: {
     maxWidth: "80%",

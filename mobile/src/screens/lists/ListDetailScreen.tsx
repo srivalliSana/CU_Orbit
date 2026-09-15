@@ -8,6 +8,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { createItem, deleteList, exportListCsvText, getList, type ListField, type ListItemRow } from "../../api/lists";
 import { getChannelMembers } from "../../api/channels";
+import { apiErrorMessage } from "../../api/client";
 import { useThemeColors } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
 
@@ -40,7 +41,7 @@ export default function ListDetailScreen({ route, navigation }: Props) {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const queryClient = useQueryClient();
 
-  const { data, isLoading, refetch, isRefetching } = useQuery({
+  const { data, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ["list", listId],
     queryFn: () => getList(listId),
   });
@@ -113,10 +114,21 @@ export default function ListDetailScreen({ route, navigation }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigation, data?.list.name, data?.list.icon]);
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>{apiErrorMessage(error, "Couldn't load this list.")}</Text>
+        <Pressable onPress={() => refetch()} style={styles.retryButton}>
+          <Text style={styles.retryText}>Try again</Text>
+        </Pressable>
       </View>
     );
   }
@@ -197,7 +209,10 @@ export default function ListDetailScreen({ route, navigation }: Props) {
 
 const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 40 },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 40, paddingHorizontal: 24, gap: 12 },
+  errorText: { color: colors.danger, fontSize: 14, textAlign: "center" },
+  retryButton: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 10, backgroundColor: colors.primary },
+  retryText: { color: colors.primaryText, fontWeight: "700", fontSize: 13 },
   card: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 8 },
   cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   cardTitle: { fontSize: 15, fontWeight: "600" },
