@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { getThemeMode, setThemeMode } from '../lib/theme';
 import { setDoNotDisturb } from '../api/chat';
+import { updateProfile } from '../api/users';
 
 const THEME_OPTIONS = [
   { value: 'system', label: 'System default' },
@@ -18,6 +19,17 @@ const DND_OPTIONS = [
 export default function SettingsPanel({ user, onClose, onSignOut, onUpdated }) {
   const [mode, setMode] = useState(getThemeMode());
   const [dndBusy, setDndBusy] = useState(false);
+  const [digestBusy, setDigestBusy] = useState(false);
+
+  const toggleDigest = async () => {
+    setDigestBusy(true);
+    try {
+      const updated = await updateProfile({ email_digest_opt_out: !user?.email_digest_opt_out });
+      onUpdated?.(updated);
+    } finally {
+      setDigestBusy(false);
+    }
+  };
 
   const choose = (value) => {
     setThemeMode(value);
@@ -99,6 +111,30 @@ export default function SettingsPanel({ user, onClose, onSignOut, onUpdated }) {
           <p className="mt-2 text-xs text-slate-500">
             Individual channels and DMs can be muted from their row in the sidebar.
           </p>
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+            <div>
+              <p className="text-sm text-slate-700 dark:text-slate-200">Email digest</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                A daily email summarizing unread mentions and messages, only when there's something to report.
+              </p>
+            </div>
+            <button
+              onClick={toggleDigest}
+              disabled={digestBusy}
+              role="switch"
+              aria-checked={!user?.email_digest_opt_out}
+              aria-label="Email digest"
+              className={`relative h-6 w-11 shrink-0 rounded-full transition disabled:opacity-50 ${
+                user?.email_digest_opt_out ? 'bg-slate-300 dark:bg-slate-700' : 'bg-blue-600'
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${
+                  user?.email_digest_opt_out ? 'left-0.5' : 'left-[22px]'
+                }`}
+              />
+            </button>
+          </div>
         </div>
 
         <h3 className="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">Privacy</h3>

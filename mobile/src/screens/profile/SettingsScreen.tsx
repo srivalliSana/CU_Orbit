@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useThemeColors, useThemeStore, type ThemeMode } from "../../state/themeStore";
 import { useAuthStore } from "../../state/authStore";
 import { setDoNotDisturb } from "../../api/conversations";
+import { updateProfile } from "../../api/users";
 
 const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: "system", label: "System default" },
@@ -24,6 +25,7 @@ export default function SettingsScreen() {
   const setMode = useThemeStore((s) => s.setMode);
   const user = useAuthStore((s) => s.user);
   const [dndBusy, setDndBusy] = useState(false);
+  const [digestBusy, setDigestBusy] = useState(false);
 
   const dndUntil = user?.dnd_until ? new Date(user.dnd_until) : null;
   const dndActive = !!dndUntil && dndUntil.getTime() > Date.now();
@@ -35,6 +37,16 @@ export default function SettingsScreen() {
       if (user) useAuthStore.getState().updateUser({ ...user, dnd_until });
     } finally {
       setDndBusy(false);
+    }
+  };
+
+  const toggleDigest = async () => {
+    setDigestBusy(true);
+    try {
+      const updated = await updateProfile({ email_digest_opt_out: !user?.email_digest_opt_out });
+      useAuthStore.getState().updateUser(updated);
+    } finally {
+      setDigestBusy(false);
     }
   };
 
@@ -84,6 +96,19 @@ export default function SettingsScreen() {
             ))}
           </View>
         )}
+        <View style={[styles.row, { borderTopWidth: 1, borderTopColor: colors.border }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.rowText, { color: colors.text }]}>Email digest</Text>
+            <Text style={[styles.hint, { color: colors.textMuted, padding: 0, marginTop: 2 }]}>
+              A daily email summarizing unread mentions and messages.
+            </Text>
+          </View>
+          {digestBusy ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Switch value={!user?.email_digest_opt_out} onValueChange={toggleDigest} />
+          )}
+        </View>
       </View>
 
       <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Privacy</Text>

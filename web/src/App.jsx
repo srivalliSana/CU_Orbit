@@ -21,6 +21,7 @@ import MentionsPanel from './components/MentionsPanel';
 import ProfilePanel from './components/ProfilePanel';
 import SettingsPanel from './components/SettingsPanel';
 import SignInScreen from './components/SignInScreen';
+import OnboardingScreen from './components/OnboardingScreen';
 import AdminPanel from './components/AdminPanel';
 import OAuthConsentScreen from './components/OAuthConsentScreen';
 import UserProfileModal from './components/UserProfileModal';
@@ -281,6 +282,10 @@ export default function App() {
         onDone={() => { window.location.href = window.location.pathname; }}
       />
     );
+  }
+
+  if (status === 'ready' && user && !user.has_onboarded) {
+    return <OnboardingScreen user={user} onDone={(updated) => setUser(updated)} />;
   }
 
   return (

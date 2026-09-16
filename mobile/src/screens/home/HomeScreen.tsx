@@ -80,21 +80,17 @@ export default function HomeScreen({ navigation }: Props) {
     const term = query.trim().toLowerCase();
     const match = (title: string) => !term || title.toLowerCase().includes(term);
 
-    const channelRows = (data?.channels ?? [])
-      .map(channelToRow)
-      .filter((r) => match(r.title))
-      .sort((a, b) => {
-        if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
-        return (b.sentAt ?? 0) - (a.sentAt ?? 0);
-      });
+    const byRecency = (a: ChatRowItem, b: ChatRowItem) => (b.sentAt ?? 0) - (a.sentAt ?? 0);
 
-    const dmRows = (data?.dms ?? [])
-      .map(dmToRow)
-      .filter((r) => match(r.title))
-      .sort((a, b) => {
-        if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
-        return (b.sentAt ?? 0) - (a.sentAt ?? 0);
-      });
+    const allChannelRows = (data?.channels ?? []).map(channelToRow).filter((r) => match(r.title));
+    const allDmRows = (data?.dms ?? []).map(dmToRow).filter((r) => match(r.title));
+
+    // Pinned conversations get their own section at the top, same as web's
+    // sidebar — not just sorted-first within Channels/DMs, actually pulled
+    // out into a dedicated "📌 Pinned" group.
+    const pinnedRows = [...allChannelRows.filter((r) => r.isPinned), ...allDmRows.filter((r) => r.isPinned)].sort(byRecency);
+    const channelRows = allChannelRows.filter((r) => !r.isPinned).sort(byRecency);
+    const dmRows = allDmRows.filter((r) => !r.isPinned).sort(byRecency);
 
     const list: ListItem[] = [];
     if (!term) {
@@ -126,6 +122,11 @@ export default function HomeScreen({ navigation }: Props) {
       list.push(
         ...messageResults.map((r) => ({ kind: "message" as const, id: `msg-${r.id}`, result: r }))
       );
+    }
+
+    if (!term && pinnedRows.length > 0) {
+      list.push({ kind: "sectionHeader", id: "pinned-header", label: "📌 Pinned" });
+      list.push(...pinnedRows.map((row) => ({ kind: "row" as const, id: `pinned-${row.id}`, row })));
     }
 
     list.push({

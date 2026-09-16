@@ -24,6 +24,11 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
     queryClient.invalidateQueries({ queryKey: ['home'] });
   };
 
+  const togglePin = async (containerId, pinned) => {
+    await setConversationPref(containerId, 'pin', pinned).catch(() => {});
+    queryClient.invalidateQueries({ queryKey: ['home'] });
+  };
+
   // Search the campus directory, plus message content, as well as open
   // conversations, so anyone/anything at the university can be found — not
   // only people/chats already open. Debounced, and stale responses are
@@ -48,18 +53,23 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
     return () => clearTimeout(timer);
   }, [q]);
 
-  const { channels, dms } = useMemo(() => {
+  const { channels, dms, pinnedChannels, pinnedDms } = useMemo(() => {
     const term = q.trim().toLowerCase();
     const match = (s) => !term || (s || '').toLowerCase().includes(term);
+    const allChannels = (chats.channels || []).filter((c) => match(c.name));
+    const allDms = (chats.dms || []).filter((d) => match(d.other_user_name));
     return {
-      channels: (chats.channels || []).filter((c) => match(c.name)),
-      dms: (chats.dms || []).filter((d) => match(d.other_user_name)),
+      channels: allChannels.filter((c) => !c.is_pinned),
+      dms: allDms.filter((d) => !d.is_pinned),
+      pinnedChannels: allChannels.filter((c) => c.is_pinned),
+      pinnedDms: allDms.filter((d) => d.is_pinned),
     };
   }, [chats, q]);
 
+  const showPinned = tab !== 'dms' && pinnedChannels.length > 0 || tab !== 'channels' && pinnedDms.length > 0;
   const showChannels = tab !== 'dms' && channels.length > 0;
   const showDms = tab !== 'channels' && dms.length > 0;
-  const nothing = !showChannels && !showDms;
+  const nothing = !showPinned && !showChannels && !showDms;
 
   return (
     <aside
@@ -197,6 +207,45 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
           </Section>
         )}
 
+        {showPinned && (
+          <Section title="📌 Pinned">
+            {pinnedChannels.map((c) => (
+              <Row
+                key={c.id}
+                active={activeId === c.id}
+                onClick={() => onSelect({ id: c.id, kind: 'channel', title: `# ${c.name}`, topic: c.topic })}
+                avatar={<Avatar name={c.name} kind="channel" size={44} />}
+                title={`# ${c.name}`}
+                preview={preview(c.last_message_preview)}
+                time={c.last_message_preview?.sent_at}
+                unread={c.unread_count}
+                mention={c.has_unread_mention}
+                muted={c.is_muted}
+                onToggleMute={() => toggleMute(c.id, !c.is_muted)}
+                pinned
+                onTogglePin={() => togglePin(c.id, false)}
+              />
+            ))}
+            {pinnedDms.map((d) => (
+              <Row
+                key={d.id}
+                active={activeId === d.id}
+                onClick={() => onSelect({ id: d.id, kind: 'dm', title: d.other_user_name, presence: d.presence })}
+                avatar={<Avatar name={d.other_user_name} url={d.other_user_avatar_url} presence={d.presence} size={44} />}
+                title={d.other_user_name}
+                preview={preview(d.last_message_preview)}
+                time={d.last_message_preview?.sent_at}
+                unread={d.unread_count}
+                mention={d.has_unread_mention}
+                muted={d.is_muted}
+                onToggleMute={() => toggleMute(d.id, !d.is_muted)}
+                pinned
+                onTogglePin={() => togglePin(d.id, false)}
+              />
+            ))}
+          </Section>
+        )}
+
         {showChannels && (
           <Section title="Channels">
             {channels.map((c) => (
@@ -212,6 +261,7 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
                 mention={c.has_unread_mention}
                 muted={c.is_muted}
                 onToggleMute={() => toggleMute(c.id, !c.is_muted)}
+                onTogglePin={() => togglePin(c.id, true)}
               />
             ))}
           </Section>
@@ -232,6 +282,7 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
                 mention={d.has_unread_mention}
                 muted={d.is_muted}
                 onToggleMute={() => toggleMute(d.id, !d.is_muted)}
+                onTogglePin={() => togglePin(d.id, true)}
               />
             ))}
           </Section>
@@ -255,7 +306,7 @@ const Section = ({ title, children }) => (
   </section>
 );
 
-function Row({ active, onClick, avatar, title, preview, time, unread, mention, muted, onToggleMute }) {
+function Row({ active, onClick, avatar, title, preview, time, unread, mention, muted, onToggleMute, pinned, onTogglePin }) {
   return (
     <div
       className={`group relative flex w-full items-center gap-3 py-2.5 pl-4 pr-2 text-left transition ${
@@ -286,6 +337,18 @@ function Row({ active, onClick, avatar, title, preview, time, unread, mention, m
           </div>
         </div>
       </button>
+      {onTogglePin && (
+        <button
+          onClick={onTogglePin}
+          title={pinned ? 'Unpin conversation' : 'Pin conversation'}
+          aria-label={pinned ? 'Unpin conversation' : 'Pin conversation'}
+          className={`shrink-0 rounded-full p-1.5 text-sm text-slate-400 transition hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-slate-700 ${
+            pinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          }`}
+        >
+          📌
+        </button>
+      )}
       {onToggleMute && (
         <button
           onClick={onToggleMute}

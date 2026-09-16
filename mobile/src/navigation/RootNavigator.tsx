@@ -10,6 +10,7 @@ import { useAuthStore } from "../state/authStore";
 import { useThemeColors, useThemeStore } from "../state/themeStore";
 import AuthStack from "./AuthStack";
 import AppShell from "./AppShell";
+import OnboardingScreen from "../screens/onboarding/OnboardingScreen";
 import { linking } from "./linking";
 import { navigationRef } from "./navigationRef";
 
@@ -23,7 +24,7 @@ function extractJoinCode(url: string): string | null {
 }
 
 export default function RootNavigator() {
-  const { status } = useAuthSession();
+  const { status, user } = useAuthSession();
   const colors = useThemeColors();
   const hydrateTheme = useThemeStore((s) => s.hydrate);
   const setPendingJoinCode = useAuthStore((s) => s.setPendingJoinCode);
@@ -68,7 +69,7 @@ export default function RootNavigator() {
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : status === "signedIn" ? (
-        <AppShell />
+        user && !user.has_onboarded ? <OnboardingScreen /> : <AppShell />
       ) : (
         <AuthStack />
       )}

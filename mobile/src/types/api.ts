@@ -11,6 +11,8 @@ export interface User {
   status_emoji?: string;
   status_text?: string;
   status_expires_at?: string | null;
+  email_digest_opt_out?: boolean;
+  has_onboarded?: boolean;
   is_active?: boolean;
   dnd_until?: string | null;
 }

@@ -140,6 +140,11 @@ const User = sequelize.define('User', {
     // Slack-style auto-clearing status ("in a meeting" for 1h) — null means
     // the status never expires on its own. Cleared by clearExpiredStatuses().
     status_expires_at: { type: DataTypes.DATE, allowNull: true },
+    // Opt-out (not opt-in) — matches Slack's own default for digest email.
+    email_digest_opt_out: { type: DataTypes.BOOLEAN, defaultValue: false },
+    last_digest_sent_at: { type: DataTypes.DATE, allowNull: true },
+    // Gates the one-time welcome flow shown after a user's first sign-in.
+    has_onboarded: { type: DataTypes.BOOLEAN, defaultValue: false },
     presence: { type: DataTypes.ENUM('online', 'away', 'dnd', 'offline'), defaultValue: 'online' },
     // Drives "last seen" — refreshed on API activity, not on login, so it
     // reflects actual use.
@@ -1730,22 +1735,28 @@ function unreadWhere(userId, containerFilter) {
     };
 }
 
+/** Shared by GET /api/unread (the CampusOne menu badge) and the email
+ *  digest sweep below — one source of truth for "how much is unread". */
+async function getUnreadTotal(userId) {
+    const memberships = await ChannelMember.findAll({ where: { userId } });
+    const channelIds = memberships.map((m) => m.channelId);
+
+    const channelUnread = channelIds.length
+        ? await Message.count({ where: unreadWhere(userId, { channelId: { [Op.in]: channelIds } }) })
+        : 0;
+
+    // DM rooms are "<uuid>_<uuid>", so ours are the ones containing our id.
+    const dmUnread = await Message.count({
+        where: unreadWhere(userId, { dm_id: { [Op.like]: `%${userId}%` } }),
+    });
+
+    return { total: channelUnread + dmUnread, channels: channelUnread, dms: dmUnread };
+}
+
 /** Unread total for the signed-in user — drives the CampusOne menu badge. */
 app.get('/api/unread', auth.requireAuth, async (req, res) => {
     try {
-        const memberships = await ChannelMember.findAll({ where: { userId: req.user.id } });
-        const channelIds = memberships.map((m) => m.channelId);
-
-        const channelUnread = channelIds.length
-            ? await Message.count({ where: unreadWhere(req.user.id, { channelId: { [Op.in]: channelIds } }) })
-            : 0;
-
-        // DM rooms are "<uuid>_<uuid>", so ours are the ones containing our id.
-        const dmUnread = await Message.count({
-            where: unreadWhere(req.user.id, { dm_id: { [Op.like]: `%${req.user.id}%` } }),
-        });
-
-        res.json({ total: channelUnread + dmUnread, channels: channelUnread, dms: dmUnread });
+        res.json(await getUnreadTotal(req.user.id));
     } catch (e) {
         // Returning zero silently made a broken query look like "nothing unread".
         console.error('[UNREAD]', e.message, e.parent?.sqlMessage || '');
@@ -2933,6 +2944,53 @@ async function clearExpiredStatuses() {
     }
 }
 setInterval(clearExpiredStatuses, 60000);
+
+const DIGEST_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/** Once a day per user (checked every 30 min so a restart doesn't miss the
+ *  window), a plain-text email summarizing unread mentions/messages — only
+ *  sent when there's actually something to report, but last_digest_sent_at
+ *  advances either way so a quiet user isn't re-checked every sweep. Opt-
+ *  out, not opt-in, matching Slack's own default. */
+async function sendDailyDigests() {
+    if (!mailer) return;
+    try {
+        const cutoff = new Date(Date.now() - DIGEST_INTERVAL_MS);
+        const due = await User.findAll({
+            where: {
+                email_digest_opt_out: false,
+                [Op.or]: [{ last_digest_sent_at: null }, { last_digest_sent_at: { [Op.lte]: cutoff } }],
+            },
+        });
+        for (const user of due) {
+            const to = user.campus_email || user.email;
+            if (!to) { user.last_digest_sent_at = new Date(); await user.save(); continue; }
+            try {
+                const [{ total }, mentionCount] = await Promise.all([
+                    getUnreadTotal(user.id),
+                    Mention.count({ where: { mentioned_user_id: user.id, is_read: false } }),
+                ]);
+                if (total > 0) {
+                    await mailer.sendMail({
+                        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+                        to,
+                        subject: mentionCount > 0
+                            ? `${mentionCount} mention${mentionCount === 1 ? '' : 's'} and ${total} unread message${total === 1 ? '' : 's'} on Let's Connect`
+                            : `${total} unread message${total === 1 ? '' : 's'} on Let's Connect`,
+                        text: `You have ${total} unread message${total === 1 ? '' : 's'}${mentionCount > 0 ? `, including ${mentionCount} mention${mentionCount === 1 ? '' : 's'}` : ''} waiting on Let's Connect.\n\nOpen the app to catch up: https://cumess.cutm.ac.in/portal\n\nTurn this email off any time in Settings.`,
+                    });
+                }
+                user.last_digest_sent_at = new Date();
+                await user.save();
+            } catch (e) {
+                console.error('[digest] failed for', user.id, e.message);
+            }
+        }
+    } catch (e) {
+        console.error('[digest-sweep]', e.message);
+    }
+}
+setInterval(sendDailyDigests, 30 * 60000);
 
 // --- Workflow Builder ---
 //
@@ -4454,7 +4512,7 @@ app.put('/api/users/:phone', auth.requireAuth, async (req, res) => {
         // The path param is not trusted: you may only edit your own profile.
         const user = await User.findByPk(req.user.id);
         if (!user) return res.status(404).json({ error: 'User not found' });
-        const { name, bio, avatarUrl, status_emoji, status_text, status_duration_minutes } = req.body;
+        const { name, bio, avatarUrl, status_emoji, status_text, status_duration_minutes, email_digest_opt_out, has_onboarded } = req.body;
         if (name) user.name = name;
         if (bio) user.bio = bio;
         if (avatarUrl) user.avatarUrl = avatarUrl;
@@ -4465,6 +4523,8 @@ app.put('/api/users/:phone', auth.requireAuth, async (req, res) => {
         if (status_duration_minutes !== undefined) {
             user.status_expires_at = status_duration_minutes ? new Date(Date.now() + Number(status_duration_minutes) * 60000) : null;
         }
+        if (email_digest_opt_out !== undefined) user.email_digest_opt_out = !!email_digest_opt_out;
+        if (has_onboarded !== undefined) user.has_onboarded = !!has_onboarded;
         await user.save();
         res.json({ success: true, user });
     } catch (e) { res.status(500).json(e); }
