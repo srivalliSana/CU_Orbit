@@ -14,6 +14,7 @@ import ListDetailScreen from "../screens/lists/ListDetailScreen";
 import ListBoardScreen from "../screens/lists/ListBoardScreen";
 import CanvasScreen from "../screens/channels/CanvasScreen";
 import WorkflowsScreen from "../screens/channels/WorkflowsScreen";
+import SearchScreen from "../screens/home/SearchScreen";
 import ListItemScreen from "../screens/lists/ListItemScreen";
 import ListFieldsScreen from "../screens/lists/ListFieldsScreen";
 import ListImportScreen from "../screens/lists/ListImportScreen";
@@ -46,6 +47,7 @@ function HomeStackNavigator() {
       <HomeStack.Screen name="ListBoard" component={ListBoardScreen} options={{ title: "Board" }} />
       <HomeStack.Screen name="Canvas" component={CanvasScreen} options={{ title: "Canvas" }} />
       <HomeStack.Screen name="Workflows" component={WorkflowsScreen} options={{ title: "Workflows" }} />
+      <HomeStack.Screen name="Search" component={SearchScreen} options={{ title: "Search" }} />
       <HomeStack.Screen name="ListItem" component={ListItemScreen} options={{ title: "Item" }} />
       <HomeStack.Screen name="ListFields" component={ListFieldsScreen} options={{ title: "Manage fields" }} />
       <HomeStack.Screen name="ListImport" component={ListImportScreen} options={{ title: "Import CSV" }} />

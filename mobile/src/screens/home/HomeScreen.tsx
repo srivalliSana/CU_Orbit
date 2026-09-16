@@ -100,6 +100,13 @@ export default function HomeScreen({ navigation }: Props) {
     if (!term) {
       list.push({
         kind: "shortcut",
+        id: "search",
+        label: "Search",
+        icon: "🔍",
+        onPress: () => navigation.navigate("Search"),
+      });
+      list.push({
+        kind: "shortcut",
         id: "threads",
         label: "Threads",
         icon: "💬",

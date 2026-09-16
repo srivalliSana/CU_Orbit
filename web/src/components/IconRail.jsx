@@ -10,7 +10,7 @@ import { getThemeMode, setThemeMode } from '../lib/theme';
  * app already uses everywhere, not borrowed from anyone else's palette).
  */
 export default function IconRail({
-  user, filter, onChangeFilter, onOpenMentions, mentionsUnread, onOpenThreads, onOpenAdmin, onOpenProfile, isAdmin,
+  user, filter, onChangeFilter, onOpenMentions, mentionsUnread, onOpenThreads, onOpenSearch, onOpenAdmin, onOpenProfile, isAdmin,
 }) {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
 
@@ -45,6 +45,17 @@ export default function IconRail({
           <>
             <circle cx="12" cy="8" r="3.2" />
             <path d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5" />
+          </>
+        }
+      />
+      <RailButton
+        label="Search"
+        active={false}
+        onClick={onOpenSearch}
+        icon={
+          <>
+            <circle cx="11" cy="11" r="7" />
+            <path d="m21 21-4.3-4.3" />
           </>
         }
       />

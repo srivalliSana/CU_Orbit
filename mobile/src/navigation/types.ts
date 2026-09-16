@@ -23,6 +23,7 @@ export type HomeStackParamList = {
   ListBoard: { listId: string; listName?: string };
   Canvas: { channelId: string };
   Workflows: { channelId: string };
+  Search: undefined;
   ListItem: { listId: string; itemId: string };
   ListFields: { listId: string };
   ListImport: { listId: string };

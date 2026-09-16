@@ -16,6 +16,7 @@ import CanvasPanel from './components/CanvasPanel';
 import WorkflowsPanel from './components/WorkflowsPanel';
 import HuddleManager from './components/HuddleManager';
 import ThreadsPanel from './components/ThreadsPanel';
+import SearchPanel from './components/SearchPanel';
 import MentionsPanel from './components/MentionsPanel';
 import ProfilePanel from './components/ProfilePanel';
 import SettingsPanel from './components/SettingsPanel';
@@ -40,6 +41,7 @@ export default function App() {
   const [channelInfoId, setChannelInfoId] = useState(null);   // channel id shown in the side panel
   const [chatFilter, setChatFilter] = useState('all');   // all | channels | dms — controlled here so the icon rail can drive it
   const [threadsOpen, setThreadsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [listsChannelId, setListsChannelId] = useState(null);   // channel id whose Lists workspace is open
   const [canvasChannelId, setCanvasChannelId] = useState(null);   // channel id whose Canvas is open
   const [workflowsChannelId, setWorkflowsChannelId] = useState(null);   // channel id whose Workflows panel is open
@@ -290,6 +292,7 @@ export default function App() {
         onOpenMentions={() => setMentionsOpen(true)}
         mentionsUnread={mentionsUnread}
         onOpenThreads={() => setThreadsOpen(true)}
+        onOpenSearch={() => setSearchOpen(true)}
         onOpenAdmin={() => setAdminOpen(true)}
         isAdmin={user?.role === 'admin'}
         onOpenProfile={() => setProfileOpen(true)}
@@ -377,6 +380,21 @@ export default function App() {
           onClose={() => setThreadsOpen(false)}
           onOpenDm={(dmChat) => { setThreadsOpen(false); setContact(null); setActive(dmChat); }}
           onOpenProfile={(userId) => setProfileUserId(userId)}
+        />
+      )}
+
+      {searchOpen && (
+        <SearchPanel
+          onClose={() => setSearchOpen(false)}
+          onOpenResult={(r) => {
+            setSearchOpen(false);
+            setActive(
+              r.is_dm
+                ? { id: r.container_id, kind: 'dm', title: r.container_name || r.sender_name }
+                : { id: r.container_id, kind: 'channel', title: `# ${r.container_name || 'channel'}` }
+            );
+            setScrollToMessageId(r.id);
+          }}
         />
       )}
 
