@@ -66,25 +66,27 @@ export default function EmojiPicker({
               <Text style={styles.close}>✕</Text>
             </Pressable>
           </View>
-          <View style={styles.grid}>
-            {EMOJI_GRID.map((e) => (
-              <Pressable key={e} style={styles.cell} onPress={() => onPick(e)}>
-                <Text style={styles.emoji}>{e}</Text>
-              </Pressable>
-            ))}
-          </View>
-          {teamEmoji && teamEmoji.length > 0 ? (
-            <>
-              <Text style={styles.sectionLabel}>Team emoji</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.teamRow}>
-                {teamEmoji.map((e) => (
-                  <Pressable key={e.id} style={styles.teamCell} onPress={() => onPick(`:${e.name}:`)}>
-                    <Image source={{ uri: resolveMediaUrl(e.image_url) || e.image_url }} style={styles.teamImage} />
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </>
-          ) : null}
+          <ScrollView style={styles.body} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+            <View style={styles.grid}>
+              {EMOJI_GRID.map((e) => (
+                <Pressable key={e} style={styles.cell} onPress={() => onPick(e)}>
+                  <Text style={styles.emoji}>{e}</Text>
+                </Pressable>
+              ))}
+            </View>
+            {teamEmoji && teamEmoji.length > 0 ? (
+              <>
+                <Text style={styles.sectionLabel}>Team emoji</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.teamRow}>
+                  {teamEmoji.map((e) => (
+                    <Pressable key={e.id} style={styles.teamCell} onPress={() => onPick(`:${e.name}:`)}>
+                      <Image source={{ uri: resolveMediaUrl(e.image_url) || e.image_url }} style={styles.teamImage} />
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </>
+            ) : null}
+          </ScrollView>
 
           <View style={styles.customRow}>
             <TextInput
@@ -115,9 +117,13 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   sheet: {
     width: "100%",
     maxWidth: 320,
+    maxHeight: 380,
     backgroundColor: colors.background,
     borderRadius: 16,
     padding: 16,
+  },
+  body: {
+    flexGrow: 0,
   },
   header: {
     flexDirection: "row",
