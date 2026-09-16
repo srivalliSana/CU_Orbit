@@ -23,7 +23,7 @@ export default function IconRail({
   return (
     <nav
       aria-label="Primary"
-      className="hidden w-16 shrink-0 flex-col items-center gap-1 border-r border-slate-800 bg-gradient-to-b from-slate-900 to-slate-950 py-3 md:flex"
+      className="hidden w-16 shrink-0 flex-col items-center gap-1 border-r border-slate-200 bg-white py-3 dark:border-slate-800 dark:bg-gradient-to-b dark:from-slate-900 dark:to-slate-950 md:flex"
     >
       <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-sm font-black text-white shadow-lg shadow-blue-900/40">
         LC
@@ -86,7 +86,7 @@ export default function IconRail({
           onClick={toggleTheme}
           title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
           aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-          className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition hover:bg-white/10 hover:text-white"
+          className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/10 dark:hover:text-white"
         >
           {dark ? (
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -117,19 +117,21 @@ function RailButton({ label, icon, active, badge, onClick }) {
     >
       <span
         className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition ${
-          active ? 'bg-blue-600 text-white shadow-md shadow-blue-900/40' : 'text-slate-400 group-hover:bg-white/10 group-hover:text-white'
+          active
+            ? 'bg-blue-600 text-white shadow-md shadow-blue-900/40'
+            : 'text-slate-500 group-hover:bg-slate-100 group-hover:text-slate-900 dark:text-slate-400 dark:group-hover:bg-white/10 dark:group-hover:text-white'
         }`}
       >
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           {icon}
         </svg>
         {badge != null && (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-slate-950">
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white dark:ring-slate-950">
             {badge}
           </span>
         )}
       </span>
-      <span className={`text-[10px] font-medium ${active ? 'text-white' : 'text-slate-500 group-hover:text-slate-300'}`}>
+      <span className={`text-[10px] font-medium ${active ? 'text-blue-600 dark:text-white' : 'text-slate-500 group-hover:text-slate-700 dark:text-slate-500 dark:group-hover:text-slate-300'}`}>
         {label}
       </span>
     </button>
