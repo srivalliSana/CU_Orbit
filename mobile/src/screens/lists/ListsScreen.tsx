@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { createList, getLists } from "../../api/lists";
+import { useNavGuard } from "../../hooks/useNavGuard";
 import { useThemeColors } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
 
@@ -18,6 +19,7 @@ export default function ListsScreen({ route, navigation }: Props) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const queryClient = useQueryClient();
+  const navGuard = useNavGuard();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
 
@@ -86,7 +88,7 @@ export default function ListsScreen({ route, navigation }: Props) {
         renderItem={({ item }) => (
           <Pressable
             style={[styles.row, { borderColor: colors.border }]}
-            onPress={() => navigation.navigate("ListDetail", { listId: item.id, listName: item.name })}
+            onPress={() => navGuard(() => navigation.navigate("ListDetail", { listId: item.id, listName: item.name }))}
           >
             <Text style={styles.rowIcon}>{item.icon}</Text>
             <View style={{ flex: 1 }}>

@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useMentions } from "../../hooks/useMentions";
+import { useNavGuard } from "../../hooks/useNavGuard";
 import { useThemeColors } from "../../state/themeStore";
 import { timeLabel } from "../../lib/format";
 
@@ -18,6 +19,7 @@ interface MentionsNavigation {
 
 export default function MentionsScreen() {
   const navigation = useNavigation<MentionsNavigation & ReturnType<typeof useNavigation>>();
+  const navGuard = useNavGuard();
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { data, isLoading, markRead } = useMentions();
@@ -42,11 +44,13 @@ export default function MentionsScreen() {
             // A status-post mention has no real chat container to open.
             if (item.channel_id === "STATUS") return;
             const isDm = item.channel_id.includes("_");
-            navigation.navigate("Chat", {
-              containerId: item.channel_id,
-              title: isDm ? item.sender_name : item.channel_name,
-              kind: isDm ? "dm" : "channel",
-            });
+            navGuard(() =>
+              navigation.navigate("Chat", {
+                containerId: item.channel_id,
+                title: isDm ? item.sender_name : item.channel_name,
+                kind: isDm ? "dm" : "channel",
+              })
+            );
           }}
         >
           <Text style={styles.channel}>{item.channel_name}</Text>

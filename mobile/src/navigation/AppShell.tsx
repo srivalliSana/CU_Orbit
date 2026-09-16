@@ -28,6 +28,7 @@ import SettingsScreen from "../screens/profile/SettingsScreen";
 import AdminScreen from "../screens/admin/AdminScreen";
 import { useAuthSession } from "../hooks/useAuthSession";
 import { useMentions } from "../hooks/useMentions";
+import { useNavGuard } from "../hooks/useNavGuard";
 import { useThemeColors } from "../state/themeStore";
 import type { ActivityStackParamList, DrawerParamList, HomeStackParamList, ProfileStackParamList, TabParamList } from "./types";
 
@@ -146,11 +147,12 @@ function DrawerContent({ navigation }: DrawerContentComponentProps) {
   const { user, signOut } = useAuthSession();
   const colors = useThemeColors();
   const styles = drawerStyles(colors);
+  const navGuard = useNavGuard();
   return (
     <View style={{ flex: 1, padding: 24, paddingTop: 56, backgroundColor: colors.background }}>
       <View style={{ marginBottom: 24 }}>
         <Pressable
-          onPress={() => navigation.navigate("Tabs", { screen: "HomeTab" })}
+          onPress={() => navGuard(() => navigation.navigate("Tabs", { screen: "HomeTab" }))}
           style={styles.button}
         >
           <Text style={styles.buttonText}>Home</Text>

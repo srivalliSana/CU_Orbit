@@ -5,6 +5,7 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { getThreads } from "../../api/threads";
+import { useNavGuard } from "../../hooks/useNavGuard";
 import { useThemeColors } from "../../state/themeStore";
 import { timeLabel } from "../../lib/format";
 import type { HomeStackParamList } from "../../navigation/types";
@@ -14,6 +15,7 @@ export default function ThreadsScreen() {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
+  const navGuard = useNavGuard();
   const { data, isLoading, isRefetching, refetch } = useQuery({ queryKey: ["threads"], queryFn: getThreads });
 
   if (isLoading) {
@@ -44,7 +46,7 @@ export default function ThreadsScreen() {
         return (
           <Pressable
             style={styles.row}
-            onPress={() => navigation.navigate("ThreadDetail", { parentId: item.parent_message_id })}
+            onPress={() => navGuard(() => navigation.navigate("ThreadDetail", { parentId: item.parent_message_id }))}
           >
             <View style={styles.rowHeader}>
               <Text style={styles.rowContext} numberOfLines={1}>

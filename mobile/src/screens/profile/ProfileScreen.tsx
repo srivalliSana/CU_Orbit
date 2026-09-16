@@ -10,6 +10,7 @@ import { useAuthStore } from "../../state/authStore";
 import { updateProfile } from "../../api/users";
 import { uploadFile } from "../../api/upload";
 import { apiErrorMessage } from "../../api/client";
+import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import { useThemeColors } from "../../state/themeStore";
 import type { ProfileStackParamList } from "../../navigation/types";
 
@@ -27,6 +28,8 @@ export default function ProfileScreen({ navigation }: Props) {
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const openSettings = useDebouncedCallback(() => navigation.navigate("Settings"));
+  const openAdmin = useDebouncedCallback(() => navigation.navigate("Admin"));
 
   const startEditing = () => {
     setName(user?.name ?? "");
@@ -137,7 +140,7 @@ export default function ProfileScreen({ navigation }: Props) {
       <View style={styles.spacer} />
 
       <Pressable
-        onPress={() => navigation.navigate("Settings")}
+        onPress={openSettings}
         style={styles.settingsRow}
       >
         <Ionicons name="settings-outline" size={20} color={colors.text} />
@@ -147,7 +150,7 @@ export default function ProfileScreen({ navigation }: Props) {
 
       {user?.role === "admin" && (
         <Pressable
-          onPress={() => navigation.navigate("Admin")}
+          onPress={openAdmin}
           style={styles.settingsRow}
         >
           <Ionicons name="shield-checkmark-outline" size={20} color={colors.text} />

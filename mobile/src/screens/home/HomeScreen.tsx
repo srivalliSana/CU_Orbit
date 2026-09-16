@@ -15,6 +15,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useHome } from "../../hooks/useHome";
 import { useMentions } from "../../hooks/useMentions";
 import { useChatActions } from "../../hooks/useChatActions";
+import { useNavGuard } from "../../hooks/useNavGuard";
 import { searchMessages, type SearchResult } from "../../api/search";
 import ChatListRow, { type ChatRowItem } from "../../components/ChatListRow";
 import { channelToRow, dmToRow } from "../../lib/chatRows";
@@ -47,6 +48,7 @@ export default function HomeScreen({ navigation }: Props) {
   const { data, isLoading, isRefetching, refetch, error } = useHome();
   const { data: mentions } = useMentions();
   const { onLongPress } = useChatActions();
+  const navGuard = useNavGuard();
   const [query, setQuery] = useState("");
   const [fabMenuOpen, setFabMenuOpen] = useState(false);
   const debouncedQuery = useDebounced(query.trim(), 300);
@@ -201,11 +203,13 @@ export default function HomeScreen({ navigation }: Props) {
               <Pressable
                 style={styles.messageRow}
                 onPress={() =>
-                  navigation.navigate("Chat", {
-                    containerId: r.container_id,
-                    title,
-                    kind: isDm ? "dm" : "channel",
-                  })
+                  navGuard(() =>
+                    navigation.navigate("Chat", {
+                      containerId: r.container_id,
+                      title,
+                      kind: isDm ? "dm" : "channel",
+                    })
+                  )
                 }
               >
                 <Text style={styles.messageSender}>{r.sender_name}</Text>
@@ -220,11 +224,13 @@ export default function HomeScreen({ navigation }: Props) {
             <ChatListRow
               item={item.row}
               onPress={() =>
-                navigation.navigate("Chat", {
-                  containerId: item.row.id,
-                  title: item.row.title,
-                  kind: item.row.kind,
-                })
+                navGuard(() =>
+                  navigation.navigate("Chat", {
+                    containerId: item.row.id,
+                    title: item.row.title,
+                    kind: item.row.kind,
+                  })
+                )
               }
               onLongPress={() => onLongPress(item.row)}
             />
