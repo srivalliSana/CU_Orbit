@@ -70,7 +70,7 @@ export default function ProfileScreen({ navigation }: Props) {
         status_text: statusText.trim(),
         status_duration_minutes: statusDuration,
       });
-      useAuthStore.setState({ user: updated });
+      useAuthStore.getState().updateUser(updated);
       setEditing(false);
     } catch (e) {
       setError(apiErrorMessage(e, "Could not save your profile."));
@@ -103,7 +103,7 @@ export default function ProfileScreen({ navigation }: Props) {
         mimeType: asset.mimeType || "image/jpeg",
       });
       const updated = await updateProfile({ avatarUrl: url });
-      useAuthStore.setState({ user: updated });
+      useAuthStore.getState().updateUser(updated);
     } catch (e) {
       setError(apiErrorMessage(e, "Could not update your avatar."));
     } finally {

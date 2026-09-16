@@ -28,16 +28,39 @@ export function useAuthSession() {
     hydrate();
   }, [hydrate]);
 
-  // Once hydrated with a stored token, validate it's still good.
+  // Once hydrated with a stored token, validate it's still good. Only an
+  // actual auth rejection (401/403 — the token really is invalid/expired)
+  // signs the user out. A network failure (no response at all — dead wifi,
+  // a slow/flaky connection right at cold start) is not proof the token is
+  // bad, so instead of wiping the session it keeps the stored token and
+  // retries shortly — otherwise a single bad network blip on launch signs
+  // the user out of an app they never actually logged out of.
   useEffect(() => {
     if (status !== "signedIn" || user) return;
-    me()
-      .then((freshUser) => {
-        useAuthStore.setState({ user: freshUser });
-      })
-      .catch(() => {
-        clear();
-      });
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout>;
+
+    const tryFetchUser = () => {
+      me()
+        .then((freshUser) => {
+          if (!cancelled) useAuthStore.getState().updateUser(freshUser);
+        })
+        .catch((e) => {
+          if (cancelled) return;
+          const httpStatus = (e as { response?: { status?: number } })?.response?.status;
+          if (httpStatus === 401 || httpStatus === 403) {
+            clear();
+          } else {
+            retryTimer = setTimeout(tryFetchUser, 8000);
+          }
+        });
+    };
+    tryFetchUser();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(retryTimer);
+    };
   }, [status, user, clear]);
 
   const signInWithGoogleAsync = useCallback(async () => {

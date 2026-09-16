@@ -32,7 +32,7 @@ export default function SettingsScreen() {
     setDndBusy(true);
     try {
       const { dnd_until } = await setDoNotDisturb(minutes);
-      if (user) useAuthStore.setState({ user: { ...user, dnd_until } });
+      if (user) useAuthStore.getState().updateUser({ ...user, dnd_until });
     } finally {
       setDndBusy(false);
     }
