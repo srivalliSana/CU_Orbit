@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 
 import { useThemeColors } from "../state/themeStore";
 import type { PickedFile } from "../api/upload";
@@ -38,11 +39,16 @@ export default function AttachmentPreviewModal({
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
           <Text style={styles.title}>
-            {attachments.length > 1 ? `${attachments.length} files` : first.file.name}
+            {attachments.length > 1 ? `${attachments.length} files` : first.type === "voice" ? "Voice message" : first.file.name}
           </Text>
 
           {first.type === "image" ? (
             <Image source={{ uri: first.file.uri }} style={styles.preview} resizeMode="cover" />
+          ) : first.type === "voice" ? (
+            // Hearing the recording back is what actually prevents an
+            // accidental send — a filename alone doesn't tell you what
+            // you're about to send.
+            <VoicePreview uri={first.file.uri} styles={styles} colors={colors} />
           ) : (
             <View style={styles.filePreview}>
               <Text style={styles.fileIcon}>📎</Text>
@@ -65,7 +71,7 @@ export default function AttachmentPreviewModal({
 
           <View style={styles.actions}>
             <Pressable style={styles.cancelButton} onPress={onCancel} disabled={uploading}>
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={styles.cancelText}>{first.type === "voice" && attachments.length === 1 ? "Delete" : "Cancel"}</Text>
             </Pressable>
             <Pressable style={styles.sendButton} onPress={onConfirm} onLongPress={onLongPressConfirm} disabled={uploading}>
               {uploading ? (
@@ -78,6 +84,30 @@ export default function AttachmentPreviewModal({
         </View>
       </View>
     </Modal>
+  );
+}
+
+// A separate component (not inlined) so useAudioPlayer — which must run
+// unconditionally, same order every render — only mounts once the pending
+// attachment is actually a voice recording. Mirrors MessageBubble's
+// VoiceBubble, minus the already-sent-message chrome.
+function VoicePreview({ uri, styles, colors }: { uri: string; styles: ReturnType<typeof makeStyles>; colors: ReturnType<typeof useThemeColors> }) {
+  const player = useAudioPlayer(uri);
+  const status = useAudioPlayerStatus(player);
+  const seconds = Math.round((status.playing ? status.currentTime : status.duration) || 0);
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+
+  return (
+    <Pressable style={styles.voiceRow} onPress={() => (status.playing ? player.pause() : player.play())}>
+      <View style={styles.voicePlayButton}>
+        <Text style={styles.voicePlayIcon}>{status.playing ? "⏸" : "▶"}</Text>
+      </View>
+      <View style={styles.voiceTrack}>
+        <View style={[styles.voiceTrackFill, { width: `${status.duration ? (status.currentTime / status.duration) * 100 : 0}%` }]} />
+      </View>
+      <Text style={styles.voiceDuration}>{`${m}:${String(s).padStart(2, "0")}`}</Text>
+    </Pressable>
   );
 }
 
@@ -124,6 +154,42 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   moreText: {
     fontSize: 12,
     color: colors.textMuted,
+  },
+  voiceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 16,
+  },
+  voicePlayButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.primary,
+  },
+  voicePlayIcon: {
+    fontSize: 14,
+    color: colors.primaryText,
+  },
+  voiceTrack: {
+    flex: 1,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    overflow: "hidden",
+  },
+  voiceTrackFill: {
+    height: "100%",
+    backgroundColor: colors.primary,
+  },
+  voiceDuration: {
+    fontSize: 12,
+    color: colors.textMuted,
+    fontVariant: ["tabular-nums"],
   },
   captionInput: {
     backgroundColor: colors.surface,

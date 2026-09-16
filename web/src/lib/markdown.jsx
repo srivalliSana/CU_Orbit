@@ -52,6 +52,15 @@ function parseInline(text, linkClassName, keyBase) {
   return [text];
 }
 
+/** Inline-only formatting (bold/italic/etc, no block-level lists/code
+ *  fences) for single-line contexts — reply-quote previews, forward
+ *  previews — where the full block parser could emit a <ul>/<pre> inside
+ *  a truncated <p> and break the layout. */
+export function renderInlineText(text, linkClassName) {
+  if (!text) return text;
+  return parseInline(text.replace(/\n+/g, ' '), linkClassName, 'inline');
+}
+
 /** Renders a restricted markdown subset (see INLINE_PATTERNS) plus bullet/numbered lists and fenced code blocks. */
 export function renderMarkdown(text, linkClassName) {
   if (!text) return text;

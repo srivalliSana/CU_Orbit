@@ -15,6 +15,7 @@ import { uploadFile, type PickedFile } from "../api/upload";
 import { getChannelMembers, type ChannelMemberRow } from "../api/channels";
 import AttachmentPreviewModal, { type PendingAttachment } from "./AttachmentPreviewModal";
 import Avatar from "./Avatar";
+import { renderMarkdown } from "../lib/markdown";
 import { useThemeColors } from "../state/themeStore";
 
 export interface SendPayload {
@@ -377,7 +378,9 @@ export default function Composer({
         <View style={styles.replyBar}>
           <View style={styles.replyTextWrap}>
             <Text style={styles.replySender}>Replying to {replyTo.sender_name}</Text>
-            <Text style={styles.replyPreview} numberOfLines={1}>{replyTo.text || "Attachment"}</Text>
+            <Text style={styles.replyPreview} numberOfLines={1}>
+              {replyTo.text ? renderMarkdown(replyTo.text, styles.replyPreview) : "Attachment"}
+            </Text>
           </View>
           <Pressable onPress={onCancelReply} hitSlop={8}>
             <Text style={styles.replyCancel}>✕</Text>

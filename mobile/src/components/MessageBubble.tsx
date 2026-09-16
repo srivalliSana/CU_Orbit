@@ -19,7 +19,7 @@ import EditMessageModal from "./EditMessageModal";
 import Avatar from "./Avatar";
 import LinkPreviewCard from "./LinkPreviewCard";
 import AddToListSheet from "./lists/AddToListSheet";
-import { renderMessageText } from "../lib/markdown";
+import { renderMarkdown, renderMessageText } from "../lib/markdown";
 import { openFile, saveFile } from "../lib/fileActions";
 import { resolveMediaUrl } from "../constants/config";
 import { clockLabel } from "../lib/format";
@@ -191,7 +191,9 @@ export default function MessageBubble({
             style={styles.replyQuote}
           >
             <Text style={styles.replyQuoteSender}>{message.reply_to.sender_name}</Text>
-            <Text style={styles.replyQuoteText} numberOfLines={1}>{message.reply_to.text || "Attachment"}</Text>
+            <Text style={styles.replyQuoteText} numberOfLines={1}>
+              {message.reply_to.text ? renderMarkdown(message.reply_to.text, styles.link) : "Attachment"}
+            </Text>
           </Pressable>
         ) : null}
 

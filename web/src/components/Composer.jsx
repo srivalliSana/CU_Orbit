@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getChannelMembers } from '../api/channels';
 import Avatar from './Avatar';
 import EmojiPicker from './EmojiPicker';
+import { renderInlineText } from '../lib/markdown';
 
 // Matches an in-progress "@word" run at the end of the typed text.
 const MENTION_TRIGGER = /(?:^|\s)@(\w*)$/;
@@ -50,6 +51,12 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
   const chunksRef = useRef([]);
   const secondsRef = useRef(0);
   const timerRef = useRef(null);
+
+  // Object URL for the pending file's playback preview — only meaningful
+  // for a voice recording, and revoked whenever the file changes/clears so
+  // recording several notes in a row doesn't leak blob URLs.
+  const fileObjectUrl = useMemo(() => (file && file.type.startsWith('audio/') ? URL.createObjectURL(file) : null), [file]);
+  useEffect(() => () => { if (fileObjectUrl) URL.revokeObjectURL(fileObjectUrl); }, [fileObjectUrl]);
 
   // Only channels have a fixed member list worth tagging from — a DM is
   // already a conversation with exactly one other person.
@@ -291,12 +298,21 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
         <div className="mb-2 flex items-center gap-2 rounded-lg border-l-2 border-blue-500 bg-slate-100 px-3 py-1.5 text-xs dark:bg-slate-800">
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-slate-600 dark:text-slate-300">Replying to {replyTo.sender_name}</p>
-            <p className="truncate text-slate-500 dark:text-slate-400">{replyTo.text || 'Attachment'}</p>
+            <p className="truncate text-slate-500 dark:text-slate-400">{replyTo.text ? renderInlineText(replyTo.text, 'underline') : 'Attachment'}</p>
           </div>
           <button onClick={onCancelReply} className="ml-auto shrink-0 text-slate-400 hover:text-slate-600" aria-label="Cancel reply">✕</button>
         </div>
       )}
-      {file && (
+      {file && file.type.startsWith('audio/') ? (
+        // A voice recording gets a real playback preview — hearing it back
+        // before sending is what actually prevents an accidental send,
+        // not just having a delete button next to a filename.
+        <div className="mb-2 flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-1.5 dark:bg-slate-800">
+          <audio controls src={fileObjectUrl} className="h-8 min-w-0 flex-1" />
+          <button onClick={() => { setFile(null); if (fileInput.current) fileInput.current.value = ''; }}
+                  className="shrink-0 text-slate-400 hover:text-slate-600" aria-label="Delete recording" title="Delete recording">🗑️</button>
+        </div>
+      ) : file && (
         <div className="mb-2 flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-1.5 text-xs dark:bg-slate-800">
           <span className="truncate text-slate-600 dark:text-slate-300">📎 {file.name}</span>
           <button onClick={() => { setFile(null); if (fileInput.current) fileInput.current.value = ''; }}

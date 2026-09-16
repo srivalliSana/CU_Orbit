@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { clockLabel } from '../lib/format';
-import { renderMessageText } from '../lib/markdown';
+import { renderInlineText, renderMessageText } from '../lib/markdown';
 import { deleteMessage, editMessage, getReads, hideMessage, reactToMessage, sendMessageAction, setMessagePinned, starMessage, unstarMessage, votePoll } from '../api/chat';
 import Avatar from './Avatar';
 import EmojiPicker, { useCustomEmojiMap } from './EmojiPicker';
@@ -329,7 +329,7 @@ export default function MessageBubble({
               }`}
             >
               <p className="font-semibold">{m.reply_to.sender_name}</p>
-              <p className="truncate">{m.reply_to.text || 'Attachment'}</p>
+              <p className="truncate">{m.reply_to.text ? renderInlineText(m.reply_to.text, own ? 'underline' : 'underline text-blue-600 dark:text-blue-400') : 'Attachment'}</p>
             </button>
           )}
 
