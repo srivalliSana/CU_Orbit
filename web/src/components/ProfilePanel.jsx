@@ -9,6 +9,7 @@ export default function ProfilePanel({ user, onClose, onUpdated, onOpenSettings 
   const [name, setName] = useState(user?.name || '');
   const [bio, setBio] = useState(user?.bio || '');
   const [statusText, setStatusText] = useState(user?.status_text || '');
+  const [statusDuration, setStatusDuration] = useState('');   // '' = never expires
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
@@ -17,6 +18,7 @@ export default function ProfilePanel({ user, onClose, onUpdated, onOpenSettings 
     setName(user?.name || '');
     setBio(user?.bio || '');
     setStatusText(user?.status_text || '');
+    setStatusDuration('');
     setError(null);
     setEditing(true);
   };
@@ -29,6 +31,7 @@ export default function ProfilePanel({ user, onClose, onUpdated, onOpenSettings 
         name: name.trim(),
         bio: bio.trim(),
         status_text: statusText.trim(),
+        status_duration_minutes: statusDuration ? Number(statusDuration) : null,
       });
       onUpdated(updated);
       setEditing(false);
@@ -77,7 +80,14 @@ export default function ProfilePanel({ user, onClose, onUpdated, onOpenSettings 
             <>
               <h3 className="mt-3 text-lg font-semibold text-slate-800 dark:text-slate-100">{user?.name}</h3>
               <p className="text-xs text-slate-500">{user?.campus_email || user?.email}</p>
-              {user?.status_text && <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">{user.status_text}</p>}
+              {user?.status_text && (
+                <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">
+                  {user.status_text}
+                  {user.status_expires_at && (
+                    <span className="ml-1.5 text-xs text-slate-400">· clears {statusExpiryLabel(user.status_expires_at)}</span>
+                  )}
+                </p>
+              )}
               {user?.bio && <p className="mt-1 text-xs text-slate-500">{user.bio}</p>}
               <button
                 onClick={startEditing}
@@ -90,6 +100,21 @@ export default function ProfilePanel({ user, onClose, onUpdated, onOpenSettings 
             <div className="mt-4 w-full space-y-3 text-left">
               <Field label="Name" value={name} onChange={setName} placeholder="Your name" />
               <Field label="Status" value={statusText} onChange={setStatusText} placeholder="What's on your mind?" />
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Clear status</label>
+                <select
+                  value={statusDuration}
+                  onChange={(e) => setStatusDuration(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:text-slate-100"
+                >
+                  <option value="">Don't clear automatically</option>
+                  <option value="30">In 30 minutes</option>
+                  <option value="60">In 1 hour</option>
+                  <option value="240">In 4 hours</option>
+                  <option value={String(24 * 60)}>Today</option>
+                  <option value={String(7 * 24 * 60)}>This week</option>
+                </select>
+              </div>
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Bio</label>
                 <textarea
@@ -133,6 +158,16 @@ export default function ProfilePanel({ user, onClose, onUpdated, onOpenSettings 
       </div>
     </aside>
   );
+}
+
+function statusExpiryLabel(iso) {
+  const ms = new Date(iso).getTime() - Date.now();
+  if (ms <= 0) return 'soon';
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 60) return `in ${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `in ${hours}h`;
+  return `in ${Math.round(hours / 24)}d`;
 }
 
 function Field({ label, value, onChange, placeholder }) {

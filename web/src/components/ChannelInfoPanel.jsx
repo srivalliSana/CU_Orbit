@@ -535,6 +535,22 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
               </button>
             </div>
 
+            {isChannelAdmin && (
+              <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
+                {channel.archived_at && (
+                  <p className="mb-2 rounded-lg bg-slate-100 px-2.5 py-2 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    This channel is archived — everyone can still read its history, but no one can post until it's unarchived.
+                  </p>
+                )}
+                <button
+                  onClick={() => toggle('archived', !channel.archived_at)}
+                  className="block w-full rounded-lg px-2 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  {channel.archived_at ? '📤 Unarchive channel' : '🗄️ Archive channel'}
+                </button>
+              </div>
+            )}
+
             {isSuperAdmin && (
               <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
                 {channel.is_active === false && (

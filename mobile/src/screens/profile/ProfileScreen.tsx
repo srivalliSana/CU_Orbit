@@ -16,6 +16,25 @@ import type { ProfileStackParamList } from "../../navigation/types";
 
 type Props = NativeStackScreenProps<ProfileStackParamList, "Profile">;
 
+const STATUS_DURATIONS: { label: string; minutes: number | null }[] = [
+  { label: "Don't clear", minutes: null },
+  { label: "30 min", minutes: 30 },
+  { label: "1 hour", minutes: 60 },
+  { label: "4 hours", minutes: 240 },
+  { label: "Today", minutes: 24 * 60 },
+  { label: "This week", minutes: 7 * 24 * 60 },
+];
+
+function statusExpiryLabel(iso: string) {
+  const ms = new Date(iso).getTime() - Date.now();
+  if (ms <= 0) return "soon";
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 60) return `in ${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `in ${hours}h`;
+  return `in ${Math.round(hours / 24)}d`;
+}
+
 export default function ProfileScreen({ navigation }: Props) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -25,6 +44,7 @@ export default function ProfileScreen({ navigation }: Props) {
   const [name, setName] = useState(user?.name ?? "");
   const [bio, setBio] = useState(user?.bio ?? "");
   const [statusText, setStatusText] = useState(user?.status_text ?? "");
+  const [statusDuration, setStatusDuration] = useState<number | null>(null);   // null = never expires
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +55,7 @@ export default function ProfileScreen({ navigation }: Props) {
     setName(user?.name ?? "");
     setBio(user?.bio ?? "");
     setStatusText(user?.status_text ?? "");
+    setStatusDuration(null);
     setError(null);
     setEditing(true);
   };
@@ -47,6 +68,7 @@ export default function ProfileScreen({ navigation }: Props) {
         name: name.trim(),
         bio: bio.trim(),
         status_text: statusText.trim(),
+        status_duration_minutes: statusDuration,
       });
       useAuthStore.setState({ user: updated });
       setEditing(false);
@@ -102,7 +124,12 @@ export default function ProfileScreen({ navigation }: Props) {
         <>
           <Text style={styles.name}>{user?.name}</Text>
           <Text style={styles.email}>{user?.campusEmail ?? user?.campus_email ?? user?.email}</Text>
-          {!!user?.status_text && <Text style={styles.statusText}>{user.status_text}</Text>}
+          {!!user?.status_text && (
+            <Text style={styles.statusText}>
+              {user.status_text}
+              {user.status_expires_at ? <Text style={styles.statusExpiry}> · clears {statusExpiryLabel(user.status_expires_at)}</Text> : null}
+            </Text>
+          )}
           {!!user?.bio && <Text style={styles.bio}>{user.bio}</Text>}
 
           <Pressable onPress={startEditing} style={styles.editButton}>
@@ -116,6 +143,18 @@ export default function ProfileScreen({ navigation }: Props) {
           <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Your name" placeholderTextColor={colors.textMuted} />
           <Text style={styles.label}>Status</Text>
           <TextInput style={styles.input} value={statusText} onChangeText={setStatusText} placeholder="What's on your mind?" placeholderTextColor={colors.textMuted} />
+          <Text style={styles.label}>Clear status</Text>
+          <View style={styles.durationRow}>
+            {STATUS_DURATIONS.map((d) => (
+              <Pressable
+                key={d.label}
+                onPress={() => setStatusDuration(d.minutes)}
+                style={[styles.durationChip, statusDuration === d.minutes && styles.durationChipActive]}
+              >
+                <Text style={[styles.durationChipText, statusDuration === d.minutes && styles.durationChipTextActive]}>{d.label}</Text>
+              </Pressable>
+            ))}
+          </View>
           <Text style={styles.label}>Bio</Text>
           <TextInput
             style={[styles.input, styles.bioInput]}
@@ -205,6 +244,33 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     fontSize: 14,
     color: colors.text,
     marginTop: 8,
+  },
+  statusExpiry: {
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  durationRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 4,
+  },
+  durationChip: {
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: colors.surface,
+  },
+  durationChipActive: {
+    backgroundColor: colors.primary,
+  },
+  durationChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.textMuted,
+  },
+  durationChipTextActive: {
+    color: colors.primaryText,
   },
   bio: {
     fontSize: 13,

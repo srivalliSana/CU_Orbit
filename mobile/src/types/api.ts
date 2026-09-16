@@ -10,6 +10,7 @@ export interface User {
   bio?: string;
   status_emoji?: string;
   status_text?: string;
+  status_expires_at?: string | null;
   is_active?: boolean;
   dnd_until?: string | null;
 }

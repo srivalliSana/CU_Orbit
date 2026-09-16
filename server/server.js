@@ -137,6 +137,9 @@ const User = sequelize.define('User', {
     bio: { type: DataTypes.TEXT, defaultValue: "Hey there! I am using Let's Connect." },
     status_emoji: { type: DataTypes.STRING, defaultValue: '✨' },
     status_text: { type: DataTypes.STRING, defaultValue: '' },
+    // Slack-style auto-clearing status ("in a meeting" for 1h) — null means
+    // the status never expires on its own. Cleared by clearExpiredStatuses().
+    status_expires_at: { type: DataTypes.DATE, allowNull: true },
     presence: { type: DataTypes.ENUM('online', 'away', 'dnd', 'offline'), defaultValue: 'online' },
     // Drives "last seen" — refreshed on API activity, not on login, so it
     // reflects actual use.
@@ -189,6 +192,12 @@ const Channel = sequelize.define('Channel', {
     // Superadmin "deactivate" instead of delete — the channel and its history
     // stay intact, just hidden and read/write-locked, until reactivated.
     is_active: { type: DataTypes.BOOLEAN, defaultValue: true },
+    // Channel-admin-level "archive" (distinct from superadmin deactivate
+    // above): read-only, everyone can still see it and scroll history, just
+    // can't post — and it stays visible/browsable rather than disappearing.
+    // A channel's own admin can do this to their own channel; deactivate
+    // stays a workspace-admin-only moderation action.
+    archived_at: { type: DataTypes.DATE, allowNull: true },
 });
 
 const ChannelMember = sequelize.define('ChannelMember', {
@@ -2910,6 +2919,21 @@ async function sendDueScheduledMessages() {
 }
 setInterval(sendDueScheduledMessages, 20000);
 
+/** Clears a status that's past its expiry — "in a meeting" for 1h shouldn't
+ *  still say so a week later. A minute of drift on when exactly it clears
+ *  is a non-issue, same reasoning as the scheduled-message sweep above. */
+async function clearExpiredStatuses() {
+    try {
+        await User.update(
+            { status_text: '', status_emoji: '✨', status_expires_at: null },
+            { where: { status_expires_at: { [Op.lte]: new Date() } } }
+        );
+    } catch (e) {
+        console.error('[status-expiry-sweep]', e.message);
+    }
+}
+setInterval(clearExpiredStatuses, 60000);
+
 // --- Workflow Builder ---
 //
 // One trigger + one action per workflow (not Slack's full multi-step visual
@@ -3070,6 +3094,9 @@ app.post('/api/messages', auth.requireAuth, async (req, res) => {
              // active again" is the whole point of deactivate-over-delete.
              if (ch && ch.is_active === false) {
                  return res.status(403).json({ error: 'channel_deactivated', message: 'This channel has been deactivated' });
+             }
+             if (ch && ch.archived_at) {
+                 return res.status(403).json({ error: 'channel_archived', message: 'This channel is archived — unarchive it to send messages' });
              }
              if (ch && ch.restricted_messaging) {
                  const member = await ChannelMember.findOne({ where: { channelId, userId: senderId } });
@@ -4427,12 +4454,17 @@ app.put('/api/users/:phone', auth.requireAuth, async (req, res) => {
         // The path param is not trusted: you may only edit your own profile.
         const user = await User.findByPk(req.user.id);
         if (!user) return res.status(404).json({ error: 'User not found' });
-        const { name, bio, avatarUrl, status_emoji, status_text } = req.body;
+        const { name, bio, avatarUrl, status_emoji, status_text, status_duration_minutes } = req.body;
         if (name) user.name = name;
         if (bio) user.bio = bio;
         if (avatarUrl) user.avatarUrl = avatarUrl;
-        if (status_emoji) user.status_emoji = status_emoji;
-        if (status_text) user.status_text = status_text;
+        // Explicit undefined check (not truthy) — status has to be clearable
+        // to "", which `if (status_text)` would silently ignore.
+        if (status_emoji !== undefined) user.status_emoji = status_emoji;
+        if (status_text !== undefined) user.status_text = status_text;
+        if (status_duration_minutes !== undefined) {
+            user.status_expires_at = status_duration_minutes ? new Date(Date.now() + Number(status_duration_minutes) * 60000) : null;
+        }
         await user.save();
         res.json({ success: true, user });
     } catch (e) { res.status(500).json(e); }
@@ -4543,7 +4575,7 @@ app.put('/api/channels/:id', auth.requireAuth, async (req, res) => {
         if ((!me || me.role !== 'admin') && !isGroupAdmin(req.user)) {
             return res.status(403).json({ error: 'forbidden', message: 'Only channel admins can edit channel info' });
         }
-        const { restricted_messaging, info_edit_restricted, approval_required, topic, name } = req.body;
+        const { restricted_messaging, info_edit_restricted, approval_required, topic, name, archived } = req.body;
         const channel = await Channel.findByPk(req.params.id);
         if (channel) {
             if (restricted_messaging !== undefined) channel.restricted_messaging = restricted_messaging;
@@ -4551,6 +4583,10 @@ app.put('/api/channels/:id', auth.requireAuth, async (req, res) => {
             if (approval_required !== undefined) channel.approval_required = approval_required;
             if (topic !== undefined) channel.topic = topic;
             if (name !== undefined) channel.name = name;
+            if (archived !== undefined) {
+                channel.archived_at = archived ? new Date() : null;
+                await logAudit(req.user, archived ? 'channel.archived' : 'channel.unarchived', 'channel', channel.id, channel.name);
+            }
             await channel.save();
         }
         res.json(channel);

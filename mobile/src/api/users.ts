@@ -23,6 +23,7 @@ export interface ProfileUpdate {
   avatarUrl?: string;
   status_emoji?: string;
   status_text?: string;
+  status_duration_minutes?: number | null;
 }
 
 // The path segment is ignored server-side (you may only edit your own

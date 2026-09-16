@@ -360,6 +360,19 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
             </Pressable>
           </View>
 
+          {isChannelAdmin && channel ? (
+            <View style={styles.settingsBlock}>
+              {channel.archived_at ? (
+                <Text style={styles.deactivatedNotice}>
+                  This channel is archived — everyone can still read its history, but no one can post until it's unarchived.
+                </Text>
+              ) : null}
+              <Pressable style={styles.navRow} onPress={() => toggle("archived", !channel.archived_at)}>
+                <Text style={styles.navRowText}>{channel.archived_at ? "📤 Unarchive channel" : "🗄️ Archive channel"}</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
           {isSuperAdmin && channel ? (
             <View style={styles.settingsBlock}>
               {channel.is_active === false ? (

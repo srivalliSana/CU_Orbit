@@ -29,6 +29,10 @@ export interface ChannelDetail {
   info_edit_restricted: boolean;
   approval_required: boolean;
   is_active: boolean;
+  archived_at: string | null;
+  // Write-only: PUT /api/channels/:id accepts this boolean action, but the
+  // server persists it as (and GET responses return) archived_at above.
+  archived?: boolean;
 }
 
 export interface ChannelMemberRow {
