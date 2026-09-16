@@ -2713,6 +2713,22 @@ async function postSignedWebhook(url, app, payload, timeoutMs = 3000) {
 }
 
 /**
+ * Every registered slash command from an approved (non-suspended, non-
+ * pending) app — not admin-gated, since any member who can type a message
+ * should be able to see what "/" autocompletes to, same as Slack. Backs the
+ * composer's slash-command suggestion dropdown on web and mobile.
+ */
+app.get('/api/slash-commands', auth.requireAuth, async (req, res) => {
+    try {
+        const approvedAppIds = (await App.findAll({ where: { status: 'approved' }, attributes: ['id'] })).map((a) => a.id);
+        const rows = approvedAppIds.length
+            ? await SlashCommand.findAll({ where: { app_id: { [Op.in]: approvedAppIds } }, order: [['command', 'ASC']] })
+            : [];
+        res.json(rows.map((r) => ({ command: r.command, description: r.description, usage_hint: r.usage_hint })));
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/**
  * Fires a matched slash command's webhook and posts the app's response (or a
  * timeout notice) into the channel as the app's bot. Synchronous-only for
  * Phase 1 — no response_url/async ack yet, matching Slack's oldest, simplest

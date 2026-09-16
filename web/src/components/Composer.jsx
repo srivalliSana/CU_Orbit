@@ -1,11 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getChannelMembers } from '../api/channels';
+import { getSlashCommands } from '../api/slashCommands';
 import Avatar from './Avatar';
-import EmojiPicker from './EmojiPicker';
+import EmojiPicker, { useCustomEmojiMap } from './EmojiPicker';
 import { renderInlineText } from '../lib/markdown';
+import { EMOJI_SHORTCODES } from '../lib/emojiShortcodes';
 
 // Matches an in-progress "@word" run at the end of the typed text.
 const MENTION_TRIGGER = /(?:^|\s)@(\w*)$/;
+// Matches an in-progress ":word" run at the end of the typed text —
+// unclosed (no second colon yet), same "end of string" simplification as
+// MENTION_TRIGGER above.
+const EMOJI_TRIGGER = /(?:^|\s):(\w{2,})$/;
+// A slash command is only ever the message's first token, unlike @/: which
+// can appear anywhere — so this matches the whole value, not just its tail.
+const SLASH_TRIGGER = /^\/(\w*)$/;
 
 const formatDuration = (totalSeconds) => {
   const m = Math.floor(totalSeconds / 60);
@@ -34,7 +43,11 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
   const [file, setFile] = useState(null);
   const [members, setMembers] = useState([]);
   const [mentionQuery, setMentionQuery] = useState(null);
+  const [emojiQuery, setEmojiQuery] = useState(null);
+  const [slashQuery, setSlashQuery] = useState(null);
+  const [slashCommands, setSlashCommands] = useState([]);
   const [taggedUsers, setTaggedUsers] = useState([]);
+  const customEmojiMap = useCustomEmojiMap();
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [formattingOpen, setFormattingOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -71,6 +84,24 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
     return members.filter((m) => m.name.toLowerCase().includes(q)).slice(0, 6);
   }, [members, mentionQuery]);
 
+  useEffect(() => { getSlashCommands().then(setSlashCommands).catch(() => setSlashCommands([])); }, []);
+
+  const slashSuggestions = useMemo(() => {
+    if (slashQuery === null) return [];
+    const q = slashQuery.toLowerCase();
+    return slashCommands.filter((c) => c.command.toLowerCase().startsWith(q)).slice(0, 6);
+  }, [slashCommands, slashQuery]);
+
+  const emojiSuggestions = useMemo(() => {
+    if (emojiQuery === null) return [];
+    const q = emojiQuery.toLowerCase();
+    const standard = EMOJI_SHORTCODES.filter(([, name]) => name.startsWith(q)).map(([emoji, name]) => ({ id: `s:${name}`, name, emoji, insert: emoji }));
+    const custom = [...customEmojiMap.entries()]
+      .filter(([code]) => code.slice(1, -1).toLowerCase().startsWith(q))
+      .map(([code, url]) => ({ id: `c:${code}`, name: code.slice(1, -1), url, insert: code }));
+    return [...standard, ...custom].slice(0, 8);
+  }, [emojiQuery, customEmojiMap]);
+
   const grow = (el) => {
     if (!el) return;
     el.style.height = 'auto';
@@ -92,6 +123,8 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
     setFile(null);
     setTaggedUsers([]);
     setMentionQuery(null);
+    setEmojiQuery(null);
+    setSlashQuery(null);
     onCancelReply?.();
     if (fileInput.current) fileInput.current.value = '';
     grow(box.current);
@@ -137,10 +170,15 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
   };
 
   const onChange = (e) => {
-    setText(e.target.value);
+    const value = e.target.value;
+    setText(value);
     grow(e.target);
-    const match = e.target.value.match(MENTION_TRIGGER);
-    setMentionQuery(match ? match[1] : null);
+    const mentionMatch = value.match(MENTION_TRIGGER);
+    setMentionQuery(mentionMatch ? mentionMatch[1] : null);
+    const emojiMatch = value.match(EMOJI_TRIGGER);
+    setEmojiQuery(emojiMatch ? emojiMatch[1] : null);
+    const slashMatch = value.match(SLASH_TRIGGER);
+    setSlashQuery(slashMatch ? slashMatch[1] : null);
     // Throttle to one ping every 2s rather than one per keystroke.
     if (Date.now() - lastTyped.current > 2000) {
       lastTyped.current = Date.now();
@@ -153,6 +191,20 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
     setText(replaced);
     setTaggedUsers((prev) => [...prev, { user_id: member.id, display_name: member.name }]);
     setMentionQuery(null);
+    box.current?.focus();
+  };
+
+  const pickEmoji = (item) => {
+    const replaced = text.replace(EMOJI_TRIGGER, (m) => `${m.startsWith(' ') ? ' ' : ''}${item.insert} `);
+    setText(replaced);
+    setEmojiQuery(null);
+    box.current?.focus();
+    requestAnimationFrame(() => grow(box.current));
+  };
+
+  const pickSlashCommand = (cmd) => {
+    setText(`/${cmd.command} `);
+    setSlashQuery(null);
     box.current?.focus();
   };
 
@@ -290,6 +342,34 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
             >
               <Avatar name={m.name} url={m.avatarUrl} size={24} />
               <span className="text-slate-700 dark:text-slate-200">{m.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {slashSuggestions.length > 0 && (
+        <div className="absolute bottom-full left-3 right-3 z-10 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
+          {slashSuggestions.map((c) => (
+            <button
+              key={c.command}
+              onMouseDown={(e) => { e.preventDefault(); pickSlashCommand(c); }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-700"
+            >
+              <span className="shrink-0 font-mono font-semibold text-blue-600 dark:text-blue-400">/{c.command}</span>
+              <span className="truncate text-xs text-slate-500">{c.usage_hint || c.description}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {emojiSuggestions.length > 0 && (
+        <div className="absolute bottom-full left-3 right-3 z-10 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
+          {emojiSuggestions.map((item) => (
+            <button
+              key={item.id}
+              onMouseDown={(e) => { e.preventDefault(); pickEmoji(item); }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-700"
+            >
+              {item.url ? <img src={item.url} alt={item.name} className="h-5 w-5 object-contain" /> : <span className="text-lg">{item.emoji}</span>}
+              <span className="text-slate-700 dark:text-slate-200">:{item.name}:</span>
             </button>
           ))}
         </div>

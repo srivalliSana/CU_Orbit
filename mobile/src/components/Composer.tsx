@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, FlatList, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, FlatList, Image, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -13,9 +13,12 @@ import {
 
 import { uploadFile, type PickedFile } from "../api/upload";
 import { getChannelMembers, type ChannelMemberRow } from "../api/channels";
+import { getSlashCommands, type SlashCommandRow } from "../api/slashCommands";
 import AttachmentPreviewModal, { type PendingAttachment } from "./AttachmentPreviewModal";
 import Avatar from "./Avatar";
+import { useCustomEmojiMap } from "./EmojiPicker";
 import { renderMarkdown } from "../lib/markdown";
+import { EMOJI_SHORTCODES } from "../lib/emojiShortcodes";
 import { useThemeColors } from "../state/themeStore";
 
 export interface SendPayload {
@@ -39,6 +42,13 @@ export interface ReplyTarget {
 // RN's TextInput doesn't expose live cursor coordinates without extra
 // plumbing, and composing a mention mid-message is a rare edit pattern.
 const MENTION_TRIGGER = /(?:^|\s)@(\w*)$/;
+// Same "end of string" simplification, unclosed ":word".
+const EMOJI_TRIGGER = /(?:^|\s):(\w{2,})$/;
+// A slash command is only ever the message's first token, so this matches
+// the whole value rather than just its tail.
+const SLASH_TRIGGER = /^\/(\w*)$/;
+
+type EmojiSuggestion = { id: string; name: string; emoji?: string; url?: string; insert: string };
 
 const formatDuration = (totalSeconds: number) => {
   const m = Math.floor(totalSeconds / 60);
@@ -73,7 +83,11 @@ export default function Composer({
   const [uploading, setUploading] = useState(false);
   const [members, setMembers] = useState<ChannelMemberRow[]>([]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [emojiQuery, setEmojiQuery] = useState<string | null>(null);
+  const [slashQuery, setSlashQuery] = useState<string | null>(null);
+  const [slashCommands, setSlashCommands] = useState<SlashCommandRow[]>([]);
   const [taggedUsers, setTaggedUsers] = useState<{ user_id: string; display_name: string }[]>([]);
+  const customEmojiMap = useCustomEmojiMap();
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [formattingOpen, setFormattingOpen] = useState(false);
   const [selection, setSelection] = useState({ start: 0, end: 0 });
@@ -102,6 +116,26 @@ export default function Composer({
     return members.filter((m) => m.name.toLowerCase().includes(q)).slice(0, 6);
   }, [members, mentionQuery]);
 
+  useEffect(() => { getSlashCommands().then(setSlashCommands).catch(() => setSlashCommands([])); }, []);
+
+  const slashSuggestions = useMemo(() => {
+    if (slashQuery === null) return [];
+    const q = slashQuery.toLowerCase();
+    return slashCommands.filter((c) => c.command.toLowerCase().startsWith(q)).slice(0, 6);
+  }, [slashCommands, slashQuery]);
+
+  const emojiSuggestions = useMemo<EmojiSuggestion[]>(() => {
+    if (emojiQuery === null) return [];
+    const q = emojiQuery.toLowerCase();
+    const standard: EmojiSuggestion[] = EMOJI_SHORTCODES.filter(([, name]) => name.startsWith(q)).map(([emoji, name]) => ({
+      id: `s:${name}`, name, emoji, insert: emoji,
+    }));
+    const custom: EmojiSuggestion[] = [...customEmojiMap.entries()]
+      .filter(([code]) => code.slice(1, -1).toLowerCase().startsWith(q))
+      .map(([code, url]) => ({ id: `c:${code}`, name: code.slice(1, -1), url, insert: code }));
+    return [...standard, ...custom].slice(0, 8);
+  }, [emojiQuery, customEmojiMap]);
+
   const submitText = () => {
     const body = text.trim();
     if (!body) return;
@@ -117,6 +151,8 @@ export default function Composer({
     setText("");
     setTaggedUsers([]);
     setMentionQuery(null);
+    setEmojiQuery(null);
+    setSlashQuery(null);
     onCancelReply?.();
   };
 
@@ -168,6 +204,8 @@ export default function Composer({
     setText("");
     setTaggedUsers([]);
     setMentionQuery(null);
+    setEmojiQuery(null);
+    setSlashQuery(null);
     onCancelReply?.();
   };
 
@@ -188,8 +226,12 @@ export default function Composer({
 
   const onChangeText = (value: string) => {
     setText(value);
-    const match = value.match(MENTION_TRIGGER);
-    setMentionQuery(match ? match[1] : null);
+    const mentionMatch = value.match(MENTION_TRIGGER);
+    setMentionQuery(mentionMatch ? mentionMatch[1] : null);
+    const emojiMatch = value.match(EMOJI_TRIGGER);
+    setEmojiQuery(emojiMatch ? emojiMatch[1] : null);
+    const slashMatch = value.match(SLASH_TRIGGER);
+    setSlashQuery(slashMatch ? slashMatch[1] : null);
     // Throttle to one ping every 2s rather than one per keystroke — mirrors
     // web/src/components/Composer.jsx.
     if (Date.now() - lastTyped.current > 2000) {
@@ -234,6 +276,17 @@ export default function Composer({
     setText(replaced);
     setTaggedUsers((prev) => [...prev, { user_id: member.id, display_name: member.name }]);
     setMentionQuery(null);
+  };
+
+  const pickEmoji = (item: EmojiSuggestion) => {
+    const replaced = text.replace(EMOJI_TRIGGER, (m) => `${m.startsWith(" ") ? " " : ""}${item.insert} `);
+    setText(replaced);
+    setEmojiQuery(null);
+  };
+
+  const pickSlashCommand = (cmd: SlashCommandRow) => {
+    setText(`/${cmd.command} `);
+    setSlashQuery(null);
   };
 
   // Picking (camera or document) only stages files for review — nothing
@@ -369,6 +422,40 @@ export default function Composer({
               <Pressable onPress={() => pickMention(item)} style={styles.suggestionRow}>
                 <Avatar name={item.name} url={item.avatarUrl} size={28} />
                 <Text style={styles.suggestionText}>{item.name}</Text>
+              </Pressable>
+            )}
+          />
+        </View>
+      )}
+      {slashSuggestions.length > 0 && (
+        <View style={styles.suggestions}>
+          <FlatList
+            data={slashSuggestions}
+            keyExtractor={(c) => c.command}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => (
+              <Pressable onPress={() => pickSlashCommand(item)} style={styles.suggestionRow}>
+                <Text style={styles.slashCommandText}>/{item.command}</Text>
+                <Text style={styles.suggestionText} numberOfLines={1}>{item.usage_hint || item.description}</Text>
+              </Pressable>
+            )}
+          />
+        </View>
+      )}
+      {emojiSuggestions.length > 0 && (
+        <View style={styles.suggestions}>
+          <FlatList
+            data={emojiSuggestions}
+            keyExtractor={(e) => e.id}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => (
+              <Pressable onPress={() => pickEmoji(item)} style={styles.suggestionRow}>
+                {item.url ? (
+                  <Image source={{ uri: item.url }} style={{ width: 22, height: 22 }} />
+                ) : (
+                  <Text style={{ fontSize: 20 }}>{item.emoji}</Text>
+                )}
+                <Text style={styles.suggestionText}>:{item.name}:</Text>
               </Pressable>
             )}
           />
@@ -592,6 +679,12 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   suggestionText: {
     fontSize: 14,
     color: colors.text,
+    flexShrink: 1,
+  },
+  slashCommandText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.primary,
   },
   container: {
     flexDirection: "row",
