@@ -6,6 +6,16 @@ export const getMessages = (containerId: string) =>
     .get<Message[]>(`/messages/${encodeURIComponent(containerId)}`)
     .then((res) => res.data);
 
+export interface MessageReads {
+  read_count: number;
+  audience: number;
+  readers: { id: string; name: string; avatarUrl: string | null; read_at: string }[];
+}
+
+/** "Seen by" for a group message — mirrors web's getReads. */
+export const getReads = (messageId: string) =>
+  client.get<MessageReads>(`/messages/${messageId}/reads`).then((res) => res.data);
+
 export const sendMessage = (params: {
   containerId: string;
   body: string;

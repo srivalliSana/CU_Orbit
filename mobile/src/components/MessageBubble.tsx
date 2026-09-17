@@ -21,6 +21,7 @@ import LinkPreviewCard from "./LinkPreviewCard";
 import AddToListSheet from "./lists/AddToListSheet";
 import { renderMarkdown, renderMessageText } from "../lib/markdown";
 import { openFile, saveFile } from "../lib/fileActions";
+import { getReads } from "../api/messages";
 import { resolveMediaUrl } from "../constants/config";
 import { clockLabel } from "../lib/format";
 import { useThemeColors } from "../state/themeStore";
@@ -29,6 +30,7 @@ import type { Message } from "../types/api";
 export default function MessageBubble({
   message,
   isOwn,
+  isGroup,
   canModerate,
   isSuperAdmin,
   onReact,
@@ -49,6 +51,7 @@ export default function MessageBubble({
 }: {
   message: Message;
   isOwn: boolean;
+  isGroup?: boolean;
   canModerate?: boolean;
   isSuperAdmin?: boolean;
   highlighted?: boolean;
@@ -74,6 +77,23 @@ export default function MessageBubble({
   const [editVisible, setEditVisible] = useState(false);
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [votesVisible, setVotesVisible] = useState(false);
+
+  // "Seen by" — group messages only, own messages only, mirrors web's
+  // showReads. A DM's status already reads "read"/"delivered"/"sent"
+  // directly off the message (set server-side), so there's nothing to
+  // fetch there — tapping only does something in a group.
+  const showReads = async () => {
+    if (!isOwn || !isGroup) return;
+    try {
+      const reads = await getReads(message.id);
+      Alert.alert(
+        `Read by ${reads.read_count}${reads.audience ? ` of ${reads.audience}` : ""}`,
+        reads.readers.length ? reads.readers.map((r) => r.name).join("\n") : "No one has read this yet."
+      );
+    } catch {
+      Alert.alert("Couldn't load read receipts");
+    }
+  };
   const customEmojiMap = useCustomEmojiMap();
 
   // WhatsApp-style swipe-right-to-reply: drag reveals a reply icon behind
@@ -342,10 +362,17 @@ export default function MessageBubble({
 
         <ActionButtonsRow message={message} isOwn={isOwn} onAction={onAction} styles={styles} colors={colors} />
 
-        <View style={styles.metaRow}>
+        <Pressable onPress={showReads} disabled={!isOwn || !isGroup} style={styles.metaRow}>
           {message.edited_at ? <Text style={styles.edited}>edited</Text> : null}
           <Text style={styles.time}>{clockLabel(message.sent_at)}</Text>
-        </View>
+          {isOwn ? (
+            <Ionicons
+              name={message.status === "sent" ? "checkmark" : "checkmark-done"}
+              size={13}
+              color={message.status === "read" ? "#60A5FA" : colors.textMuted}
+            />
+          ) : null}
+        </Pressable>
 
         {reactionCounts.length > 0 ? (
           <View style={styles.reactionsRow}>

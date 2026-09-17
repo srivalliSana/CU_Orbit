@@ -239,6 +239,7 @@ export default function ChatScreen({ route, navigation }: Props) {
           <MessageBubble
             message={item}
             isOwn={item.sender_id === selfId}
+            isGroup={kind === "channel"}
             canModerate={canModerate}
             isSuperAdmin={isSuperAdmin}
             highlighted={highlightId === item.id}

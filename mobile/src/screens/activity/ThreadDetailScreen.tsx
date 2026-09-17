@@ -128,6 +128,7 @@ export default function ThreadDetailScreen({ route }: Props) {
   const isChannel = !!root.channel_id;
   const rowActions = (message: Message) => ({
     isOwn: message.sender_id === selfId,
+    isGroup: isChannel,
     canModerate: isSuperAdmin,
     isSuperAdmin,
     currentUserId: selfId,
