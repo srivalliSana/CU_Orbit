@@ -8,6 +8,7 @@ import PollVotesModal from './PollVotesModal';
 import LinkPreviewCard from './LinkPreviewCard';
 import AddToListModal from './AddToListModal';
 import { saveFile } from '../lib/saveFile';
+import { reportUser } from '../api/users';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -136,6 +137,13 @@ export default function MessageBubble({
     try { await (next ? starMessage : unstarMessage)(m.id); } catch { setStarred(!next); }
   };
 
+  const reportMessage = async () => {
+    setActionsOpen(false);
+    const reason = window.prompt(`Report this message from ${m.sender_name}? Add a reason (optional):`);
+    if (reason === null) return;   // cancelled
+    try { await reportUser(m.sender_id, reason, m.id); } catch { /* best-effort */ }
+  };
+
   const deleteForMe = async () => {
     setDeleteMenuOpen(false);
     setBusy(true);
@@ -250,6 +258,7 @@ export default function MessageBubble({
             <MenuItem icon="➡️" label="Forward" onClick={() => { setActionsOpen(false); onForward?.(m); }} />
             <MenuItem icon="📌" label={m.is_pinned ? 'Unpin' : 'Pin'} onClick={togglePin} disabled={busy} />
             <MenuItem icon={starred ? '⭐' : '☆'} label={starred ? 'Unstar' : 'Star'} onClick={toggleStar} />
+            {!own && <MenuItem icon="⚠️" label="Report" onClick={reportMessage} />}
             {m.channel_id && (
               <MenuItem icon="📋" label="Add to list" onClick={() => { setActionsOpen(false); setAddingToList(true); }} />
             )}

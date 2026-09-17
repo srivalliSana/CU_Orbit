@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,6 +22,7 @@ import AddToListSheet from "./lists/AddToListSheet";
 import { renderMarkdown, renderMessageText } from "../lib/markdown";
 import { openFile, saveFile } from "../lib/fileActions";
 import { getReads } from "../api/messages";
+import { reportUser } from "../api/users";
 import { resolveMediaUrl } from "../constants/config";
 import { clockLabel } from "../lib/format";
 import { useThemeColors } from "../state/themeStore";
@@ -77,6 +78,20 @@ export default function MessageBubble({
   const [editVisible, setEditVisible] = useState(false);
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [votesVisible, setVotesVisible] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [reportSent, setReportSent] = useState(false);
+
+  const submitReport = async () => {
+    try {
+      await reportUser(message.sender_id, reportReason.trim(), message.id);
+      setReportSent(true);
+      setTimeout(() => { setReportOpen(false); setReportSent(false); setReportReason(""); }, 1500);
+    } catch {
+      // best-effort — the report either lands or it doesn't, no need to
+      // block the reader with a retry flow for this
+    }
+  };
 
   // "Seen by" — group messages only, own messages only, mirrors web's
   // showReads. A DM's status already reads "read"/"delivered"/"sent"
@@ -417,8 +432,39 @@ export default function MessageBubble({
         onForward={onForward}
         onStar={() => onStar?.(!message.is_starred)}
         onAddToList={message.channel_id ? () => setAddToListVisible(true) : undefined}
+        onReport={!isOwn ? () => setReportOpen(true) : undefined}
         onClose={() => setPickerVisible(false)}
       />
+
+      <Modal visible={reportOpen} transparent animationType="fade" onRequestClose={() => setReportOpen(false)}>
+        <Pressable style={styles.reportBackdrop} onPress={() => setReportOpen(false)}>
+          <Pressable style={styles.reportCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.reportTitle}>Report {message.sender_name}</Text>
+            {reportSent ? (
+              <Text style={styles.reportSentText}>Thanks — an admin will review this.</Text>
+            ) : (
+              <>
+                <TextInput
+                  value={reportReason}
+                  onChangeText={setReportReason}
+                  placeholder="What happened? (optional)"
+                  placeholderTextColor={colors.textMuted}
+                  multiline
+                  style={styles.reportInput}
+                />
+                <View style={styles.reportActions}>
+                  <Pressable onPress={() => setReportOpen(false)} style={styles.reportCancel}>
+                    <Text style={{ color: colors.textMuted, fontSize: 13 }}>Cancel</Text>
+                  </Pressable>
+                  <Pressable onPress={submitReport} style={styles.reportSend}>
+                    <Text style={{ color: "#fff", fontWeight: "700", fontSize: 13 }}>Send report</Text>
+                  </Pressable>
+                </View>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {message.channel_id && (
         <AddToListSheet
@@ -926,5 +972,58 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   actionButtonText: {
     fontSize: 12,
     fontWeight: "700",
+  },
+  reportBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  reportCard: {
+    width: "100%",
+    maxWidth: 320,
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    padding: 20,
+  },
+  reportTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  reportInput: {
+    minHeight: 70,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    padding: 10,
+    fontSize: 14,
+    color: colors.text,
+    textAlignVertical: "top",
+  },
+  reportSentText: {
+    color: colors.primary,
+    fontSize: 14,
+    marginTop: 12,
+  },
+  reportActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+  },
+  reportCancel: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderRadius: 10,
+  },
+  reportSend: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderRadius: 10,
+    backgroundColor: colors.danger,
   },
 });

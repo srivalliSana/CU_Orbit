@@ -17,6 +17,12 @@ export const getUser = (id: string) => client.get<User>(`/users/${encodeURICompo
 export const startDmByEmail = (email: string) =>
   client.post<{ dm_id: string; user: User }>("/directory/dm", { email }).then((res) => res.data);
 
+export const getBlockedUsers = () => client.get<User[]>("/users/me/blocked").then((res) => res.data);
+export const blockUser = (id: string) => client.post(`/users/${encodeURIComponent(id)}/block`);
+export const unblockUser = (id: string) => client.delete(`/users/${encodeURIComponent(id)}/block`);
+export const reportUser = (id: string, reason: string, messageId?: string) =>
+  client.post(`/users/${encodeURIComponent(id)}/report`, { reason, message_id: messageId });
+
 export interface ProfileUpdate {
   name?: string;
   bio?: string;

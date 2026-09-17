@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
+import Avatar from "../../components/Avatar";
 import { useThemeColors, useThemeStore, type ThemeMode } from "../../state/themeStore";
 import { useAuthStore } from "../../state/authStore";
 import { setDoNotDisturb } from "../../api/conversations";
-import { updateProfile } from "../../api/users";
+import { getBlockedUsers, unblockUser, updateProfile } from "../../api/users";
 import { confirmTwoFactorEnroll, disableTwoFactor, startTwoFactorEnroll } from "../../api/auth";
+import type { User } from "../../types/api";
 
 const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: "system", label: "System default" },
@@ -30,6 +32,14 @@ export default function SettingsScreen() {
   const [twofaStage, setTwofaStage] = useState<"idle" | "enrolling" | "busy">("idle");
   const [twofaCode, setTwofaCode] = useState("");
   const [twofaError, setTwofaError] = useState<string | null>(null);
+
+  const [blocked, setBlocked] = useState<User[] | null>(null);
+  useEffect(() => { getBlockedUsers().then(setBlocked).catch(() => setBlocked([])); }, []);
+
+  const unblock = async (id: string) => {
+    await unblockUser(id).catch(() => {});
+    setBlocked((rows) => rows?.filter((r) => r.id !== id) ?? rows);
+  };
 
   const startTwofaEnroll = async () => {
     setTwofaError(null);
@@ -211,6 +221,28 @@ export default function SettingsScreen() {
           your channels and DMs. Your campus email is only shown to people
           you message directly.
         </Text>
+        <View style={[styles.row, { borderTopWidth: 1, borderTopColor: colors.border, flexDirection: "column", alignItems: "flex-start" }]}>
+          <Text style={[styles.rowText, { color: colors.text }]}>Blocked</Text>
+          {blocked === null ? (
+            <Text style={[styles.hint, { color: colors.textMuted, padding: 0, marginTop: 4 }]}>Loading…</Text>
+          ) : blocked.length === 0 ? (
+            <Text style={[styles.hint, { color: colors.textMuted, padding: 0, marginTop: 4 }]}>
+              Nobody's blocked. Block someone from their profile card.
+            </Text>
+          ) : (
+            <View style={{ marginTop: 8, width: "100%", gap: 10 }}>
+              {blocked.map((b) => (
+                <View key={b.id} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <Avatar name={b.name} url={b.avatarUrl} size={28} />
+                  <Text style={[styles.rowText, { color: colors.text, flex: 1 }]} numberOfLines={1}>{b.name}</Text>
+                  <Pressable onPress={() => unblock(b.id)}>
+                    <Text style={[styles.rowText, { color: colors.primary, fontSize: 13, fontWeight: "600" }]}>Unblock</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
       </View>
     </ScrollView>
   );

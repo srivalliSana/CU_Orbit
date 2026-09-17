@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import Avatar from './Avatar';
 import { getThemeMode, setThemeMode } from '../lib/theme';
 import { setDoNotDisturb } from '../api/chat';
-import { updateProfile } from '../api/users';
+import { getBlockedUsers, unblockUser, updateProfile } from '../api/users';
 import { confirmTwoFactorEnroll, disableTwoFactor, startTwoFactorEnroll } from '../api/auth';
 
 const THEME_OPTIONS = [
@@ -24,6 +25,14 @@ export default function SettingsPanel({ user, onClose, onSignOut, onUpdated }) {
   const [twofaStage, setTwofaStage] = useState('idle');   // idle | enrolling | busy
   const [twofaCode, setTwofaCode] = useState('');
   const [twofaError, setTwofaError] = useState(null);
+
+  const [blocked, setBlocked] = useState(null);
+  useEffect(() => { getBlockedUsers().then(setBlocked).catch(() => setBlocked([])); }, []);
+
+  const unblock = async (id) => {
+    await unblockUser(id).catch(() => {});
+    setBlocked((rows) => rows?.filter((r) => r.id !== id) ?? rows);
+  };
 
   const startTwofaEnroll = async () => {
     setTwofaError(null);
@@ -244,6 +253,26 @@ export default function SettingsPanel({ user, onClose, onSignOut, onUpdated }) {
             your channels and DMs. Your CampusOne email is only shown to people
             you message directly.
           </p>
+          <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+            <p className="text-sm text-slate-700 dark:text-slate-200">Blocked</p>
+            {blocked === null ? (
+              <p className="mt-1 text-xs text-slate-400">Loading…</p>
+            ) : blocked.length === 0 ? (
+              <p className="mt-1 text-xs text-slate-500">Nobody's blocked. Block someone from their profile card.</p>
+            ) : (
+              <ul className="mt-2 space-y-1.5">
+                {blocked.map((b) => (
+                  <li key={b.id} className="flex items-center gap-2.5">
+                    <Avatar name={b.name} url={b.avatarUrl} size={28} />
+                    <span className="flex-1 truncate text-sm text-slate-700 dark:text-slate-200">{b.name}</span>
+                    <button onClick={() => unblock(b.id)} className="shrink-0 text-xs font-medium text-blue-600 hover:text-blue-700">
+                      Unblock
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
 
         <button

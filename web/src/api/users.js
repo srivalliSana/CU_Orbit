@@ -9,3 +9,9 @@ export const updateProfile = (patch) =>
 // name on a message opens their profile card, unrelated to the CampusOne
 // directory search (which stays faculty-only).
 export const getUser = (id) => api(`/api/users/${encodeURIComponent(id)}`);
+
+export const getBlockedUsers = () => api('/api/users/me/blocked');
+export const blockUser = (id) => api(`/api/users/${encodeURIComponent(id)}/block`, { method: 'POST' });
+export const unblockUser = (id) => api(`/api/users/${encodeURIComponent(id)}/block`, { method: 'DELETE' });
+export const reportUser = (id, reason, messageId) =>
+  api(`/api/users/${encodeURIComponent(id)}/report`, { method: 'POST', body: JSON.stringify({ reason, message_id: messageId }) });

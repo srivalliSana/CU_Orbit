@@ -14,6 +14,7 @@ export interface User {
   email_digest_opt_out?: boolean;
   has_onboarded?: boolean;
   twofa_enabled?: boolean;
+  is_blocked_by_me?: boolean;
   is_active?: boolean;
   dnd_until?: string | null;
 }

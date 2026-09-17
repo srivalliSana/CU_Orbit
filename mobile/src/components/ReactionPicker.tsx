@@ -20,6 +20,7 @@ export default function ReactionPicker({
   onForward,
   onStar,
   onAddToList,
+  onReport,
   onClose,
 }: {
   visible: boolean;
@@ -35,6 +36,7 @@ export default function ReactionPicker({
   onForward?: () => void;
   onStar?: () => void;
   onAddToList?: () => void;
+  onReport?: () => void;
   onClose: () => void;
 }) {
   const colors = useThemeColors();
@@ -133,6 +135,18 @@ export default function ReactionPicker({
               }}
             >
               <Text style={styles.actionText}>Edit message</Text>
+            </Pressable>
+          ) : null}
+
+          {onReport ? (
+            <Pressable
+              style={styles.actionButton}
+              onPress={() => {
+                onReport();
+                onClose();
+              }}
+            >
+              <Text style={styles.deleteText}>Report</Text>
             </Pressable>
           ) : null}
 

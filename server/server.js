@@ -705,6 +705,17 @@ const EmailOtp = sequelize.define('EmailOtp', {
     last_sent_at: { type: DataTypes.DATE, allowNull: false },
 });
 
+/** blocker_id blocked blocked_id — checked both directions on every DM
+ *  send (see POST /api/messages), so it doesn't matter which of the two
+ *  people initiated the block. */
+const Block = sequelize.define('Block', {
+    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    blocker_id: { type: DataTypes.STRING, allowNull: false },
+    blocked_id: { type: DataTypes.STRING, allowNull: false },
+}, {
+    indexes: [{ unique: true, fields: ['blocker_id', 'blocked_id'] }],
+});
+
 // Same shape as EmailOtp, kept separate so a normal sign-in code request
 // and a 2FA-step/enrollment code never collide or get mixed up for the
 // same address.
@@ -1571,9 +1582,13 @@ app.get('/api/directory/person', auth.requireAuth, async (req, res) => {
         const entry = key
             ? (await campus.searchDirectory(key, 5)).find((p) => (p.email || '').toLowerCase() === key) || null
             : null;
+        const isBlockedByMe = user && user.id !== req.user.id
+            ? !!(await Block.findOne({ where: { blocker_id: req.user.id, blocked_id: user.id } }))
+            : false;
 
         res.json({
             person: {
+                is_blocked_by_me: isBlockedByMe,
                 email: key || null,
                 // CampusOne is authoritative for who someone is; the Orbit row
                 // is only a fallback for accounts predating the directory link.
@@ -3321,6 +3336,25 @@ app.post('/api/messages', auth.requireAuth, async (req, res) => {
                 if (!channelId.split('_').includes(senderId)) {
                     return res.status(403).json({ error: 'forbidden', message: 'Not a participant in this conversation' });
                 }
+                const otherUserId = channelId.split('_').find((id) => id !== senderId);
+                if (otherUserId) {
+                    const blocked = await Block.findOne({
+                        where: {
+                            [Op.or]: [
+                                { blocker_id: senderId, blocked_id: otherUserId },
+                                { blocker_id: otherUserId, blocked_id: senderId },
+                            ],
+                        },
+                    });
+                    if (blocked) {
+                        return res.status(403).json({
+                            error: 'blocked',
+                            message: blocked.blocker_id === senderId
+                                ? "You've blocked this person — unblock them to send a message."
+                                : "You can't message this person.",
+                        });
+                    }
+                }
             } else {
                 const member = await ChannelMember.findOne({ where: { channelId, userId: senderId } });
                 if (!member) return res.status(403).json({ error: 'forbidden', message: 'Not a member of this channel' });
@@ -4730,7 +4764,10 @@ app.get('/api/users/:identifier', auth.requireAuth, async (req, res) => {
     try {
         const user = await User.findOne({ where: { [Op.or]: [{ phone: req.params.identifier }, { id: req.params.identifier }] } });
         if (!user) return res.status(404).json({ error: 'User not found' });
-        res.json(user);
+        const isBlockedByMe = user.id === req.user.id
+            ? false
+            : !!(await Block.findOne({ where: { blocker_id: req.user.id, blocked_id: user.id } }));
+        res.json({ ...user.toJSON(), is_blocked_by_me: isBlockedByMe });
     } catch (e) { res.status(500).json(e); }
 });
 
@@ -4755,6 +4792,47 @@ app.put('/api/users/:phone', auth.requireAuth, async (req, res) => {
         await user.save();
         res.json({ success: true, user });
     } catch (e) { res.status(500).json(e); }
+});
+
+/** Every user I've blocked, for the Settings → Privacy list. */
+app.get('/api/users/me/blocked', auth.requireAuth, async (req, res) => {
+    try {
+        const rows = await Block.findAll({ where: { blocker_id: req.user.id }, order: [['createdAt', 'DESC']] });
+        const ids = rows.map((r) => r.blocked_id);
+        const users = ids.length ? await User.findAll({ where: { id: { [Op.in]: ids } }, attributes: ['id', 'name', 'avatarUrl'] }) : [];
+        res.json(users);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.post('/api/users/:id/block', auth.requireAuth, async (req, res) => {
+    try {
+        if (req.params.id === req.user.id) return res.status(400).json({ error: 'bad_request', message: "You can't block yourself." });
+        const target = await User.findByPk(req.params.id);
+        if (!target) return res.status(404).json({ error: 'not_found' });
+        await Block.findOrCreate({ where: { blocker_id: req.user.id, blocked_id: req.params.id } });
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.delete('/api/users/:id/block', auth.requireAuth, async (req, res) => {
+    try {
+        await Block.destroy({ where: { blocker_id: req.user.id, blocked_id: req.params.id } });
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** Reports a user (optionally scoped to one message) — logged to the audit
+ *  trail admins already have a tab for, rather than a whole new review UI
+ *  this phase. */
+app.post('/api/users/:id/report', auth.requireAuth, async (req, res) => {
+    try {
+        const target = await User.findByPk(req.params.id);
+        if (!target) return res.status(404).json({ error: 'not_found' });
+        const reason = String(req.body.reason || '').trim().slice(0, 500) || '(no reason given)';
+        const messageId = req.body.message_id ? String(req.body.message_id) : null;
+        await logAudit(req.user, 'user.reported', 'user', target.id, `${target.name}: ${reason}${messageId ? ` (message ${messageId})` : ''}`);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
 /** Registers/updates this device's Expo push token — called on every sign-in

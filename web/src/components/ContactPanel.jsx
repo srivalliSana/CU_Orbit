@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Avatar from './Avatar';
 import { getPerson, getPinnedMessages, getSharedMedia, getStarredMessages, startDm } from '../api/chat';
+import { blockUser, reportUser, unblockUser } from '../api/users';
 import { lastSeenLabel } from '../lib/format';
 import { saveFile } from '../lib/saveFile';
 
@@ -28,6 +29,10 @@ export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMess
   const [view, setView] = useState('main');   // main | media | pinned | starred
   const [mediaCategory, setMediaCategory] = useState('image');
   const [listItems, setListItems] = useState(null);
+  const [blockBusy, setBlockBusy] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportSent, setReportSent] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,6 +71,31 @@ export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMess
   };
 
   const presence = person ? lastSeenLabel(person.presence, person.last_seen_at) : '';
+
+  const toggleBlock = async () => {
+    if (!person?.id) return;
+    setBlockBusy(true);
+    try {
+      await (person.is_blocked_by_me ? unblockUser : blockUser)(person.id);
+      setPerson((p) => ({ ...p, is_blocked_by_me: !p.is_blocked_by_me }));
+    } catch (e) {
+      setError(e.message || 'Could not update block status.');
+    } finally {
+      setBlockBusy(false);
+    }
+  };
+
+  const submitReport = async (e) => {
+    e.preventDefault();
+    if (!person?.id) return;
+    try {
+      await reportUser(person.id, reportReason.trim());
+      setReportSent(true);
+      setTimeout(() => { setReportOpen(false); setReportSent(false); setReportReason(''); }, 1500);
+    } catch (e) {
+      setError(e.message || 'Could not send the report.');
+    }
+  };
 
   return (
     <aside className="fixed inset-0 z-30 flex w-full flex-col bg-white dark:bg-slate-900 md:static md:z-auto md:w-full md:max-w-sm md:shrink-0 md:border-l md:border-slate-200 md:dark:border-slate-800">
@@ -204,9 +234,60 @@ export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMess
                 {opening ? 'Opening…' : 'Send message'}
               </button>
             )}
+
+            {person.id && (
+              <div className="mt-6 space-y-1 border-t border-slate-200 pt-4 dark:border-slate-800">
+                <button
+                  onClick={toggleBlock}
+                  disabled={blockBusy}
+                  className="block w-full rounded-lg px-2 py-2 text-left text-sm text-red-600 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-950/40"
+                >
+                  {person.is_blocked_by_me ? '✅ Unblock' : '🚫 Block'} {person.name}
+                </button>
+                <button
+                  onClick={() => setReportOpen(true)}
+                  className="block w-full rounded-lg px-2 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                >
+                  ⚠️ Report {person.name}
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>
+
+      {reportOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setReportOpen(false)}>
+          <form
+            onSubmit={submitReport}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-xs rounded-2xl bg-white p-5 shadow-xl dark:bg-slate-900"
+          >
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Report {person?.name}</h3>
+            {reportSent ? (
+              <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-400">Thanks — an admin will review this.</p>
+            ) : (
+              <>
+                <textarea
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                  placeholder="What happened? (optional)"
+                  rows={3}
+                  className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                />
+                <div className="mt-3 flex justify-end gap-2">
+                  <button type="button" onClick={() => setReportOpen(false)} className="rounded-lg px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">
+                    Cancel
+                  </button>
+                  <button type="submit" className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700">
+                    Send report
+                  </button>
+                </div>
+              </>
+            )}
+          </form>
+        </div>
+      )}
     </aside>
   );
 }
