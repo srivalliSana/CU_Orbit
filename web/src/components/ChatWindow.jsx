@@ -191,7 +191,7 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
     loadScheduled();
   };
 
-  const handleSend = async ({ text, file, enrichedMentions, replyToId }) => {
+  const handleSend = async ({ text, file, gifUrl, enrichedMentions, replyToId }) => {
     setSendError(null);
     // Optimistic bubble so the UI feels immediate; reconciled by the next poll.
     const temp = {
@@ -214,6 +214,13 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
         mediaUrl = up.url;
         mediaName = up.name || file.name;
         type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'voice' : 'file';
+      } else if (gifUrl) {
+        // GIFs are sent by reference to Giphy's own CDN, not re-uploaded
+        // through our /uploads pipeline — same as any other image message
+        // from here on (renders, saves, reacts the same way).
+        mediaUrl = gifUrl;
+        mediaName = 'GIF';
+        type = 'image';
       }
       await sendMessage({ containerId: chat.id, body: text, type, mediaUrl, mediaName, mediaMimeType, enrichedMentions, replyToId });
       const fresh = await getMessages(chat.id);

@@ -3844,6 +3844,52 @@ app.get('/api/link-preview', auth.requireAuth, async (req, res) => {
     }
 });
 
+// --- GIF picker (Giphy proxy) ---
+//
+// The API key never reaches the client — a web bundle is public, and an
+// APK is trivially decompiled, so it stays server-side in GIPHY_API_KEY
+// and every request is proxied through here instead.
+const GIPHY_BASE = 'https://api.giphy.com/v1/gifs';
+
+async function giphyRequest(res, path, params) {
+    const key = process.env.GIPHY_API_KEY;
+    if (!key) return res.status(503).json({ error: 'not_configured', message: 'GIPHY_API_KEY is not set.' });
+    const url = new URL(`${GIPHY_BASE}/${path}`);
+    url.searchParams.set('api_key', key);
+    url.searchParams.set('limit', '24');
+    url.searchParams.set('rating', 'g');
+    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    try {
+        const resp = await fetch(url.href, { signal: controller.signal });
+        if (!resp.ok) return res.json({ results: [] });
+        const data = await resp.json();
+        res.json({
+            results: (data.data || []).map((g) => ({
+                id: g.id,
+                title: g.title || 'GIF',
+                preview_url: g.images?.fixed_width_small?.url || g.images?.fixed_width?.url,
+                url: g.images?.fixed_width?.url || g.images?.original?.url,
+                width: Number(g.images?.fixed_width?.width) || undefined,
+                height: Number(g.images?.fixed_width?.height) || undefined,
+            })),
+        });
+    } catch (e) {
+        res.json({ results: [] });
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+app.get('/api/gifs/trending', auth.requireAuth, (req, res) => giphyRequest(res, 'trending', {}));
+app.get('/api/gifs/search', auth.requireAuth, (req, res) => {
+    const q = String(req.query.q || '').trim().slice(0, 100);
+    if (!q) return giphyRequest(res, 'trending', {});
+    return giphyRequest(res, 'search', { q });
+});
+
 // --- Canvas (one pinned doc per channel) ---
 
 /** Null, not 404, when no canvas exists yet — "not created" is a normal

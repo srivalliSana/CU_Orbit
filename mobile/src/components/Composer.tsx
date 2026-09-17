@@ -16,7 +16,7 @@ import { getChannelMembers, type ChannelMemberRow } from "../api/channels";
 import { getSlashCommands, type SlashCommandRow } from "../api/slashCommands";
 import AttachmentPreviewModal, { type PendingAttachment } from "./AttachmentPreviewModal";
 import Avatar from "./Avatar";
-import { useCustomEmojiMap } from "./EmojiPicker";
+import EmojiPicker, { useCustomEmojiMap } from "./EmojiPicker";
 import { renderMarkdown } from "../lib/markdown";
 import { EMOJI_SHORTCODES } from "../lib/emojiShortcodes";
 import { useThemeColors } from "../state/themeStore";
@@ -90,6 +90,7 @@ export default function Composer({
   const customEmojiMap = useCustomEmojiMap();
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [formattingOpen, setFormattingOpen] = useState(false);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   // "Send later" — text-only for now (no attachment support on mobile v1).
   // Android's native picker is two sequential dialogs (date, then time);
@@ -250,6 +251,14 @@ export default function Composer({
     const { start, end } = selection;
     const selected = text.slice(start, end);
     setText(text.slice(0, start) + before + selected + after + text.slice(end));
+  };
+
+  // GIFs send immediately on tap, like WhatsApp/Slack — not staged into
+  // the text composer the way a typed/picked emoji is.
+  const sendGif = (url: string) => {
+    onSend({ body: "", type: "image", mediaUrl: url, mediaName: "GIF", replyToId: replyTo?.id });
+    onCancelReply?.();
+    setEmojiPickerOpen(false);
   };
 
   // Applies mapper() to every line touching the current selection — mirrors
@@ -591,6 +600,10 @@ export default function Composer({
           <Text style={[styles.formatToggleText, formattingOpen && { color: colors.primary }]}>Aa</Text>
         </Pressable>
 
+        <Pressable onPress={() => setEmojiPickerOpen(true)} style={styles.iconButton}>
+          <Text style={styles.icon}>😊</Text>
+        </Pressable>
+
         <TextInput
           value={text}
           onChangeText={onChangeText}
@@ -671,6 +684,13 @@ export default function Composer({
           onCancel={cancelPending}
           onConfirm={confirmPending}
           onLongPressConfirm={onSchedule ? startScheduling : undefined}
+        />
+
+        <EmojiPicker
+          visible={emojiPickerOpen}
+          onPick={(e) => { wrapSelection(e, ""); setEmojiPickerOpen(false); }}
+          onPickGif={sendGif}
+          onClose={() => setEmojiPickerOpen(false)}
         />
       </View>
     </View>

@@ -130,6 +130,14 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
     grow(box.current);
   };
 
+  // GIFs send immediately on tap, like WhatsApp/Slack — not staged into the
+  // text composer the way a typed emoji is.
+  const sendGif = (gifUrl) => {
+    onSend({ text: '', gifUrl, replyToId: replyTo?.id });
+    onCancelReply?.();
+    setEmojiOpen(false);
+  };
+
   const scheduleSubmit = () => {
     const body = text.trim();
     if ((!body && !file) || !scheduleAt) return;
@@ -509,6 +517,7 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
           {emojiOpen && (
             <EmojiPicker
               onPick={(e) => { insertAtCursor(e); setEmojiOpen(false); }}
+              onPickGif={sendGif}
               onClose={() => setEmojiOpen(false)}
             />
           )}
