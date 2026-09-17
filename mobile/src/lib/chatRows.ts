@@ -10,7 +10,7 @@ export const channelToRow = (c: ChannelSummary): ChatRowItem & { isPinned: boole
   id: c.id,
   kind: "channel",
   title: c.name,
-  avatarUrl: null,
+  avatarUrl: c.avatar_url ?? null,
   previewText: previewText(c.last_message_preview),
   sentAt: c.last_message_preview?.sent_at ?? null,
   unreadCount: c.unread_count,

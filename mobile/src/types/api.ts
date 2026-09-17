@@ -36,6 +36,7 @@ export interface ChannelSummary {
   last_message_preview: MessagePreview | null;
   unread_count: number;
   has_unread_mention: boolean;
+  avatar_url?: string | null;
 }
 
 export interface DmSummary {

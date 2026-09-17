@@ -214,7 +214,7 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
                 key={c.id}
                 active={activeId === c.id}
                 onClick={() => onSelect({ id: c.id, kind: 'channel', title: `# ${c.name}`, topic: c.topic })}
-                avatar={<Avatar name={c.name} kind="channel" size={44} />}
+                avatar={<Avatar name={c.name} url={c.avatar_url} kind="channel" size={44} />}
                 title={`# ${c.name}`}
                 preview={preview(c.last_message_preview)}
                 time={c.last_message_preview?.sent_at}
@@ -253,7 +253,7 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
                 key={c.id}
                 active={activeId === c.id}
                 onClick={() => onSelect({ id: c.id, kind: 'channel', title: `# ${c.name}`, topic: c.topic })}
-                avatar={<Avatar name={c.name} kind="channel" size={44} />}
+                avatar={<Avatar name={c.name} url={c.avatar_url} kind="channel" size={44} />}
                 title={`# ${c.name}`}
                 preview={preview(c.last_message_preview)}
                 time={c.last_message_preview?.sent_at}

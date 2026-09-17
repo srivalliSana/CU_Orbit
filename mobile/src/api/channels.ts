@@ -33,6 +33,7 @@ export interface ChannelDetail {
   // Write-only: PUT /api/channels/:id accepts this boolean action, but the
   // server persists it as (and GET responses return) archived_at above.
   archived?: boolean;
+  avatar_url: string | null;
 }
 
 export interface ChannelMemberRow {

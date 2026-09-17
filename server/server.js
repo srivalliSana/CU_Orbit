@@ -186,6 +186,7 @@ const Channel = sequelize.define('Channel', {
     name: { type: DataTypes.STRING, allowNull: false },
     type: { type: DataTypes.ENUM('public', 'private'), defaultValue: 'public' },
     topic: { type: DataTypes.STRING, defaultValue: '' },
+    avatar_url: { type: DataTypes.STRING, allowNull: true },
     member_count: { type: DataTypes.INTEGER, defaultValue: 0 },
     pinned_message_count: { type: DataTypes.INTEGER, defaultValue: 0 },
     is_muted: { type: DataTypes.BOOLEAN, defaultValue: false },
@@ -4635,7 +4636,7 @@ app.put('/api/channels/:id', auth.requireAuth, async (req, res) => {
         if ((!me || me.role !== 'admin') && !isGroupAdmin(req.user)) {
             return res.status(403).json({ error: 'forbidden', message: 'Only channel admins can edit channel info' });
         }
-        const { restricted_messaging, info_edit_restricted, approval_required, topic, name, archived } = req.body;
+        const { restricted_messaging, info_edit_restricted, approval_required, topic, name, archived, avatar_url } = req.body;
         const channel = await Channel.findByPk(req.params.id);
         if (channel) {
             if (restricted_messaging !== undefined) channel.restricted_messaging = restricted_messaging;
@@ -4643,6 +4644,7 @@ app.put('/api/channels/:id', auth.requireAuth, async (req, res) => {
             if (approval_required !== undefined) channel.approval_required = approval_required;
             if (topic !== undefined) channel.topic = topic;
             if (name !== undefined) channel.name = name;
+            if (avatar_url !== undefined) channel.avatar_url = avatar_url;
             if (archived !== undefined) {
                 channel.archived_at = archived ? new Date() : null;
                 await logAudit(req.user, archived ? 'channel.archived' : 'channel.unarchived', 'channel', channel.id, channel.name);

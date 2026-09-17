@@ -13,7 +13,7 @@ import {
   removeChannelMember,
   updateChannel,
 } from '../api/channels';
-import { getPinnedMessages, getSharedMedia, getStarredMessages, listUsers } from '../api/chat';
+import { getPinnedMessages, getSharedMedia, getStarredMessages, listUsers, uploadFile } from '../api/chat';
 import { setChannelActive } from '../api/admin';
 
 const MEDIA_CATEGORIES = [
@@ -51,6 +51,11 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
   const [mediaCategory, setMediaCategory] = useState('image');
   const [listItems, setListItems] = useState(null);
   const [togglingActive, setTogglingActive] = useState(false);
+  const [editingInfo, setEditingInfo] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [topicInput, setTopicInput] = useState('');
+  const [savingInfo, setSavingInfo] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const load = () => {
     setError(null);
@@ -213,6 +218,45 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
     }
   };
 
+  const startEditingInfo = () => {
+    setNameInput(channel?.name || '');
+    setTopicInput(channel?.topic || '');
+    setEditingInfo(true);
+  };
+
+  const saveInfo = async () => {
+    setSavingInfo(true);
+    setError(null);
+    try {
+      const updated = await updateChannel(channelId, { name: nameInput.trim(), topic: topicInput.trim() });
+      setChannel(updated);
+      onChanged?.();
+      setEditingInfo(false);
+    } catch (e) {
+      setError(e.message || 'Could not save channel info.');
+    } finally {
+      setSavingInfo(false);
+    }
+  };
+
+  const changeAvatar = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploadingAvatar(true);
+    setError(null);
+    try {
+      const { url } = await uploadFile(file);
+      const updated = await updateChannel(channelId, { avatar_url: url });
+      setChannel(updated);
+      onChanged?.();
+    } catch (err) {
+      setError(err.message || 'Could not update the channel photo.');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   return (
     <aside className="fixed inset-0 z-30 flex w-full flex-col bg-white dark:bg-slate-900 md:static md:z-auto md:w-full md:max-w-sm md:shrink-0 md:border-l md:border-slate-200 md:dark:border-slate-800">
       <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
@@ -305,10 +349,54 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
         {channel && (
           <>
             <div className="flex flex-col items-center text-center">
-              <Avatar name={channel.name} kind="channel" size={72} />
-              <h3 className="mt-3 text-lg font-semibold text-slate-800 dark:text-slate-100"># {channel.name}</h3>
-              {channel.topic && <p className="mt-1 text-sm text-slate-500">{channel.topic}</p>}
-              <p className="mt-1 text-xs text-slate-400">{channel.member_count} member{channel.member_count === 1 ? '' : 's'}</p>
+              {isChannelAdmin || isSuperAdmin ? (
+                <label className="group relative cursor-pointer">
+                  <Avatar name={channel.name} url={channel.avatar_url} kind="channel" size={72} />
+                  <span className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-[11px] text-white ring-2 ring-white dark:ring-slate-900">
+                    {uploadingAvatar ? '…' : '📷'}
+                  </span>
+                  <input type="file" accept="image/*" className="hidden" onChange={changeAvatar} disabled={uploadingAvatar} />
+                </label>
+              ) : (
+                <Avatar name={channel.name} url={channel.avatar_url} kind="channel" size={72} />
+              )}
+
+              {editingInfo ? (
+                <div className="mt-3 w-full space-y-2 text-left">
+                  <input
+                    value={nameInput}
+                    onChange={(e) => setNameInput(e.target.value)}
+                    placeholder="Channel name"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-center text-sm outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  />
+                  <textarea
+                    value={topicInput}
+                    onChange={(e) => setTopicInput(e.target.value)}
+                    placeholder="What's this channel about?"
+                    rows={2}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-center text-xs outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  />
+                  <div className="flex justify-center gap-2">
+                    <button onClick={() => setEditingInfo(false)} disabled={savingInfo} className="rounded-lg px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">
+                      Cancel
+                    </button>
+                    <button onClick={saveInfo} disabled={savingInfo || !nameInput.trim()} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+                      {savingInfo ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <h3 className="mt-3 text-lg font-semibold text-slate-800 dark:text-slate-100"># {channel.name}</h3>
+                  {channel.topic && <p className="mt-1 text-sm text-slate-500">{channel.topic}</p>}
+                  <p className="mt-1 text-xs text-slate-400">{channel.member_count} member{channel.member_count === 1 ? '' : 's'}</p>
+                  {isChannelAdmin || isSuperAdmin ? (
+                    <button onClick={startEditingInfo} className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-700">
+                      Edit name & topic
+                    </button>
+                  ) : null}
+                </>
+              )}
             </div>
 
             {(isChannelAdmin || isSuperAdmin) && (

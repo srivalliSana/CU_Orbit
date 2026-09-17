@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import * as ImagePicker from "expo-image-picker";
 
 import {
   addChannelMember,
@@ -27,6 +28,7 @@ import {
 } from "../../api/channels";
 import { listUsers } from "../../api/users";
 import { setChannelActive } from "../../api/admin";
+import { uploadFile } from "../../api/upload";
 import { apiErrorMessage } from "../../api/client";
 import { useAuthStore } from "../../state/authStore";
 import Avatar from "../../components/Avatar";
@@ -54,6 +56,11 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
   const [inviteEmail, setInviteEmail] = useState("");
   const [invitingByEmail, setInvitingByEmail] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editingInfo, setEditingInfo] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [topicInput, setTopicInput] = useState("");
+  const [savingInfo, setSavingInfo] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const channelQuery = useQuery({ queryKey: ["channel", channelId], queryFn: () => getChannel(channelId) });
   const membersQuery = useQuery({
@@ -169,6 +176,59 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
     }
   };
 
+  const startEditingInfo = () => {
+    if (!channel) return;
+    setNameInput(channel.name);
+    setTopicInput(channel.topic || "");
+    setEditingInfo(true);
+  };
+
+  const saveInfo = async () => {
+    setSavingInfo(true);
+    setError(null);
+    try {
+      await updateChannel(channelId, { name: nameInput.trim(), topic: topicInput.trim() });
+      reload();
+      setEditingInfo(false);
+    } catch (e) {
+      setError(apiErrorMessage(e, "Could not save channel info."));
+    } finally {
+      setSavingInfo(false);
+    }
+  };
+
+  const changeAvatar = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Photo access needed", "Enable photo access in settings to change the channel photo.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+
+    setUploadingAvatar(true);
+    setError(null);
+    try {
+      const { url } = await uploadFile({
+        uri: asset.uri,
+        name: asset.fileName || "channel-avatar.jpg",
+        mimeType: asset.mimeType || "image/jpeg",
+      });
+      await updateChannel(channelId, { avatar_url: url });
+      reload();
+    } catch (e) {
+      setError(apiErrorMessage(e, "Could not update the channel photo."));
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const candidates = (usersQuery.data ?? []).filter((u) => !members.some((m) => m.id === u.id));
 
   const toggleChannelActive = () => {
@@ -226,12 +286,61 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
       ListHeaderComponent={
         <View>
           <View style={styles.headerBlock}>
-            <Avatar name={channel?.name ?? ""} size={72} />
-            <Text style={styles.channelName}># {channel?.name}</Text>
-            {channel?.topic ? <Text style={styles.topic}>{channel.topic}</Text> : null}
-            <Text style={styles.memberCount}>
-              {channel?.member_count} member{channel?.member_count === 1 ? "" : "s"}
-            </Text>
+            {isChannelAdmin || isSuperAdmin ? (
+              <Pressable onPress={changeAvatar} disabled={uploadingAvatar} style={styles.avatarEditWrap}>
+                <Avatar name={channel?.name ?? ""} url={channel?.avatar_url} size={72} />
+                <View style={styles.avatarEditBadge}>
+                  {uploadingAvatar ? <ActivityIndicator size="small" color={colors.primaryText} /> : <Text style={{ fontSize: 11 }}>📷</Text>}
+                </View>
+              </Pressable>
+            ) : (
+              <Avatar name={channel?.name ?? ""} url={channel?.avatar_url} size={72} />
+            )}
+
+            {editingInfo ? (
+              <View style={styles.editInfoBlock}>
+                <TextInput
+                  value={nameInput}
+                  onChangeText={setNameInput}
+                  placeholder="Channel name"
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.editInfoInput}
+                />
+                <TextInput
+                  value={topicInput}
+                  onChangeText={setTopicInput}
+                  placeholder="What's this channel about?"
+                  placeholderTextColor={colors.textMuted}
+                  multiline
+                  style={[styles.editInfoInput, { minHeight: 60, textAlignVertical: "top" }]}
+                />
+                <View style={styles.editInfoActions}>
+                  <Pressable onPress={() => setEditingInfo(false)} disabled={savingInfo}>
+                    <Text style={{ color: colors.textMuted, fontSize: 13 }}>Cancel</Text>
+                  </Pressable>
+                  <Pressable onPress={saveInfo} disabled={savingInfo || !nameInput.trim()}>
+                    <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 13 }}>
+                      {savingInfo ? "Saving…" : "Save"}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.channelName}># {channel?.name}</Text>
+                {channel?.topic ? <Text style={styles.topic}>{channel.topic}</Text> : null}
+                <Text style={styles.memberCount}>
+                  {channel?.member_count} member{channel?.member_count === 1 ? "" : "s"}
+                </Text>
+                {isChannelAdmin || isSuperAdmin ? (
+                  <Pressable onPress={startEditingInfo}>
+                    <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 12, marginTop: 6 }}>
+                      Edit name & topic
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </>
+            )}
           </View>
 
           {channel && (isChannelAdmin || isSuperAdmin) ? (
@@ -480,6 +589,43 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     alignItems: "center",
     paddingVertical: 24,
     gap: 4,
+  },
+  avatarEditWrap: {
+    position: "relative",
+  },
+  avatarEditBadge: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: colors.background,
+  },
+  editInfoBlock: {
+    width: "100%",
+    paddingHorizontal: 24,
+    marginTop: 8,
+    gap: 8,
+  },
+  editInfoInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: colors.text,
+    textAlign: "center",
+  },
+  editInfoActions: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 16,
   },
   channelName: {
     fontSize: 18,
