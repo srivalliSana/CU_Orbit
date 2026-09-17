@@ -4,7 +4,7 @@ import { updateProfile } from '../api/users';
 import { uploadFile } from '../api/chat';
 
 /** Own-profile view/edit panel, shown from the header avatar. */
-export default function ProfilePanel({ user, onClose, onUpdated, onOpenSettings }) {
+export default function ProfilePanel({ user, onClose, onUpdated, onOpenSettings, onOpenThreads, onOpenAdmin }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(user?.name || '');
   const [bio, setBio] = useState(user?.bio || '');
@@ -147,13 +147,34 @@ export default function ProfilePanel({ user, onClose, onUpdated, onOpenSettings 
         </div>
 
         {!editing && (
-          <button
-            onClick={onOpenSettings}
-            className="mt-6 flex w-full items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800/60"
-          >
-            <span>Settings</span>
-            <span className="text-slate-400">›</span>
-          </button>
+          <div className="mt-6 space-y-2">
+            {/* On desktop these live in the icon rail — duplicated here (mobile
+                only) since the rail is hidden below md, and Profile is the one
+                place still reachable from the bottom nav. */}
+            <button
+              onClick={onOpenThreads}
+              className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800/60 md:hidden"
+            >
+              <span>💬 Threads</span>
+              <span className="text-slate-400">›</span>
+            </button>
+            {user?.role === 'admin' && (
+              <button
+                onClick={onOpenAdmin}
+                className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800/60 md:hidden"
+              >
+                <span>🛡️ Admin</span>
+                <span className="text-slate-400">›</span>
+              </button>
+            )}
+            <button
+              onClick={onOpenSettings}
+              className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800/60"
+            >
+              <span>Settings</span>
+              <span className="text-slate-400">›</span>
+            </button>
+          </div>
         )}
       </div>
     </aside>

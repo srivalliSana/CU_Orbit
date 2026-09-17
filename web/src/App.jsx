@@ -17,6 +17,7 @@ import WorkflowsPanel from './components/WorkflowsPanel';
 import HuddleManager from './components/HuddleManager';
 import ThreadsPanel from './components/ThreadsPanel';
 import SearchPanel from './components/SearchPanel';
+import MobileBottomNav from './components/MobileBottomNav';
 import MentionsPanel from './components/MentionsPanel';
 import ProfilePanel from './components/ProfilePanel';
 import SettingsPanel from './components/SettingsPanel';
@@ -289,7 +290,8 @@ export default function App() {
   }
 
   return (
-    <div className="relative flex h-screen overflow-hidden bg-slate-100 dark:bg-slate-950">
+    <div className="relative flex h-screen flex-col overflow-hidden bg-slate-100 dark:bg-slate-950">
+      <div className="flex flex-1 overflow-hidden">
       <IconRail
         user={user}
         filter={chatFilter}
@@ -344,6 +346,21 @@ export default function App() {
           />
         )
         : <EmptyState user={user} onNewGroup={() => setNewGroup(true)} />}
+      </div>
+
+      {/* IconRail is hidden below md — this is its mobile equivalent, a real
+          navigation surface (not shown at all when a chat fills the screen,
+          matching the native app hiding its tab bar on the chat screen). */}
+      {!active && (
+        <MobileBottomNav
+          user={user}
+          mentionsUnread={mentionsUnread}
+          onOpenSearch={() => setSearchOpen(true)}
+          onOpenMentions={() => setMentionsOpen(true)}
+          onOpenProfile={() => setProfileOpen(true)}
+          onGoHome={() => setActive(null)}
+        />
+      )}
 
       {contact && (
         <ContactPanel
@@ -416,6 +433,8 @@ export default function App() {
           onClose={() => setProfileOpen(false)}
           onUpdated={(u) => setUser(u)}
           onOpenSettings={() => { setProfileOpen(false); setSettingsOpen(true); }}
+          onOpenThreads={() => { setProfileOpen(false); setThreadsOpen(true); }}
+          onOpenAdmin={() => { setProfileOpen(false); setAdminOpen(true); }}
         />
       )}
 
