@@ -2,8 +2,8 @@ import { client } from "./client";
 
 export const setConversationPref = (
   containerId: string,
-  action: "pin" | "mute" | "hide" | "delete",
-  value: boolean,
+  action: "pin" | "mute" | "hide" | "delete" | "wallpaper",
+  value: boolean | string | null,
   durationMinutes?: number
 ) =>
   client
@@ -12,6 +12,11 @@ export const setConversationPref = (
       value,
       duration_minutes: durationMinutes,
     })
+    .then((res) => res.data);
+
+export const getConversationPrefs = (containerId: string) =>
+  client
+    .get<{ wallpaper: string | null }>(`/conversations/${encodeURIComponent(containerId)}/prefs`)
     .then((res) => res.data);
 
 export const setDoNotDisturb = (minutes: number) =>

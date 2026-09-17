@@ -114,6 +114,9 @@ export const setConversationPref = (containerId, action, value, durationMinutes)
     body: JSON.stringify({ action, value, duration_minutes: durationMinutes }),
   });
 
+export const getConversationPrefs = (containerId) =>
+  api(`/api/conversations/${encodeURIComponent(containerId)}/prefs`);
+
 export const setDoNotDisturb = (minutes) =>
   api('/api/users/me/dnd', { method: 'POST', body: JSON.stringify({ minutes }) });
 

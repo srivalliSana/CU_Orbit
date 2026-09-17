@@ -18,7 +18,10 @@ import UserProfileModal from "../../components/UserProfileModal";
 import PollComposerModal from "../../components/PollComposerModal";
 import { createPoll } from "../../api/messages";
 import { cancelScheduledMessage, createScheduledMessage, getScheduledMessages, type ScheduledMessageRow } from "../../api/scheduled";
-import { useThemeColors } from "../../state/themeStore";
+import { getConversationPrefs, setConversationPref } from "../../api/conversations";
+import { wallpaperColor } from "../../lib/wallpapers";
+import WallpaperPicker from "../../components/WallpaperPicker";
+import { useThemeColors, useIsDarkMode } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
 import type { Message } from "../../types/api";
 
@@ -26,8 +29,11 @@ type Props = NativeStackScreenProps<HomeStackParamList, "Chat">;
 
 export default function ChatScreen({ route, navigation }: Props) {
   const colors = useThemeColors();
+  const isDark = useIsDarkMode();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { containerId, title, kind, scrollToMessageId } = route.params;
+  const [wallpaper, setWallpaper] = useState<string | null>(null);
+  const [wallpaperPickerOpen, setWallpaperPickerOpen] = useState(false);
   const { data: messages, isLoading, error, refetch, send, react, remove, hide, edit, pin, star, vote, action } = useMessages(containerId);
   const { typingName, notifyTyping } = useTyping(containerId);
   const selfId = useAuthStore((s) => s.user?.id);
@@ -142,35 +148,48 @@ export default function ChatScreen({ route, navigation }: Props) {
   useEffect(() => {
     navigation.setOptions({
       title,
-      headerRight: () => {
-        if (kind === "channel") {
-          return (
+      headerRight: () => (
+        <View style={styles.headerActions}>
+          <Pressable onPress={() => setWallpaperPickerOpen(true)} hitSlop={8}>
+            <Ionicons name="color-palette-outline" size={22} color={colors.primary} />
+          </Pressable>
+          {kind === "channel" ? (
             <Pressable
               onPress={() => navigation.navigate("ChannelInfo", { channelId: containerId })}
               hitSlop={8}
             >
               <Ionicons name="information-circle-outline" size={24} color={colors.primary} />
             </Pressable>
-          );
-        }
-        if (kind === "dm" && otherUserId) {
-          return (
+          ) : null}
+          {kind === "dm" && otherUserId ? (
             <Pressable
               onPress={() => navigation.navigate("ContactInfo", { userId: otherUserId, name: title, containerId })}
               hitSlop={8}
             >
               <Ionicons name="information-circle-outline" size={24} color={colors.primary} />
             </Pressable>
-          );
-        }
-        return undefined;
-      },
+          ) : null}
+        </View>
+      ),
     });
   }, [navigation, title, kind, containerId, otherUserId]);
 
   useEffect(() => {
     markConversationRead(containerId);
   }, [containerId]);
+
+  useEffect(() => {
+    setWallpaperPickerOpen(false);
+    getConversationPrefs(containerId)
+      .then((p) => setWallpaper(p?.wallpaper || null))
+      .catch(() => setWallpaper(null));
+  }, [containerId]);
+
+  const pickWallpaper = (key: string | null) => {
+    setWallpaper(key);
+    setWallpaperPickerOpen(false);
+    setConversationPref(containerId, "wallpaper", key).catch(() => {});
+  };
 
   // A slash command's private (ephemeral) reply — never a real Message row,
   // pushed only to whoever ran the command.
@@ -224,6 +243,7 @@ export default function ChatScreen({ route, navigation }: Props) {
       <FlatList
         ref={listRef}
         data={messages}
+        style={wallpaperColor(wallpaper, isDark) ? { backgroundColor: wallpaperColor(wallpaper, isDark)! } : undefined}
         keyExtractor={(m) => m.id}
         onScrollToIndexFailed={(info) => {
           // The target isn't rendered yet (variable-height rows) — approximate
@@ -339,6 +359,13 @@ export default function ChatScreen({ route, navigation }: Props) {
           navigation.push("Chat", { containerId: chat.id, title: chat.title, kind: "dm" });
         }}
       />
+
+      <WallpaperPicker
+        visible={wallpaperPickerOpen}
+        current={wallpaper}
+        onPick={pickWallpaper}
+        onClose={() => setWallpaperPickerOpen(false)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -347,6 +374,11 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   flex: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
   },
   scheduledBanner: {
     borderTopWidth: StyleSheet.hairlineWidth,

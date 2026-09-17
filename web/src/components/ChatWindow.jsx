@@ -4,11 +4,12 @@ import MessageBubble from './MessageBubble';
 import Composer from './Composer';
 import ForwardModal from './ForwardModal';
 import PollComposerModal from './PollComposerModal';
-import { createPoll, getMessages, markConversationRead, sendMessage, uploadFile } from '../api/chat';
+import { createPoll, getConversationPrefs, getMessages, markConversationRead, sendMessage, setConversationPref, uploadFile } from '../api/chat';
 import { cancelScheduledMessage, createScheduledMessage, getScheduledMessages } from '../api/scheduled';
 import { getChannelMembers } from '../api/channels';
 import { dayLabel, lastSeenLabel } from '../lib/format';
 import { join, leave, on, sendTyping } from '../api/socket';
+import { WALLPAPERS, wallpaperColor } from '../lib/wallpapers';
 
 // The socket delivers messages; this is only a safety net for a dropped
 // connection, so it can be slow.
@@ -26,6 +27,9 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
   const [creatingPoll, setCreatingPoll] = useState(false);
   const [highlightId, setHighlightId] = useState(null);
   const [ephemeralNotice, setEphemeralNotice] = useState(null);
+  const [wallpaper, setWallpaper] = useState(null);
+  const [wallpaperPickerOpen, setWallpaperPickerOpen] = useState(false);
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
   const scroller = useRef(null);
   const atBottom = useRef(true);
   const pinned = messages.find((m) => m.is_pinned);
@@ -164,6 +168,23 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
   // A different conversation starts with a clean composer, not a stale reply.
   useEffect(() => { setReplyTo(null); setEphemeralNotice(null); }, [chat.id]);
 
+  useEffect(() => {
+    setWallpaperPickerOpen(false);
+    getConversationPrefs(chat.id)
+      .then((p) => setWallpaper(p?.wallpaper || null))
+      .catch(() => setWallpaper(null));
+  }, [chat.id]);
+
+  async function pickWallpaper(key) {
+    setWallpaper(key);
+    setWallpaperPickerOpen(false);
+    try {
+      await setConversationPref(chat.id, 'wallpaper', key);
+    } catch {
+      // best-effort; local state already reflects the choice
+    }
+  }
+
   const [scheduled, setScheduled] = useState([]);
   const [scheduledOpen, setScheduledOpen] = useState(false);
   const loadScheduled = () => getScheduledMessages(chat.id).then(setScheduled).catch(() => {});
@@ -241,7 +262,7 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
   let lastDay = null;
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-slate-50 dark:bg-slate-950">
+    <section className="relative flex min-w-0 flex-1 flex-col bg-slate-50 dark:bg-slate-950">
       <header className="flex items-center gap-1 border-b border-slate-200 bg-white px-2 py-2.5 dark:border-slate-800 dark:bg-slate-900 md:gap-3 md:px-4">
         <button
           onClick={onBack}
@@ -323,7 +344,39 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
             </svg>
           </button>
         )}
+        <button
+          onClick={() => setWallpaperPickerOpen((v) => !v)}
+          title="Chat wallpaper"
+          aria-label="Chat wallpaper"
+          className="shrink-0 rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" /><circle cx="8" cy="10" r="1.2" fill="currentColor" stroke="none" /><circle cx="15" cy="9" r="1.2" fill="currentColor" stroke="none" /><circle cx="13" cy="15" r="1.2" fill="currentColor" stroke="none" />
+          </svg>
+        </button>
       </header>
+
+      {wallpaperPickerOpen && (
+        <div className="absolute right-4 top-14 z-20 w-56 rounded-xl border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+          <p className="mb-2 px-1 text-xs font-semibold text-slate-500 dark:text-slate-400">Chat wallpaper</p>
+          <div className="grid grid-cols-3 gap-2">
+            {WALLPAPERS.map((w) => (
+              <button
+                key={w.key ?? 'default'}
+                onClick={() => pickWallpaper(w.key)}
+                title={w.label}
+                className="flex flex-col items-center gap-1 rounded-lg p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <span
+                  className={`h-8 w-8 rounded-full border ${wallpaper === w.key ? 'ring-2 ring-blue-500' : 'border-slate-300 dark:border-slate-600'}`}
+                  style={{ backgroundColor: wallpaperColor(w.key, isDark) || (isDark ? '#0f172a' : '#f1f5f9') }}
+                />
+                <span className="text-[10px] text-slate-500 dark:text-slate-400">{w.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {pinned && (
         <button
@@ -337,7 +390,12 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
         </button>
       )}
 
-      <div ref={scroller} onScroll={onScroll} className="flex-1 overflow-y-auto px-4 py-4">
+      <div
+        ref={scroller}
+        onScroll={onScroll}
+        className="flex-1 overflow-y-auto px-4 py-4"
+        style={wallpaperColor(wallpaper, isDark) ? { backgroundColor: wallpaperColor(wallpaper, isDark) } : undefined}
+      >
         {loading && <p className="py-8 text-center text-sm text-slate-400">Loading messages…</p>}
         {!loading && messages.length === 0 && (
           <p className="py-8 text-center text-sm text-slate-400">No messages yet. Say hello.</p>

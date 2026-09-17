@@ -37,3 +37,10 @@ export function useThemeColors(): ThemeColors {
   const resolved = mode === "system" ? systemScheme ?? "light" : mode;
   return resolved === "dark" ? darkColors : lightColors;
 }
+
+export function useIsDarkMode(): boolean {
+  const mode = useThemeStore((s) => s.mode);
+  const systemScheme = useColorScheme();
+  const resolved = mode === "system" ? systemScheme ?? "light" : mode;
+  return resolved === "dark";
+}

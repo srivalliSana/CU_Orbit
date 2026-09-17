@@ -243,7 +243,10 @@ const ConversationPref = sequelize.define('ConversationPref', {
     // style mute; isMuted stays true the whole time so existing readers of
     // isMuted alone still work, this just adds an expiry on top.
     mutedUntil: { type: DataTypes.DATE, allowNull: true },
-    isHidden: { type: DataTypes.BOOLEAN, defaultValue: false }
+    isHidden: { type: DataTypes.BOOLEAN, defaultValue: false },
+    // A preset key ('ocean', 'sunset', ...) or null for the default
+    // background — per-user, per-conversation, same as pin/mute.
+    wallpaper: { type: DataTypes.STRING, allowNull: true }
 }, {
     // findOne({ userId, containerId }) runs once per channel/DM on every
     // home-feed load — unindexed, that's a full table scan per row.
@@ -2486,6 +2489,17 @@ app.get('/api/home/quick-access/:userId', auth.requireAuth, async (req, res) => 
     }
 });
 
+/** This user's own pref row for one conversation — currently just the
+ *  wallpaper, since pin/mute state already rides along on the home feed
+ *  and don't need a per-chat fetch the way "what should this chat screen
+ *  look like right now" does. */
+app.get('/api/conversations/:id/prefs', auth.requireAuth, async (req, res) => {
+    try {
+        const pref = await ConversationPref.findOne({ where: { userId: req.user.id, containerId: req.params.id } });
+        res.json({ wallpaper: pref?.wallpaper || null });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
 // PREFS
 app.post('/api/conversations/:id/prefs', auth.requireAuth, async (req, res) => {
     try {
@@ -2510,6 +2524,7 @@ app.post('/api/conversations/:id/prefs', auth.requireAuth, async (req, res) => {
         }
         if (action === 'hide') pref.isHidden = isTrue;
         if (action === 'delete' && isTrue) pref.isHidden = true;
+        if (action === 'wallpaper') pref.wallpaper = value || null;
         await pref.save();
         res.json({ success: true, pref });
     } catch (e) {
