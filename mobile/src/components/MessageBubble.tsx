@@ -110,6 +110,23 @@ export default function MessageBubble({
     ],
   }));
 
+  // A plain Pressable's onLongPress nested under a GestureDetector's Pan
+  // gesture is unreliable — RNGH's native recognizer can claim the touch
+  // before the long-press timer fires, so a long-press was frequently lost
+  // (reported as "long-press not working"). Gesture.Race arbitrates it
+  // properly: holding still long enough wins the long-press, moving past
+  // the pan's activation offset first wins the swipe. Attached to the
+  // whole row (not just the bubble) so long-pressing the empty gutter
+  // beside a message opens the picker too.
+  const longPressGesture = useMemo(
+    () =>
+      Gesture.LongPress()
+        .minDuration(350)
+        .onStart(() => runOnJS(setPickerVisible)(true)),
+    []
+  );
+  const rowGesture = useMemo(() => Gesture.Race(swipeGesture, longPressGesture), [swipeGesture, longPressGesture]);
+
   const reactionCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const r of message.reactions) counts.set(r.emoji, (counts.get(r.emoji) ?? 0) + 1);
@@ -151,7 +168,7 @@ export default function MessageBubble({
 
   const handleSave = () => {
     if (!attachmentUrl) return;
-    saveFile(attachmentUrl, fileName);
+    saveFile(attachmentUrl, fileName, mimeType || (message.type === "image" ? "image/jpeg" : message.type === "video" ? "video/mp4" : undefined));
   };
 
   const onFileLongPress = () => {
@@ -163,16 +180,15 @@ export default function MessageBubble({
   };
 
   return (
+    <GestureDetector gesture={rowGesture}>
     <View style={[styles.row, isOwn ? styles.rowOwn : styles.rowOther]}>
       {message.is_pinned ? <Text style={styles.pinnedLabel}>📌 Pinned</Text> : null}
-      <GestureDetector gesture={swipeGesture}>
         <View style={styles.swipeWrap}>
           <Animated.View style={[styles.swipeReplyIcon, swipeIconStyle]}>
             <Ionicons name="arrow-undo" size={18} color={colors.primary} />
           </Animated.View>
           <Animated.View style={swipeBubbleStyle}>
       <Pressable
-        onLongPress={() => setPickerVisible(true)}
         style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther, highlighted && styles.bubbleHighlighted]}
       >
         {!isOwn ? (
@@ -359,7 +375,6 @@ export default function MessageBubble({
       </Pressable>
           </Animated.View>
         </View>
-      </GestureDetector>
 
       <ReactionPicker
         visible={pickerVisible}
@@ -411,6 +426,7 @@ export default function MessageBubble({
         </Modal>
       ) : null}
     </View>
+    </GestureDetector>
   );
 }
 

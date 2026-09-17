@@ -98,7 +98,7 @@ export default function MessageListScreen({ route, navigation }: Props) {
                     { text: "Locate in chat", onPress: jumpToChat },
                     ...(url ? [
                       { text: "Open", onPress: () => openFile(url, fileName, attachment?.mimeType) },
-                      { text: "Save to device", onPress: () => saveFile(url, fileName) },
+                      { text: "Save to device", onPress: () => saveFile(url, fileName, attachment?.mimeType) },
                     ] : []),
                     { text: "Cancel", style: "cancel" as const },
                   ]);

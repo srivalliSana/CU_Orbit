@@ -354,22 +354,19 @@ export default function Composer({
     );
   };
 
-  // One camera call, both capture modes allowed — the device's own camera
-  // app supplies its native photo/video toggle (every stock Android camera
-  // has one), so there's no need for an app-level "which one?" prompt in
-  // front of it. allowsEditing is left off here specifically because it's
-  // undefined behavior when a video is captured through a dual-mode
-  // request — see captureFromCamera.
-  const openCamera = () => captureFromCamera();
-
-  const captureFromCamera = async () => {
+  // Android has no combined photo/video capture intent — ACTION_IMAGE_CAPTURE
+  // and ACTION_VIDEO_CAPTURE are separate native intents, so requesting both
+  // mediaTypes in one launchCameraAsync call silently only shows photo mode
+  // (reported as "camera only shows photo, not video"). Two explicit modes
+  // instead of guessing at a toggle that doesn't exist on this platform.
+  const captureFromCamera = async (mode: "image" | "video") => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
       Alert.alert("Camera access needed", "Enable camera access in settings to capture photos or video.");
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images", "videos"],
+      mediaTypes: mode === "video" ? ["videos"] : ["images"],
       quality: 0.8,
     });
     if (result.canceled || !result.assets?.[0]) return;
@@ -385,6 +382,35 @@ export default function Composer({
         type: isVideo ? "video" : "image",
       },
     ]);
+  };
+
+  // Existing photos/videos from the gallery — distinct from the camera
+  // options above, which only ever capture something new.
+  const pickFromGallery = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Photo access needed", "Enable photo access in settings to share photos or videos.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images", "videos"],
+      allowsMultipleSelection: true,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.length) return;
+    stageFiles(
+      result.assets.map((asset) => {
+        const isVideo = asset.type === "video";
+        return {
+          file: {
+            uri: asset.uri,
+            name: asset.fileName || (isVideo ? "video.mp4" : "photo.jpg"),
+            mimeType: asset.mimeType || (isVideo ? "video/mp4" : "image/jpeg"),
+          },
+          type: isVideo ? "video" : "image",
+        };
+      })
+    );
   };
 
   const startVoiceRecording = async () => {
@@ -525,10 +551,24 @@ export default function Composer({
                 </Pressable>
                 <Pressable
                   style={styles.attachMenuRow}
-                  onPress={() => { setAttachMenuOpen(false); openCamera(); }}
+                  onPress={() => { setAttachMenuOpen(false); pickFromGallery(); }}
+                >
+                  <Text style={styles.attachMenuIcon}>🖼️</Text>
+                  <Text style={styles.attachMenuText}>Gallery</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.attachMenuRow}
+                  onPress={() => { setAttachMenuOpen(false); captureFromCamera("image"); }}
                 >
                   <Text style={styles.attachMenuIcon}>📷</Text>
                   <Text style={styles.attachMenuText}>Camera</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.attachMenuRow}
+                  onPress={() => { setAttachMenuOpen(false); captureFromCamera("video"); }}
+                >
+                  <Text style={styles.attachMenuIcon}>🎥</Text>
+                  <Text style={styles.attachMenuText}>Video</Text>
                 </Pressable>
                 {kind === "channel" && onCreatePoll ? (
                   <Pressable
@@ -556,8 +596,10 @@ export default function Composer({
           onChangeText={onChangeText}
           onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
           placeholder="Type a message"
+          placeholderTextColor={colors.textMuted}
           style={styles.input}
           multiline
+          textAlignVertical="top"
         />
 
         {recorderState.isRecording ? (
@@ -822,12 +864,14 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   },
   input: {
     flex: 1,
+    minHeight: 42,
     maxHeight: 120,
     backgroundColor: colors.surface,
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 15,
+    lineHeight: 20,
     color: colors.text,
   },
   sendButton: {

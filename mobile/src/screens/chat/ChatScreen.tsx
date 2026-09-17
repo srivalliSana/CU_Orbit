@@ -72,10 +72,28 @@ export default function ChatScreen({ route, navigation }: Props) {
     };
   }, []);
 
+  // Reset per-chat scroll bookkeeping when switching to a different
+  // container — otherwise a stale lastMessageId from the previous chat
+  // makes the "is this actually new" check below wrong.
+  const hasDoneInitialScroll = useRef(false);
+  useEffect(() => {
+    lastMessageId.current = undefined;
+    hasDoneInitialScroll.current = false;
+  }, [containerId]);
+
   useEffect(() => {
     const last = messages?.[messages.length - 1];
     if (!last || last.id === lastMessageId.current) return;
     lastMessageId.current = last.id;
+    // Opening a channel should land on the most recent message, like
+    // WhatsApp — not wherever the list defaults to (the oldest message at
+    // the top). This only needs to happen once per chat open; after that,
+    // scrolling is gated the normal way (own send, or keyboard already up).
+    if (!hasDoneInitialScroll.current) {
+      hasDoneInitialScroll.current = true;
+      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
+      return;
+    }
     if (last.sender_id === selfId || keyboardVisible.current) {
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     }

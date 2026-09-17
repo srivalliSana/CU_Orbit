@@ -76,6 +76,14 @@
           "contactsPermission": "Let's Connect uses your contacts to help you find people to message."
         }
       ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Let's Connect saves images and videos you download to your photo library.",
+          "savePhotosPermission": "Let's Connect saves images and videos you download to your photo library.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ],
       "expo-asset",
       "expo-font",
       "expo-video",
