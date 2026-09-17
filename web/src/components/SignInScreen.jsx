@@ -1,14 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { getConfig, requestOtp, signInWithGoogle, verifyOtp } from '../api/auth';
+import { getConfig, requestOtp, resendTwoFactor, signInWithGoogle, verifyOtp, verifyTwoFactor } from '../api/auth';
 
 /** Shown when there is no valid session — Google or email-OTP sign-in, gated to a CUTM campus email. */
 export default function SignInScreen({ onSignedIn }) {
   const [googleReady, setGoogleReady] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
   const [error, setError] = useState(null);
-  const [stage, setStage] = useState('email'); // 'email' | 'code'
+  const [stage, setStage] = useState('email'); // 'email' | 'code' | 'twofa'
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
+  const [twofaToken, setTwofaToken] = useState(null);
+  const [twofaCode, setTwofaCode] = useState('');
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [resendIn, setResendIn] = useState(0);
@@ -44,8 +46,14 @@ export default function SignInScreen({ onSignedIn }) {
               return;
             }
             try {
-              const user = await signInWithGoogle(resp.access_token);
-              onSignedIn(user);
+              const result = await signInWithGoogle(resp.access_token);
+              if (result.twofaRequired) {
+                setTwofaToken(result.twofaToken);
+                setStage('twofa');
+                setResendIn(45);
+              } else {
+                onSignedIn(result.user);
+              }
             } catch (e) {
               setError(e.message || 'Google sign-in failed.');
             }
@@ -98,12 +106,70 @@ export default function SignInScreen({ onSignedIn }) {
     }
   };
 
+  const confirmTwofa = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setVerifying(true);
+    try {
+      const user = await verifyTwoFactor(twofaToken, twofaCode.trim());
+      onSignedIn(user);
+    } catch (err) {
+      setError(err.message || 'Wrong code.');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const resendTwofaCode = async () => {
+    setError(null);
+    try {
+      await resendTwoFactor(twofaToken);
+      setResendIn(45);
+    } catch (err) {
+      setError(err.message || 'Could not resend the code.');
+    }
+  };
+
   return (
     <div className="flex h-screen items-center justify-center bg-slate-50 p-6 dark:bg-slate-950">
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-lg ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
         <h1 className="text-center text-xl font-semibold text-slate-800 dark:text-slate-100">Let's Connect</h1>
         <p className="mt-1 text-center text-sm text-slate-500">Sign in with your CUTM campus email</p>
 
+        {stage === 'twofa' ? (
+          <form onSubmit={confirmTwofa} className="mt-6 space-y-3">
+            <p className="text-center text-xs text-slate-500">
+              For extra security, we sent a code to <span className="font-medium text-slate-700 dark:text-slate-200">{email || 'your email'}</span>
+            </p>
+            <input
+              type="text"
+              inputMode="numeric"
+              autoFocus
+              required
+              value={twofaCode}
+              onChange={(e) => setTwofaCode(e.target.value)}
+              placeholder="6-digit code"
+              maxLength={6}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-center text-lg tracking-[0.4em] outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            />
+            <button
+              type="submit"
+              disabled={verifying}
+              className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {verifying ? 'Verifying…' : 'Confirm'}
+            </button>
+            <button
+              type="button"
+              disabled={resendIn > 0}
+              onClick={resendTwofaCode}
+              className="w-full text-center text-xs text-blue-600 hover:text-blue-700 disabled:text-slate-300"
+            >
+              {resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend code'}
+            </button>
+          </form>
+        ) : (
+        <>
         <div className="mt-6 flex justify-center">
           {googleReady ? (
             <button
@@ -186,6 +252,8 @@ export default function SignInScreen({ onSignedIn }) {
               </button>
             </div>
           </form>
+        )}
+        </>
         )}
 
         {error && <p role="alert" className="mt-4 text-center text-xs text-red-600">{error}</p>}

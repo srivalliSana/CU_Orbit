@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useThemeColors, useThemeStore, type ThemeMode } from "../../state/themeStore";
 import { useAuthStore } from "../../state/authStore";
 import { setDoNotDisturb } from "../../api/conversations";
 import { updateProfile } from "../../api/users";
+import { confirmTwoFactorEnroll, disableTwoFactor, startTwoFactorEnroll } from "../../api/auth";
 
 const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: "system", label: "System default" },
@@ -26,6 +27,48 @@ export default function SettingsScreen() {
   const user = useAuthStore((s) => s.user);
   const [dndBusy, setDndBusy] = useState(false);
   const [digestBusy, setDigestBusy] = useState(false);
+  const [twofaStage, setTwofaStage] = useState<"idle" | "enrolling" | "busy">("idle");
+  const [twofaCode, setTwofaCode] = useState("");
+  const [twofaError, setTwofaError] = useState<string | null>(null);
+
+  const startTwofaEnroll = async () => {
+    setTwofaError(null);
+    setTwofaStage("busy");
+    try {
+      await startTwoFactorEnroll();
+      setTwofaStage("enrolling");
+    } catch (e) {
+      setTwofaError(e instanceof Error ? e.message : "Could not send a code.");
+      setTwofaStage("idle");
+    }
+  };
+
+  const confirmTwofaEnroll = async () => {
+    setTwofaError(null);
+    setTwofaStage("busy");
+    try {
+      const updated = await confirmTwoFactorEnroll(twofaCode.trim());
+      useAuthStore.getState().updateUser(updated);
+      setTwofaStage("idle");
+      setTwofaCode("");
+    } catch (e) {
+      setTwofaError(e instanceof Error ? e.message : "Wrong code.");
+      setTwofaStage("enrolling");
+    }
+  };
+
+  const turnOffTwofa = async () => {
+    setTwofaError(null);
+    setTwofaStage("busy");
+    try {
+      const updated = await disableTwoFactor();
+      useAuthStore.getState().updateUser(updated);
+    } catch (e) {
+      setTwofaError(e instanceof Error ? e.message : "Could not turn off two-factor authentication.");
+    } finally {
+      setTwofaStage("idle");
+    }
+  };
 
   const dndUntil = user?.dnd_until ? new Date(user.dnd_until) : null;
   const dndActive = !!dndUntil && dndUntil.getTime() > Date.now();
@@ -111,6 +154,52 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Security</Text>
+      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={styles.row}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.rowText, { color: colors.text }]}>Two-factor authentication</Text>
+            <Text style={[styles.hint, { color: colors.textMuted, padding: 0, marginTop: 2 }]}>
+              {user?.twofa_enabled
+                ? "On — signing in with Google also asks for an emailed code."
+                : "Adds a second emailed code when signing in with Google."}
+            </Text>
+          </View>
+          {twofaStage === "busy" ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : user?.twofa_enabled ? (
+            <Pressable onPress={turnOffTwofa}>
+              <Text style={[styles.rowText, { color: colors.primary, fontSize: 13 }]}>Turn off</Text>
+            </Pressable>
+          ) : twofaStage === "idle" ? (
+            <Pressable onPress={startTwofaEnroll}>
+              <Text style={[styles.rowText, { color: colors.primary, fontSize: 13 }]}>Turn on</Text>
+            </Pressable>
+          ) : null}
+        </View>
+        {twofaStage === "enrolling" && (
+          <View style={[styles.dndOptionsRow, { borderTopWidth: 1, borderTopColor: colors.border, flexWrap: "nowrap" }]}>
+            <TextInput
+              value={twofaCode}
+              onChangeText={setTwofaCode}
+              placeholder="6-digit code"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="number-pad"
+              maxLength={6}
+              autoFocus
+              style={[styles.codeInput, { color: colors.text, borderColor: colors.border }]}
+            />
+            <Pressable onPress={confirmTwofaEnroll} disabled={!twofaCode.trim()}>
+              <Text style={[styles.rowText, { color: colors.primary, fontSize: 13, fontWeight: "700" }]}>Confirm</Text>
+            </Pressable>
+            <Pressable onPress={() => setTwofaStage("idle")}>
+              <Text style={[styles.rowText, { color: colors.textMuted, fontSize: 13 }]}>Cancel</Text>
+            </Pressable>
+          </View>
+        )}
+        {twofaError ? <Text style={[styles.hint, { color: colors.danger }]}>{twofaError}</Text> : null}
+      </View>
+
       <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Privacy</Text>
       <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={styles.row}>
@@ -176,5 +265,13 @@ const styles = StyleSheet.create({
   dndOptionText: {
     fontSize: 13,
     fontWeight: "600",
+  },
+  codeInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 14,
   },
 });

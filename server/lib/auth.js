@@ -36,6 +36,22 @@ function verifySession(token) {
     return jwt.verify(token, ORBIT_SECRET, { algorithms: ['HS256'], audience: AUDIENCE });
 }
 
+// A distinct audience + short TTL, so even if this ever leaked it's useless
+// as a real session token — it only proves "the first factor already
+// succeeded for this user," not "this user is signed in."
+const TWOFA_AUDIENCE = 'cu-orbit-2fa-pending';
+const TWOFA_TTL = '5m';
+
+function issuePendingTwoFactorToken(user) {
+    assertSecrets();
+    return jwt.sign({ sub: user.id }, ORBIT_SECRET, { algorithm: 'HS256', expiresIn: TWOFA_TTL, audience: TWOFA_AUDIENCE });
+}
+
+function verifyPendingTwoFactorToken(token) {
+    assertSecrets();
+    return jwt.verify(token, ORBIT_SECRET, { algorithms: ['HS256'], audience: TWOFA_AUDIENCE });
+}
+
 function bearer(req) {
     const h = req.get('authorization') || '';
     return h.startsWith('Bearer ') ? h.slice(7).trim() : null;
@@ -93,4 +109,7 @@ function requireRole(...roles) {
     };
 }
 
-module.exports = { issueSession, verifySession, requireAuth, requireRole, assertSecrets, setOnAuthenticated, setActiveCheck, AUDIENCE };
+module.exports = {
+    issueSession, verifySession, requireAuth, requireRole, assertSecrets, setOnAuthenticated, setActiveCheck, AUDIENCE,
+    issuePendingTwoFactorToken, verifyPendingTwoFactorToken,
+};

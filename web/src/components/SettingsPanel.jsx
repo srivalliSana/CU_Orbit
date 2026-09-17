@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { getThemeMode, setThemeMode } from '../lib/theme';
 import { setDoNotDisturb } from '../api/chat';
 import { updateProfile } from '../api/users';
+import { confirmTwoFactorEnroll, disableTwoFactor, startTwoFactorEnroll } from '../api/auth';
 
 const THEME_OPTIONS = [
   { value: 'system', label: 'System default' },
@@ -20,6 +21,49 @@ export default function SettingsPanel({ user, onClose, onSignOut, onUpdated }) {
   const [mode, setMode] = useState(getThemeMode());
   const [dndBusy, setDndBusy] = useState(false);
   const [digestBusy, setDigestBusy] = useState(false);
+  const [twofaStage, setTwofaStage] = useState('idle');   // idle | enrolling | busy
+  const [twofaCode, setTwofaCode] = useState('');
+  const [twofaError, setTwofaError] = useState(null);
+
+  const startTwofaEnroll = async () => {
+    setTwofaError(null);
+    setTwofaStage('busy');
+    try {
+      await startTwoFactorEnroll();
+      setTwofaStage('enrolling');
+    } catch (e) {
+      setTwofaError(e.message || 'Could not send a code.');
+      setTwofaStage('idle');
+    }
+  };
+
+  const confirmTwofaEnroll = async (e) => {
+    e.preventDefault();
+    setTwofaError(null);
+    setTwofaStage('busy');
+    try {
+      const updated = await confirmTwoFactorEnroll(twofaCode.trim());
+      onUpdated?.(updated);
+      setTwofaStage('idle');
+      setTwofaCode('');
+    } catch (e) {
+      setTwofaError(e.message || 'Wrong code.');
+      setTwofaStage('enrolling');
+    }
+  };
+
+  const turnOffTwofa = async () => {
+    setTwofaError(null);
+    setTwofaStage('busy');
+    try {
+      const updated = await disableTwoFactor();
+      onUpdated?.(updated);
+    } catch (e) {
+      setTwofaError(e.message || 'Could not turn off two-factor authentication.');
+    } finally {
+      setTwofaStage('idle');
+    }
+  };
 
   const toggleDigest = async () => {
     setDigestBusy(true);
@@ -135,6 +179,61 @@ export default function SettingsPanel({ user, onClose, onSignOut, onUpdated }) {
               />
             </button>
           </div>
+        </div>
+
+        <h3 className="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">Security</h3>
+        <div className="mt-2 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm text-slate-700 dark:text-slate-200">Two-factor authentication</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {user?.twofa_enabled
+                  ? 'On — signing in with Google also asks for an emailed code.'
+                  : 'Adds a second emailed code when signing in with Google.'}
+              </p>
+            </div>
+            {user?.twofa_enabled ? (
+              <button
+                onClick={turnOffTwofa}
+                disabled={twofaStage === 'busy'}
+                className="shrink-0 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-300"
+              >
+                Turn off
+              </button>
+            ) : twofaStage === 'idle' ? (
+              <button
+                onClick={startTwofaEnroll}
+                className="shrink-0 rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+              >
+                Turn on
+              </button>
+            ) : null}
+          </div>
+          {twofaStage === 'enrolling' && (
+            <form onSubmit={confirmTwofaEnroll} className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+              <input
+                type="text"
+                inputMode="numeric"
+                autoFocus
+                value={twofaCode}
+                onChange={(e) => setTwofaCode(e.target.value)}
+                placeholder="6-digit code"
+                maxLength={6}
+                className="min-w-0 flex-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+              />
+              <button
+                type="submit"
+                disabled={!twofaCode.trim()}
+                className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                Confirm
+              </button>
+              <button type="button" onClick={() => setTwofaStage('idle')} className="shrink-0 text-xs text-slate-400 hover:text-slate-600">
+                Cancel
+              </button>
+            </form>
+          )}
+          {twofaError && <p className="mt-2 text-xs text-red-600">{twofaError}</p>}
         </div>
 
         <h3 className="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">Privacy</h3>

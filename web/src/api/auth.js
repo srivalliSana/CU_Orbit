@@ -67,9 +67,36 @@ export async function signInWithGoogle(accessToken) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ accessToken }),
   }));
+  // 2FA-enabled accounts don't get a session yet — a second emailed code
+  // (see verifyTwoFactor below) has to land first.
+  if (d.twofa_required) return { twofaRequired: true, twofaToken: d.twofa_token };
+  setToken(d.session);
+  return { user: d.user };
+}
+
+export async function verifyTwoFactor(twofaToken, code) {
+  const d = await json(await fetch('/api/auth/2fa/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ twofa_token: twofaToken, code }),
+  }));
   setToken(d.session);
   return d.user;
 }
+
+export const resendTwoFactor = (twofaToken) =>
+  json(fetch('/api/auth/2fa/resend', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ twofa_token: twofaToken }),
+  }));
+
+// Enrollment (from Settings) — requires an active session, unlike the
+// sign-in-step endpoints above.
+export const startTwoFactorEnroll = () => api('/api/auth/2fa/enable/start', { method: 'POST' });
+export const confirmTwoFactorEnroll = (code) =>
+  api('/api/auth/2fa/enable/confirm', { method: 'POST', body: JSON.stringify({ code }) }).then((d) => d.user);
+export const disableTwoFactor = () => api('/api/auth/2fa/disable', { method: 'POST' }).then((d) => d.user);
 
 export const requestOtp = (email) =>
   json(fetch('/api/auth/otp/request', {

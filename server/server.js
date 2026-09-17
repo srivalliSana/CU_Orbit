@@ -145,6 +145,11 @@ const User = sequelize.define('User', {
     last_digest_sent_at: { type: DataTypes.DATE, allowNull: true },
     // Gates the one-time welcome flow shown after a user's first sign-in.
     has_onboarded: { type: DataTypes.BOOLEAN, defaultValue: false },
+    // Gates a second email-code step on the Google sign-in path specifically
+    // (see POST /api/auth/google) — the email-OTP sign-in path already IS a
+    // form of email-verified auth, so a second code there would be
+    // redundant; this hardens the single-factor Google path instead.
+    twofa_enabled: { type: DataTypes.BOOLEAN, defaultValue: false },
     presence: { type: DataTypes.ENUM('online', 'away', 'dnd', 'offline'), defaultValue: 'online' },
     // Drives "last seen" — refreshed on API activity, not on login, so it
     // reflects actual use.
@@ -693,6 +698,17 @@ const Status = sequelize.define('Status', {
 // One-time codes for the email sign-in flow. Keyed by email so a fresh
 // request overwrites any still-pending code rather than accumulating rows.
 const EmailOtp = sequelize.define('EmailOtp', {
+    email: { type: DataTypes.STRING, primaryKey: true },
+    code_hash: { type: DataTypes.STRING, allowNull: false },
+    expires_at: { type: DataTypes.DATE, allowNull: false },
+    attempts: { type: DataTypes.INTEGER, defaultValue: 0 },
+    last_sent_at: { type: DataTypes.DATE, allowNull: false },
+});
+
+// Same shape as EmailOtp, kept separate so a normal sign-in code request
+// and a 2FA-step/enrollment code never collide or get mixed up for the
+// same address.
+const TwoFactorCode = sequelize.define('TwoFactorCode', {
     email: { type: DataTypes.STRING, primaryKey: true },
     code_hash: { type: DataTypes.STRING, allowNull: false },
     expires_at: { type: DataTypes.DATE, allowNull: false },
@@ -2012,6 +2028,12 @@ app.post('/api/auth/google', async (req, res) => {
         }
 
         const user = await findOrCreateOrbitUser(email, payload.name);
+
+        if (user.twofa_enabled) {
+            await sendTwoFactorCode(user.campus_email || user.email);
+            return res.json({ twofa_required: true, twofa_token: auth.issuePendingTwoFactorToken(user) });
+        }
+
         res.json({ success: true, session: auth.issueSession(user), user });
     } catch (e) {
         console.error('[google-signin] failed:', e.message);
@@ -2102,6 +2124,164 @@ app.post('/api/auth/otp/verify', async (req, res) => {
         res.json({ success: true, session: auth.issueSession(user), user });
     } catch (e) {
         console.error('[otp-verify] failed:', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
+const TWOFA_TTL_MS = 10 * 60 * 1000;
+const TWOFA_RESEND_COOLDOWN_MS = 45 * 1000;
+const TWOFA_MAX_ATTEMPTS = 5;
+
+/** Generates, stores, and emails a fresh 2FA code — shared by the sign-in
+ *  step and the enrollment step below. Throws if SMTP isn't configured or
+ *  the resend cooldown hasn't elapsed, same shape as the OTP-request route. */
+async function sendTwoFactorCode(email) {
+    if (!mailer) throw Object.assign(new Error('not_configured'), { code: 'not_configured' });
+    const existing = await TwoFactorCode.findByPk(email);
+    if (existing && Date.now() - new Date(existing.last_sent_at).getTime() < TWOFA_RESEND_COOLDOWN_MS) {
+        throw Object.assign(new Error('rate_limited'), { code: 'rate_limited' });
+    }
+    const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+    const code_hash = crypto.createHash('sha256').update(code).digest('hex');
+    await TwoFactorCode.upsert({ email, code_hash, attempts: 0, expires_at: new Date(Date.now() + TWOFA_TTL_MS), last_sent_at: new Date() });
+    await mailer.sendMail({
+        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        to: email,
+        subject: `${code} is your Let's Connect security code`,
+        text: `Your Let's Connect two-factor code is ${code}. It expires in 10 minutes. If you didn't request this, someone may have your Google sign-in — consider changing your Google password.`,
+    });
+}
+
+/** Checks a submitted code against the stored TwoFactorCode row, consuming
+ *  attempts on failure and the row itself on success — same constant-time-
+ *  compare/lockout shape as /api/auth/otp/verify. Returns true/throws with
+ *  a {code, message} shaped error the callers below turn into a response. */
+async function checkTwoFactorCode(email, code) {
+    const record = await TwoFactorCode.findByPk(email);
+    if (!record) throw Object.assign(new Error('Request a new code'), { code: 'invalid_code' });
+    if (new Date(record.expires_at).getTime() < Date.now()) {
+        await record.destroy();
+        throw Object.assign(new Error('That code expired — request a new one'), { code: 'expired' });
+    }
+    if (record.attempts >= TWOFA_MAX_ATTEMPTS) {
+        await record.destroy();
+        throw Object.assign(new Error('Too many wrong tries — request a new code'), { code: 'too_many_attempts' });
+    }
+    const code_hash = crypto.createHash('sha256').update(code).digest('hex');
+    const a = Buffer.from(code_hash);
+    const b = Buffer.from(record.code_hash);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+        record.attempts += 1;
+        await record.save();
+        throw Object.assign(new Error('Wrong code'), { code: 'invalid_code' });
+    }
+    await record.destroy();
+}
+
+/** Step 2 of Google sign-in when the account has 2FA enabled — exchanges
+ *  the short-lived pending token + emailed code for the real session. */
+app.post('/api/auth/2fa/verify', async (req, res) => {
+    try {
+        const { twofa_token, code } = req.body;
+        if (!twofa_token || !code) return res.status(400).json({ error: 'bad_request', message: 'twofa_token and code required' });
+        let claims;
+        try {
+            claims = auth.verifyPendingTwoFactorToken(twofa_token);
+        } catch (e) {
+            return res.status(401).json({ error: 'invalid_token', message: 'That sign-in attempt has expired — start over' });
+        }
+        const user = await User.findByPk(claims.sub);
+        if (!user) return res.status(401).json({ error: 'invalid_token' });
+
+        try {
+            await checkTwoFactorCode(user.campus_email || user.email, String(code).trim());
+        } catch (e) {
+            logSecurityEvent('invalid_2fa_code', req, user.id);
+            return res.status(401).json({ error: e.code || 'invalid_code', message: e.message });
+        }
+
+        res.json({ success: true, session: auth.issueSession(user), user });
+    } catch (e) {
+        console.error('[2fa-verify] failed:', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
+/** Resends the sign-in-step 2FA code without restarting the Google flow. */
+app.post('/api/auth/2fa/resend', async (req, res) => {
+    try {
+        const { twofa_token } = req.body;
+        if (!twofa_token) return res.status(400).json({ error: 'bad_request', message: 'twofa_token required' });
+        let claims;
+        try {
+            claims = auth.verifyPendingTwoFactorToken(twofa_token);
+        } catch (e) {
+            return res.status(401).json({ error: 'invalid_token', message: 'That sign-in attempt has expired — start over' });
+        }
+        const user = await User.findByPk(claims.sub);
+        if (!user) return res.status(401).json({ error: 'invalid_token' });
+        await sendTwoFactorCode(user.campus_email || user.email);
+        res.json({ success: true });
+    } catch (e) {
+        if (e.code === 'rate_limited') return res.status(429).json({ error: 'rate_limited', message: 'Wait a moment before requesting another code' });
+        if (e.code === 'not_configured') return res.status(503).json({ error: 'not_configured' });
+        console.error('[2fa-resend] failed:', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
+/** Enrollment step 1 — send a confirmation code to the signed-in user's own
+ *  email before actually turning 2FA on (proves they can still receive it,
+ *  same reasoning as verifying an email address before trusting it). */
+app.post('/api/auth/2fa/enable/start', auth.requireAuth, async (req, res) => {
+    try {
+        const user = await User.findByPk(req.user.id);
+        if (!user) return res.status(404).json({ error: 'not_found' });
+        if (user.twofa_enabled) return res.json({ success: true, already_enabled: true });
+        await sendTwoFactorCode(user.campus_email || user.email);
+        res.json({ success: true });
+    } catch (e) {
+        if (e.code === 'rate_limited') return res.status(429).json({ error: 'rate_limited', message: 'Wait a moment before requesting another code' });
+        if (e.code === 'not_configured') return res.status(503).json({ error: 'not_configured' });
+        console.error('[2fa-enable-start] failed:', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
+/** Enrollment step 2 — confirm the code, actually flip twofa_enabled on. */
+app.post('/api/auth/2fa/enable/confirm', auth.requireAuth, async (req, res) => {
+    try {
+        const { code } = req.body;
+        if (!code) return res.status(400).json({ error: 'bad_request', message: 'code required' });
+        const user = await User.findByPk(req.user.id);
+        if (!user) return res.status(404).json({ error: 'not_found' });
+        try {
+            await checkTwoFactorCode(user.campus_email || user.email, String(code).trim());
+        } catch (e) {
+            return res.status(401).json({ error: e.code || 'invalid_code', message: e.message });
+        }
+        user.twofa_enabled = true;
+        await user.save();
+        await logAudit(req.user, '2fa.enabled', 'user', user.id, user.name);
+        res.json({ success: true, user });
+    } catch (e) {
+        console.error('[2fa-enable-confirm] failed:', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
+/** Disabling only requires an active session, not a fresh code — matches
+ *  common practice for "turn it back off" once you're already signed in. */
+app.post('/api/auth/2fa/disable', auth.requireAuth, async (req, res) => {
+    try {
+        const user = await User.findByPk(req.user.id);
+        if (!user) return res.status(404).json({ error: 'not_found' });
+        user.twofa_enabled = false;
+        await user.save();
+        await logAudit(req.user, '2fa.disabled', 'user', user.id, user.name);
+        res.json({ success: true, user });
+    } catch (e) {
+        console.error('[2fa-disable] failed:', e.message);
         res.status(500).json({ error: 'server_error' });
     }
 });

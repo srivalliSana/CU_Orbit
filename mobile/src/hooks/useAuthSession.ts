@@ -2,7 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 
-import { me, requestOtp as apiRequestOtp, signInWithGoogle, verifyOtp as apiVerifyOtp } from "../api/auth";
+import {
+  me,
+  requestOtp as apiRequestOtp,
+  resendTwoFactor,
+  signInWithGoogle,
+  verifyOtp as apiVerifyOtp,
+  verifyTwoFactor,
+} from "../api/auth";
 import { apiErrorMessage } from "../api/client";
 import { GOOGLE_ANDROID_CLIENT_ID, GOOGLE_REVERSED_CLIENT_ID } from "../constants/config";
 import { useAuthStore } from "../state/authStore";
@@ -23,6 +30,9 @@ export function useAuthSession() {
   const { status, user, hydrate, setSession, clear } = useAuthStore();
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set only while a Google sign-in is paused waiting on a second emailed
+  // code — see server's twofa_enabled gating on POST /api/auth/google.
+  const [twofaToken, setTwofaToken] = useState<string | null>(null);
 
   useEffect(() => {
     hydrate();
@@ -109,14 +119,55 @@ export function useAuthSession() {
         return;
       }
 
-      const { session, user: signedInUser } = await signInWithGoogle(idToken);
-      await setSession(session, signedInUser);
+      const signInResult = await signInWithGoogle(idToken);
+      if ("twofa_required" in signInResult) {
+        setTwofaToken(signInResult.twofa_token);
+        return;
+      }
+      await setSession(signInResult.session, signInResult.user);
     } catch (e) {
       setError(apiErrorMessage(e, "Could not sign in with Google."));
     } finally {
       setSigningIn(false);
     }
   }, [setSession]);
+
+  const verifyTwofa = useCallback(
+    async (code: string) => {
+      if (!twofaToken) return false;
+      setError(null);
+      setSigningIn(true);
+      try {
+        const { session, user: signedInUser } = await verifyTwoFactor(twofaToken, code);
+        await setSession(session, signedInUser);
+        setTwofaToken(null);
+        return true;
+      } catch (e) {
+        setError(apiErrorMessage(e, "Wrong code."));
+        return false;
+      } finally {
+        setSigningIn(false);
+      }
+    },
+    [twofaToken, setSession]
+  );
+
+  const resendTwofa = useCallback(async () => {
+    if (!twofaToken) return false;
+    setError(null);
+    try {
+      await resendTwoFactor(twofaToken);
+      return true;
+    } catch (e) {
+      setError(apiErrorMessage(e, "Could not resend the code."));
+      return false;
+    }
+  }, [twofaToken]);
+
+  const cancelTwofa = useCallback(() => {
+    setTwofaToken(null);
+    setError(null);
+  }, []);
 
   const requestOtp = useCallback(async (email: string) => {
     setError(null);
@@ -149,5 +200,8 @@ export function useAuthSession() {
 
   const signOut = useCallback(() => clear(), [clear]);
 
-  return { status, user, signingIn, error, signInWithGoogleAsync, requestOtp, verifyOtp, signOut };
+  return {
+    status, user, signingIn, error, signInWithGoogleAsync, requestOtp, verifyOtp, signOut,
+    twofaPending: twofaToken !== null, verifyTwofa, resendTwofa, cancelTwofa,
+  };
 }

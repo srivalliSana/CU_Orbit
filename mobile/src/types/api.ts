@@ -13,6 +13,7 @@ export interface User {
   status_expires_at?: string | null;
   email_digest_opt_out?: boolean;
   has_onboarded?: boolean;
+  twofa_enabled?: boolean;
   is_active?: boolean;
   dnd_until?: string | null;
 }

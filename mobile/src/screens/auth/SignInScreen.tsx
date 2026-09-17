@@ -8,11 +8,12 @@ import { useThemeColors } from "../../state/themeStore";
 export default function SignInScreen() {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { signingIn, error, signInWithGoogleAsync, requestOtp, verifyOtp } = useAuthSession();
+  const { signingIn, error, signInWithGoogleAsync, requestOtp, verifyOtp, twofaPending, verifyTwofa, resendTwofa, cancelTwofa } = useAuthSession();
 
   const [stage, setStage] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  const [twofaCode, setTwofaCode] = useState("");
   const [sending, setSending] = useState(false);
   const [resendIn, setResendIn] = useState(0);
 
@@ -36,6 +37,10 @@ export default function SignInScreen() {
     await verifyOtp(email.trim().toLowerCase(), code.trim());
   };
 
+  const confirmTwofa = async () => {
+    await verifyTwofa(twofaCode.trim());
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -48,7 +53,36 @@ export default function SignInScreen() {
         <Text style={styles.title}>Let's Connect</Text>
         <Text style={styles.subtitle}>Sign in with your CUTM campus email</Text>
 
-        {signingIn ? (
+        {twofaPending ? (
+          <View style={styles.form}>
+            <Text style={styles.codeHint}>For extra security, we sent a code to your email</Text>
+            <TextInput
+              value={twofaCode}
+              onChangeText={setTwofaCode}
+              placeholder="6-digit code"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="number-pad"
+              maxLength={6}
+              autoFocus
+              style={[styles.input, styles.codeInput]}
+            />
+            <Pressable
+              style={({ pressed }) => [
+                styles.primaryButton,
+                twofaCode.trim().length !== 6 && styles.buttonDisabled,
+                pressed && twofaCode.trim().length === 6 && styles.buttonPressed,
+              ]}
+              onPress={confirmTwofa}
+              disabled={twofaCode.trim().length !== 6}
+            >
+              <Text style={styles.primaryButtonText}>Confirm</Text>
+            </Pressable>
+            <View style={styles.formFooter}>
+              <Text style={styles.link} onPress={cancelTwofa}>Cancel</Text>
+              <Text style={styles.link} onPress={resendTwofa}>Resend code</Text>
+            </View>
+          </View>
+        ) : signingIn ? (
           <ActivityIndicator size="large" color={colors.primary} style={styles.spinner} />
         ) : (
           <>
