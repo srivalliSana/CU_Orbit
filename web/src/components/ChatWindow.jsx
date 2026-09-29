@@ -287,7 +287,7 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
   let lastDay = null;
 
   return (
-    <section className="relative flex min-w-0 flex-1 flex-col bg-slate-50 dark:bg-slate-950">
+    <section className="relative flex min-w-0 flex-1 flex-col bg-canvas dark:bg-slate-950">
       <header className="flex items-center gap-1 border-b border-slate-200 bg-white px-2 py-2.5 dark:border-slate-800 dark:bg-slate-900 md:gap-3 md:px-4">
         <button
           onClick={onBack}

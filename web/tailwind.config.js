@@ -21,6 +21,11 @@ export default {
           400: '#3dc496', 500: '#1a8e72', 600: '#167a62', 700: '#136350',
           800: '#114f41', 900: '#0d3c32',
         },
+        // Soft, mint-tinted neutrals for the app's largest surfaces (body,
+        // message pane) — replaces stark white/slate-100 so light mode
+        // doesn't read as glaring next to the landing page's own softer tone.
+        canvas: '#f7fbfa',
+        paper2: '#eef6f4',
       },
     },
   },

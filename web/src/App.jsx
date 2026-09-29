@@ -290,7 +290,7 @@ export default function App() {
   }
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-slate-100 dark:bg-slate-950">
+    <div className="relative flex h-screen flex-col overflow-hidden bg-canvas dark:bg-slate-950">
       <div className="flex flex-1 overflow-hidden">
       <IconRail
         user={user}

@@ -74,7 +74,7 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
   return (
     <aside
       style={width ? { '--sidebar-width': `${width}px` } : undefined}
-      className={`${activeId ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:w-[var(--sidebar-width,20rem)] md:max-w-[none]`}
+      className={`${activeId ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-slate-200 bg-canvas dark:border-slate-800 dark:bg-slate-900 md:w-[var(--sidebar-width,20rem)] md:max-w-[none]`}
     >
       <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
         <div className="min-w-0 flex-1">
