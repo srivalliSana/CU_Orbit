@@ -185,6 +185,31 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
     }
   }
 
+  const [uploadingWallpaper, setUploadingWallpaper] = useState(false);
+  async function pickWallpaperImage(file) {
+    if (!file) return;
+    setUploadingWallpaper(true);
+    try {
+      const { url } = await uploadFile(file);
+      await pickWallpaper(`img:${url}`);
+    } catch {
+      // best-effort
+    } finally {
+      setUploadingWallpaper(false);
+    }
+  }
+
+  // A custom-uploaded photo is stored as "img:<url>" (vs. a flat preset
+  // key) — this resolves either into the same {background...} style shape
+  // so the scroller and the sticky date-divider don't need to know which.
+  function wallpaperStyle(value, dark) {
+    if (value?.startsWith('img:')) {
+      return { backgroundImage: `url(${value.slice(4)})`, backgroundSize: 'cover', backgroundPosition: 'center' };
+    }
+    const color = wallpaperColor(value, dark);
+    return color ? { backgroundColor: color } : null;
+  }
+
   const [scheduled, setScheduled] = useState([]);
   const [scheduledOpen, setScheduledOpen] = useState(false);
   const loadScheduled = () => getScheduledMessages(chat.id).then(setScheduled).catch(() => {});
@@ -375,6 +400,16 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
               </button>
             ))}
           </div>
+          <label className="mt-2 flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-2 py-1.5 text-xs text-slate-500 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-800">
+            {uploadingWallpaper ? 'Uploading…' : 'Upload a photo'}
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              disabled={uploadingWallpaper}
+              onChange={(e) => pickWallpaperImage(e.target.files?.[0])}
+            />
+          </label>
         </div>
       )}
 
@@ -394,7 +429,7 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
         ref={scroller}
         onScroll={onScroll}
         className="flex-1 overflow-y-auto px-4 py-4"
-        style={wallpaperColor(wallpaper, isDark) ? { backgroundColor: wallpaperColor(wallpaper, isDark) } : undefined}
+        style={wallpaperStyle(wallpaper, isDark) || undefined}
       >
         {loading && <p className="py-8 text-center text-sm text-slate-400">Loading messages…</p>}
         {!loading && messages.length === 0 && (
@@ -411,7 +446,10 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
                 // the next divider pushes it off — the same "today's date
                 // follows you" behavior WhatsApp/Telegram use, rather than
                 // the label just scrolling by like any other message.
-                <div className="sticky top-0 z-[5] my-4 flex justify-center bg-slate-50/95 py-1 backdrop-blur-sm dark:bg-slate-950/95">
+                <div
+                  className={`sticky top-0 z-[5] my-4 flex justify-center py-1 backdrop-blur-sm ${wallpaperStyle(wallpaper, isDark) ? '' : 'bg-slate-50/95 dark:bg-slate-950/95'}`}
+                  style={wallpaperColor(wallpaper, isDark) ? { backgroundColor: `${wallpaperColor(wallpaper, isDark)}f2` } : undefined}
+                >
                   <span className="rounded-full bg-slate-200 px-3 py-1 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                     {divider}
                   </span>

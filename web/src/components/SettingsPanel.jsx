@@ -103,7 +103,7 @@ export default function SettingsPanel({ user, onClose, onSignOut, onUpdated }) {
   };
 
   return (
-    <aside className="fixed inset-0 z-30 flex w-full flex-col bg-white dark:bg-slate-900">
+    <aside className="fixed inset-0 z-30 flex w-full flex-col bg-white dark:bg-slate-900 md:static md:z-auto md:w-full md:max-w-sm md:shrink-0 md:border-l md:border-slate-200 md:dark:border-slate-800">
       <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
         <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Settings</h2>
         <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-slate-600">✕</button>

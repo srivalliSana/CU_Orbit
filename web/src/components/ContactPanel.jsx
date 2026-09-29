@@ -98,7 +98,7 @@ export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMess
   };
 
   return (
-    <aside className="fixed inset-0 z-30 flex w-full flex-col bg-white dark:bg-slate-900">
+    <aside className="fixed inset-0 z-30 flex w-full flex-col bg-white dark:bg-slate-900 md:static md:z-auto md:w-full md:max-w-sm md:shrink-0 md:border-l md:border-slate-200 md:dark:border-slate-800">
       <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
         {view !== 'main' ? (
           <button onClick={() => setView('main')} className="text-sm font-medium text-blue-600 hover:text-blue-700">
