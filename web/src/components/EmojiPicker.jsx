@@ -94,7 +94,7 @@ export default function EmojiPicker({ onPick, onPickGif, onClose }) {
                   key={key}
                   onClick={() => { setTab(key); setQuery(''); }}
                   className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
-                    tab === key ? 'bg-white text-blue-600 shadow dark:bg-slate-700' : 'text-slate-500'
+                    tab === key ? 'bg-white text-accent-600 shadow dark:bg-slate-700' : 'text-slate-500'
                   }`}
                 >
                   {label}
@@ -111,7 +111,7 @@ export default function EmojiPicker({ onPick, onPickGif, onClose }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={tab === 'gifs' ? 'Search GIFs…' : 'Search emoji…'}
-          className="mb-2 shrink-0 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+          className="mb-2 shrink-0 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
         />
 
         {tab === 'gifs' ? (
@@ -178,7 +178,7 @@ export default function EmojiPicker({ onPick, onPickGif, onClose }) {
                   value={uploadName}
                   onChange={(ev) => setUploadName(ev.target.value)}
                   placeholder="name"
-                  className="w-20 min-w-0 rounded-lg bg-slate-100 px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+                  className="w-20 min-w-0 rounded-lg bg-slate-100 px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
                 />
                 <button
                   type="button" onClick={pickFile} disabled={uploading}
@@ -199,12 +199,12 @@ export default function EmojiPicker({ onPick, onPickGif, onClose }) {
               value={custom}
               onChange={(e) => setCustom(e.target.value)}
               placeholder="Or type/paste any emoji"
-              className="min-w-0 flex-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+              className="min-w-0 flex-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
             />
             <button
               type="submit"
               disabled={!custom.trim()}
-              className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="shrink-0 rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
             >
               React
             </button>

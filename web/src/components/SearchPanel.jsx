@@ -74,14 +74,14 @@ export default function SearchPanel({ onClose, onOpenResult }) {
               className="block w-full rounded-xl border border-slate-200 p-3 text-left transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
             >
               <div className="mb-1 flex items-center justify-between gap-2">
-                <span className="truncate text-xs font-semibold text-blue-600 dark:text-blue-400">
+                <span className="truncate text-xs font-semibold text-accent-600 dark:text-accent-400">
                   {r.is_dm ? r.container_name || r.sender_name : `# ${r.container_name || 'channel'}`}
                 </span>
                 <span className="shrink-0 text-[11px] text-slate-400">{timeLabel(r.sent_at)}</span>
               </div>
               <p className="text-sm text-slate-700 dark:text-slate-200">
                 <span className="font-medium">{r.sender_name}: </span>
-                {r.text ? renderInlineText(r.text, 'text-blue-600 dark:text-blue-400') : 'Attachment'}
+                {r.text ? renderInlineText(r.text, 'text-accent-600 dark:text-accent-400') : 'Attachment'}
               </p>
             </button>
           ))}

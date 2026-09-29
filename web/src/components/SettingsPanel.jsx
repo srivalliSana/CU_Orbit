@@ -121,7 +121,7 @@ export default function SettingsPanel({ user, onClose, onSignOut, onUpdated }) {
               }`}
             >
               <span className="text-slate-700 dark:text-slate-200">{opt.label}</span>
-              {mode === opt.value && <span className="text-blue-600">✓</span>}
+              {mode === opt.value && <span className="text-accent-600">✓</span>}
             </button>
           ))}
         </div>
@@ -178,7 +178,7 @@ export default function SettingsPanel({ user, onClose, onSignOut, onUpdated }) {
               aria-checked={!user?.email_digest_opt_out}
               aria-label="Email digest"
               className={`relative h-6 w-11 shrink-0 rounded-full transition disabled:opacity-50 ${
-                user?.email_digest_opt_out ? 'bg-slate-300 dark:bg-slate-700' : 'bg-blue-600'
+                user?.email_digest_opt_out ? 'bg-slate-300 dark:bg-slate-700' : 'bg-accent-600'
               }`}
             >
               <span
@@ -212,7 +212,7 @@ export default function SettingsPanel({ user, onClose, onSignOut, onUpdated }) {
             ) : twofaStage === 'idle' ? (
               <button
                 onClick={startTwofaEnroll}
-                className="shrink-0 rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                className="shrink-0 rounded-lg bg-accent-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-accent-700"
               >
                 Turn on
               </button>
@@ -228,12 +228,12 @@ export default function SettingsPanel({ user, onClose, onSignOut, onUpdated }) {
                 onChange={(e) => setTwofaCode(e.target.value)}
                 placeholder="6-digit code"
                 maxLength={6}
-                className="min-w-0 flex-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+                className="min-w-0 flex-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
               />
               <button
                 type="submit"
                 disabled={!twofaCode.trim()}
-                className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                className="shrink-0 rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
               >
                 Confirm
               </button>
@@ -265,7 +265,7 @@ export default function SettingsPanel({ user, onClose, onSignOut, onUpdated }) {
                   <li key={b.id} className="flex items-center gap-2.5">
                     <Avatar name={b.name} url={b.avatarUrl} size={28} />
                     <span className="flex-1 truncate text-sm text-slate-700 dark:text-slate-200">{b.name}</span>
-                    <button onClick={() => unblock(b.id)} className="shrink-0 text-xs font-medium text-blue-600 hover:text-blue-700">
+                    <button onClick={() => unblock(b.id)} className="shrink-0 text-xs font-medium text-accent-600 hover:text-accent-700">
                       Unblock
                     </button>
                   </li>

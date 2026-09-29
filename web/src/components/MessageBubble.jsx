@@ -64,7 +64,7 @@ function ActionButtons({ message: m, own, onChanged }) {
             b.style === 'danger'
               ? 'bg-red-600 text-white hover:bg-red-700'
               : b.style === 'primary'
-              ? 'bg-blue-600 text-white hover:bg-blue-700'
+              ? 'bg-accent-600 text-white hover:bg-accent-700'
               : own
               ? 'bg-white/20 text-white hover:bg-white/30'
               : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200'
@@ -310,21 +310,21 @@ export default function MessageBubble({
           title="Double-click to reply"
           className={`rounded-2xl px-3 py-2 shadow-sm ${own && isGroup && !m.pending ? 'cursor-pointer' : ''} ${
             own
-              ? 'rounded-br-md bg-blue-600 text-white'
+              ? 'rounded-br-md bg-accent-600 text-white'
               : 'rounded-bl-md bg-white text-slate-800 dark:bg-slate-800 dark:text-slate-100'
           } ${m.pending ? 'opacity-60' : ''}`}
         >
           {showSender && !own && (
             <button
               onClick={(e) => { e.stopPropagation(); onOpenProfile?.(m.sender_id); }}
-              className="mb-0.5 block text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400"
+              className="mb-0.5 block text-xs font-semibold text-accent-600 hover:underline dark:text-accent-400"
             >
               {m.sender_name}
             </button>
           )}
 
           {m.forwarded_from && (
-            <p className={`mb-0.5 text-[11px] italic ${own ? 'text-blue-100' : 'text-slate-400'}`}>
+            <p className={`mb-0.5 text-[11px] italic ${own ? 'text-accent-100' : 'text-slate-400'}`}>
               ➡️ Forwarded from {m.forwarded_from.sender_name}
             </p>
           )}
@@ -334,11 +334,11 @@ export default function MessageBubble({
               type="button"
               onClick={(e) => { e.stopPropagation(); onJumpToMessage?.(m.reply_to.id); }}
               className={`mb-1 block w-full rounded-lg border-l-2 px-2 py-1 text-left text-xs transition hover:brightness-95 ${
-                own ? 'border-blue-200 bg-blue-500/30 text-blue-50' : 'border-blue-400 bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                own ? 'border-accent-200 bg-accent-500/30 text-accent-50' : 'border-accent-400 bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
               }`}
             >
               <p className="font-semibold">{m.reply_to.sender_name}</p>
-              <p className="truncate">{m.reply_to.text ? renderInlineText(m.reply_to.text, own ? 'underline' : 'underline text-blue-600 dark:text-blue-400') : 'Attachment'}</p>
+              <p className="truncate">{m.reply_to.text ? renderInlineText(m.reply_to.text, own ? 'underline' : 'underline text-accent-600 dark:text-accent-400') : 'Attachment'}</p>
             </button>
           )}
 
@@ -361,11 +361,11 @@ export default function MessageBubble({
                       disabled={busy || m.poll.closed}
                       onClick={() => vote(i)}
                       className={`relative overflow-hidden rounded-lg px-2.5 py-1.5 text-left text-xs disabled:opacity-70 ${
-                        own ? 'bg-blue-500/40' : 'bg-slate-100 dark:bg-slate-700'
+                        own ? 'bg-accent-500/40' : 'bg-slate-100 dark:bg-slate-700'
                       }`}
                     >
                       <span
-                        className={`absolute inset-y-0 left-0 ${own ? 'bg-blue-400/50' : 'bg-blue-500/20'}`}
+                        className={`absolute inset-y-0 left-0 ${own ? 'bg-accent-400/50' : 'bg-accent-500/20'}`}
                         style={{ width: `${pct}%` }}
                       />
                       <span className="relative flex items-center justify-between gap-2">
@@ -392,14 +392,14 @@ export default function MessageBubble({
                   );
                 })}
               </div>
-              <p className={`mt-1.5 text-[11px] ${own ? 'text-blue-100' : 'text-slate-400'}`}>
+              <p className={`mt-1.5 text-[11px] ${own ? 'text-accent-100' : 'text-slate-400'}`}>
                 {m.poll.total_votes} vote{m.poll.total_votes === 1 ? '' : 's'}
                 {m.poll.multiple_choice ? ' · Select one or more' : ' · Select one'}
               </p>
               {m.poll.total_votes > 0 && (
                 <button
                   onClick={() => setViewingVotes(true)}
-                  className={`mt-1 block w-full text-center text-[11px] font-semibold ${own ? 'text-blue-100 hover:text-white' : 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400'}`}
+                  className={`mt-1 block w-full text-center text-[11px] font-semibold ${own ? 'text-accent-100 hover:text-white' : 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400'}`}
                 >
                   View votes
                 </button>
@@ -472,7 +472,7 @@ export default function MessageBubble({
             m.text && m.type !== 'poll' ? (
               <div className="whitespace-pre-wrap break-words text-sm">
                 {renderMessageText(m.text, {
-                  linkClassName: own ? 'underline underline-offset-2 text-blue-100' : 'underline underline-offset-2 text-blue-600 dark:text-blue-400',
+                  linkClassName: own ? 'underline underline-offset-2 text-accent-100' : 'underline underline-offset-2 text-accent-600 dark:text-accent-400',
                   mentions: m.enriched_mentions,
                   onMentionClick: (mention) => {
                     if (!mention.user_id || !currentUserId || mention.user_id === currentUserId) return;
@@ -488,7 +488,7 @@ export default function MessageBubble({
 
           <ActionButtons message={m} own={own} onChanged={onChanged} />
 
-          <div className={`mt-0.5 flex items-center justify-end gap-1 text-[10px] ${own ? 'text-blue-100' : 'text-slate-400'}`}>
+          <div className={`mt-0.5 flex items-center justify-end gap-1 text-[10px] ${own ? 'text-accent-100' : 'text-slate-400'}`}>
             {m.edited_at ? <span className="italic">edited</span> : null}
             <span>{clockLabel(m.sent_at)}</span>
             {own ? <Ticks status={m.status} /> : null}
@@ -505,7 +505,7 @@ export default function MessageBubble({
                     onClick={() => react(emoji)}
                     title={names}
                     className={`flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] ${
-                      own ? 'bg-blue-500/40' : 'bg-slate-100 dark:bg-slate-700'
+                      own ? 'bg-accent-500/40' : 'bg-slate-100 dark:bg-slate-700'
                     }`}
                   >
                     {customUrl ? <img src={customUrl} alt={emoji} className="h-3.5 w-3.5 object-contain" /> : emoji}
@@ -517,7 +517,7 @@ export default function MessageBubble({
           )}
 
           {reads && (
-            <div className={`mt-1.5 border-t pt-1.5 text-[10px] ${own ? 'border-blue-500/40 text-blue-100' : 'border-slate-200 text-slate-500'}`}>
+            <div className={`mt-1.5 border-t pt-1.5 text-[10px] ${own ? 'border-accent-500/40 text-accent-100' : 'border-slate-200 text-slate-500'}`}>
               {reads.error ? (
                 <span>Couldn’t load read receipts</span>
               ) : (

@@ -23,7 +23,7 @@ export default class ErrorBoundary extends React.Component {
             <p className="mt-2 text-sm text-slate-500">{this.state.error.message}</p>
             <button
               onClick={() => location.reload()}
-              className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              className="mt-4 rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-700"
             >
               Reload
             </button>

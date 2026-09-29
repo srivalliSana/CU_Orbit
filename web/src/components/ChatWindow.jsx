@@ -393,7 +393,7 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
                 className="flex flex-col items-center gap-1 rounded-lg p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <span
-                  className={`h-8 w-8 rounded-full border ${wallpaper === w.key ? 'ring-2 ring-blue-500' : 'border-slate-300 dark:border-slate-600'}`}
+                  className={`h-8 w-8 rounded-full border ${wallpaper === w.key ? 'ring-2 ring-accent-500' : 'border-slate-300 dark:border-slate-600'}`}
                   style={{ backgroundColor: wallpaperColor(w.key, isDark) || (isDark ? '#0f172a' : '#f1f5f9') }}
                 />
                 <span className="text-[10px] text-slate-500 dark:text-slate-400">{w.label}</span>
@@ -455,7 +455,7 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
                   </span>
                 </div>
               )}
-              <div id={`msg-${m.id}`} className={highlightId === m.id ? 'rounded-2xl ring-2 ring-blue-400 transition-shadow' : ''}>
+              <div id={`msg-${m.id}`} className={highlightId === m.id ? 'rounded-2xl ring-2 ring-accent-400 transition-shadow' : ''}>
                 <MessageBubble
                   message={m}
                   own={m.sender_id === user?.id}

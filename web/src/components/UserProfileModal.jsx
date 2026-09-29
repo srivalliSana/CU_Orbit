@@ -72,13 +72,13 @@ export default function UserProfileModal({ userId, currentUser, onClose, onOpenC
             )}
             {user.bio && <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{user.bio}</p>}
             {user.role && user.role !== 'student' && (
-              <p className="mt-1 text-[11px] uppercase tracking-wide text-blue-500">{user.role}</p>
+              <p className="mt-1 text-[11px] uppercase tracking-wide text-accent-500">{user.role}</p>
             )}
 
             {!isMe && (
               <button
                 onClick={sendMessage}
-                className="mt-4 w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                className="mt-4 w-full rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-700"
               >
                 Send message
               </button>
@@ -124,7 +124,7 @@ export default function UserProfileModal({ userId, currentUser, onClose, onOpenC
                   onChange={(e) => setReportReason(e.target.value)}
                   placeholder="What happened? (optional)"
                   rows={3}
-                  className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                 />
                 <div className="mt-3 flex justify-end gap-2">
                   <button type="button" onClick={() => setReportOpen(false)} className="rounded-lg px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">

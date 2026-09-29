@@ -66,7 +66,7 @@ export default function OAuthConsentScreen({ params, currentUser, onDone }) {
               {info.icon_url ? (
                 <img src={info.icon_url} alt="" className="h-14 w-14 rounded-xl object-cover" />
               ) : (
-                <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-blue-600 text-xl font-semibold text-white">
+                <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-accent-600 text-xl font-semibold text-white">
                   {info.name?.[0]?.toUpperCase() || '?'}
                 </div>
               )}
@@ -95,7 +95,7 @@ export default function OAuthConsentScreen({ params, currentUser, onDone }) {
               </button>
               <button
                 onClick={approve} disabled={busy}
-                className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                className="flex-1 rounded-lg bg-accent-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-700 disabled:opacity-50"
               >
                 {busy ? 'Installing…' : 'Allow'}
               </button>

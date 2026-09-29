@@ -71,14 +71,14 @@ export default function AddToListModal({ channelId, message, onClose, onAdded })
           <form onSubmit={createAndAdd} className="flex items-center gap-2">
             <input
               autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="New list name"
-              className="min-w-0 flex-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+              className="min-w-0 flex-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
             />
-            <button type="submit" disabled={busy} className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+            <button type="submit" disabled={busy} className="shrink-0 rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50">
               {busy ? '…' : 'Create'}
             </button>
           </form>
         ) : (
-          <button onClick={() => setCreating(true)} className="text-xs font-medium text-blue-600 hover:underline">
+          <button onClick={() => setCreating(true)} className="text-xs font-medium text-accent-600 hover:underline">
             + New list
           </button>
         )}

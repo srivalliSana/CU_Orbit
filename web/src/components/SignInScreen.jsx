@@ -150,12 +150,12 @@ export default function SignInScreen({ onSignedIn }) {
               onChange={(e) => setTwofaCode(e.target.value)}
               placeholder="6-digit code"
               maxLength={6}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-center text-lg tracking-[0.4em] outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-center text-lg tracking-[0.4em] outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
             />
             <button
               type="submit"
               disabled={verifying}
-              className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="w-full rounded-lg bg-accent-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-700 disabled:opacity-50"
             >
               {verifying ? 'Verifying…' : 'Confirm'}
             </button>
@@ -163,7 +163,7 @@ export default function SignInScreen({ onSignedIn }) {
               type="button"
               disabled={resendIn > 0}
               onClick={resendTwofaCode}
-              className="w-full text-center text-xs text-blue-600 hover:text-blue-700 disabled:text-slate-300"
+              className="w-full text-center text-xs text-accent-600 hover:text-accent-700 disabled:text-slate-300"
             >
               {resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend code'}
             </button>
@@ -205,12 +205,12 @@ export default function SignInScreen({ onSignedIn }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@cutm.ac.in"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
             />
             <button
               type="submit"
               disabled={sending}
-              className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="w-full rounded-lg bg-accent-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-700 disabled:opacity-50"
             >
               {sending ? 'Sending…' : 'Email me a code'}
             </button>
@@ -229,12 +229,12 @@ export default function SignInScreen({ onSignedIn }) {
               onChange={(e) => setCode(e.target.value)}
               placeholder="6-digit code"
               maxLength={6}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-center text-lg tracking-[0.4em] outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-center text-lg tracking-[0.4em] outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
             />
             <button
               type="submit"
               disabled={verifying}
-              className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="w-full rounded-lg bg-accent-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-700 disabled:opacity-50"
             >
               {verifying ? 'Verifying…' : 'Sign in'}
             </button>
@@ -246,7 +246,7 @@ export default function SignInScreen({ onSignedIn }) {
                 type="button"
                 disabled={resendIn > 0}
                 onClick={sendCode}
-                className="text-blue-600 hover:text-blue-700 disabled:text-slate-300"
+                className="text-accent-600 hover:text-accent-700 disabled:text-slate-300"
               >
                 {resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend code'}
               </button>

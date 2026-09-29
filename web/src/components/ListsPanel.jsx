@@ -92,7 +92,7 @@ function ListsHome({ channelId, onOpenList, onClose }) {
           <p className="text-xs text-slate-500 dark:text-slate-400">Task and project lists shared with this channel.</p>
           <button
             onClick={() => setCreating((s) => !s)}
-            className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+            className="shrink-0 rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700"
           >
             {creating ? 'Cancel' : '+ New list'}
           </button>
@@ -103,9 +103,9 @@ function ListsHome({ channelId, onOpenList, onClose }) {
             <input
               autoFocus value={name} onChange={(e) => setName(e.target.value)}
               placeholder="List name, e.g. Bug tracker"
-              className="min-w-0 flex-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+              className="min-w-0 flex-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
             />
-            <button type="submit" disabled={busy} className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+            <button type="submit" disabled={busy} className="shrink-0 rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50">
               {busy ? 'Creating…' : 'Create'}
             </button>
           </form>
@@ -162,7 +162,7 @@ function ListDetail({ listId, onBack, onClose }) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2">
         <p className="text-sm text-red-600">{error}</p>
-        <button onClick={onBack} className="text-xs text-blue-600 underline">Back to lists</button>
+        <button onClick={onBack} className="text-xs text-accent-600 underline">Back to lists</button>
       </div>
     );
   }
@@ -226,7 +226,7 @@ function ListDetail({ listId, onBack, onClose }) {
           <input
             autoFocus value={nameDraft} onChange={(e) => setNameDraft(e.target.value)}
             onBlur={saveName} onKeyDown={(e) => e.key === 'Enter' && saveName()}
-            className="min-w-0 flex-1 rounded-lg bg-slate-100 px-2 py-1 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-100"
+            className="min-w-0 flex-1 rounded-lg bg-slate-100 px-2 py-1 text-sm font-semibold outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-100"
           />
         ) : (
           <button onClick={() => { setNameDraft(list.name); setRenaming(true); }} className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-slate-800 hover:underline dark:text-slate-100">
@@ -276,7 +276,7 @@ function ListDetail({ listId, onBack, onClose }) {
                   <button
                     onClick={() => setAddingField(true)}
                     title="Add a new column, e.g. Status or Priority"
-                    className="flex h-full w-full items-center justify-center gap-1 whitespace-nowrap py-2 text-xs font-semibold text-slate-500 hover:text-blue-600 dark:text-slate-400"
+                    className="flex h-full w-full items-center justify-center gap-1 whitespace-nowrap py-2 text-xs font-semibold text-slate-500 hover:text-accent-600 dark:text-slate-400"
                   >
                     + Field
                   </button>
@@ -373,7 +373,7 @@ function BoardView({ list, fields, items, members, groupFieldId, onChangeGroupFi
         <p className="text-sm text-slate-500">
           Board view groups items by a Status, Priority, or Dropdown field. This list doesn't have one yet.
         </p>
-        <button onClick={onAddGroupField} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
+        <button onClick={onAddGroupField} className="rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700">
           Add a Status field
         </button>
       </div>
@@ -501,7 +501,7 @@ function FieldHeader({ field, onChanged }) {
         <input
           autoFocus value={name} onChange={(e) => setName(e.target.value)}
           onBlur={save} onKeyDown={(e) => e.key === 'Enter' && save()}
-          className="min-w-0 flex-1 rounded bg-white px-1 py-0.5 text-xs outline-none ring-1 ring-blue-500 dark:bg-slate-900"
+          className="min-w-0 flex-1 rounded bg-white px-1 py-0.5 text-xs outline-none ring-1 ring-accent-500 dark:bg-slate-900"
         />
       ) : (
         <button onClick={() => setEditing(true)} className="min-w-0 flex-1 truncate text-left hover:underline">
@@ -560,12 +560,12 @@ function ItemRow({
           <button
             onClick={onOpenDetail}
             title="Open — comments & details"
-            className={`flex items-center gap-0.5 text-slate-300 hover:text-blue-600 ${item.comment_count ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+            className={`flex items-center gap-0.5 text-slate-300 hover:text-accent-600 ${item.comment_count ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
           >
             💬{item.comment_count > 0 && <span className="text-[10px] font-semibold">{item.comment_count}</span>}
           </button>
           {!isSubtask && (
-            <button onClick={onAddSubtask} title="Add subtask" className="text-slate-300 opacity-0 hover:text-blue-600 group-hover:opacity-100">＋</button>
+            <button onClick={onAddSubtask} title="Add subtask" className="text-slate-300 opacity-0 hover:text-accent-600 group-hover:opacity-100">＋</button>
           )}
           <button onClick={remove} title="Delete item" className="text-slate-300 opacity-0 hover:text-red-600 group-hover:opacity-100">×</button>
         </div>
@@ -706,12 +706,12 @@ function AddFieldModal({ onCreate, onClose }) {
         <label className="text-[11px] font-medium text-slate-500">Name</label>
         <input
           autoFocus required value={name} onChange={(e) => setName(e.target.value)}
-          className="mt-0.5 mb-3 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+          className="mt-0.5 mb-3 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
         />
         <label className="text-[11px] font-medium text-slate-500">Type</label>
         <select
           value={type} onChange={(e) => setType(e.target.value)}
-          className="mt-0.5 mb-3 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+          className="mt-0.5 mb-3 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
         >
           {FIELD_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
         </select>
@@ -721,13 +721,13 @@ function AddFieldModal({ onCreate, onClose }) {
             <textarea
               rows={3} value={optionsText} onChange={(e) => setOptionsText(e.target.value)}
               placeholder={'To do\nIn progress\nDone'}
-              className="mt-0.5 mb-3 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+              className="mt-0.5 mb-3 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
             />
           </>
         )}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</button>
-          <button type="submit" disabled={busy} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+          <button type="submit" disabled={busy} className="rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50">
             {busy ? 'Adding…' : 'Add field'}
           </button>
         </div>
@@ -842,7 +842,7 @@ function ImportCsvModal({ listId, fields, onDone, onClose }) {
             <button onClick={() => { setRows(null); if (fileRef.current) fileRef.current.value = ''; }} className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">
               Choose a different file
             </button>
-            <button onClick={submit} disabled={busy} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+            <button onClick={submit} disabled={busy} className="rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50">
               {busy ? 'Importing…' : 'Import'}
             </button>
           </div>
@@ -951,9 +951,9 @@ function ItemDetailModal({ item, fields, members, onChanged, onClose }) {
         <form onSubmit={send} className="flex items-center gap-2 border-t border-slate-200 p-3 dark:border-slate-800">
           <input
             value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Add a comment…"
-            className="min-w-0 flex-1 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+            className="min-w-0 flex-1 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
           />
-          <button type="submit" disabled={sending || !draft.trim()} className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+          <button type="submit" disabled={sending || !draft.trim()} className="shrink-0 rounded-lg bg-accent-600 px-3 py-2 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50">
             Send
           </button>
         </form>

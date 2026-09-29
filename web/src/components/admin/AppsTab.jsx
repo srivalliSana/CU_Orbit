@@ -35,7 +35,7 @@ export default function AppsTab() {
         </p>
         <button
           onClick={() => setShowCreate((s) => !s)}
-          className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+          className="shrink-0 rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700"
         >
           {showCreate ? 'Cancel' : '+ Register app'}
         </button>
@@ -107,21 +107,21 @@ function CreateAppForm({ onCreated }) {
         <input
           required value={name} onChange={(e) => setName(e.target.value)}
           placeholder="DesignHub"
-          className="mt-0.5 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+          className="mt-0.5 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
         />
       </div>
       <div>
         <label className="text-[11px] font-medium text-slate-500">Description (optional)</label>
         <input
           value={description} onChange={(e) => setDescription(e.target.value)}
-          className="mt-0.5 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+          className="mt-0.5 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
         />
       </div>
       <div>
         <label className="text-[11px] font-medium text-slate-500">Icon URL (optional)</label>
         <input
           value={iconUrl} onChange={(e) => setIconUrl(e.target.value)}
-          className="mt-0.5 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+          className="mt-0.5 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
         />
       </div>
       <div>
@@ -129,7 +129,7 @@ function CreateAppForm({ onCreated }) {
         <textarea
           required rows={2} value={redirectUris} onChange={(e) => setRedirectUris(e.target.value)}
           placeholder="https://designhub.example.com/oauth/callback"
-          className="mt-0.5 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 font-mono text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+          className="mt-0.5 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 font-mono text-xs text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
         />
       </div>
       <div>
@@ -146,7 +146,7 @@ function CreateAppForm({ onCreated }) {
       {error && <p className="text-xs text-red-600">{error}</p>}
       <button
         type="submit" disabled={busy}
-        className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        className="rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
       >
         {busy ? 'Registering…' : 'Register app'}
       </button>
@@ -177,7 +177,7 @@ function NewSecretModal({ result, onClose }) {
             <label className="text-[11px] font-medium text-slate-500">Client secret</label>
             <div className="mt-0.5 flex items-center gap-2">
               <input readOnly value={result.client_secret} onFocus={(e) => e.target.select()} className="min-w-0 flex-1 rounded-lg bg-slate-100 px-2.5 py-1.5 font-mono text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-200" />
-              <button onClick={copy} className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
+              <button onClick={copy} className="shrink-0 rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700">
                 {copied ? 'Copied' : 'Copy'}
               </button>
             </div>
@@ -281,7 +281,7 @@ function EventsSection({ app, onChanged }) {
       </p>
       <input
         value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://.../events"
-        className="mb-2 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 font-mono text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+        className="mb-2 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 font-mono text-xs text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
       />
       <div className="mb-2 flex flex-col gap-1.5">
         {EVENT_OPTIONS.map((e) => (
@@ -294,7 +294,7 @@ function EventsSection({ app, onChanged }) {
       {error && <p className="mb-1 text-[11px] text-red-600">{error}</p>}
       <button
         onClick={save} disabled={busy}
-        className="rounded-lg bg-blue-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        className="rounded-lg bg-accent-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-accent-700 disabled:opacity-50"
       >
         {saved ? 'Saved' : busy ? 'Saving…' : 'Save events config'}
       </button>
@@ -385,13 +385,13 @@ function SlashCommandsSection({ appId }) {
       <form onSubmit={add} className="flex items-center gap-1.5">
         <input
           value={command} onChange={(e) => setCommand(e.target.value)} placeholder="command"
-          className="w-24 rounded-lg bg-slate-100 px-2 py-1 font-mono text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+          className="w-24 rounded-lg bg-slate-100 px-2 py-1 font-mono text-xs text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
         />
         <input
           value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)} placeholder="https://.../webhook"
-          className="min-w-0 flex-1 rounded-lg bg-slate-100 px-2 py-1 font-mono text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+          className="min-w-0 flex-1 rounded-lg bg-slate-100 px-2 py-1 font-mono text-xs text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
         />
-        <button type="submit" disabled={busy} className="shrink-0 rounded-lg bg-blue-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+        <button type="submit" disabled={busy} className="shrink-0 rounded-lg bg-accent-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-accent-700 disabled:opacity-50">
           Add
         </button>
       </form>

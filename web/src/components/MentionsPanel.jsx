@@ -38,10 +38,10 @@ export default function MentionsPanel({ onClose, onOpenChat }) {
             key={m.id}
             onClick={() => open(m)}
             className={`flex w-full flex-col items-start gap-0.5 border-b border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60 ${
-              !m.is_read ? 'bg-blue-50/60 dark:bg-slate-800/40' : ''
+              !m.is_read ? 'bg-accent-50/60 dark:bg-slate-800/40' : ''
             }`}
           >
-            <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">{m.channel_name}</span>
+            <span className="text-xs font-semibold text-accent-600 dark:text-accent-400">{m.channel_name}</span>
             <span className="line-clamp-2 text-sm text-slate-700 dark:text-slate-200">
               <b>{m.sender_name}:</b> {m.text}
             </span>

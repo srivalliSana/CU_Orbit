@@ -52,7 +52,7 @@ export default function WorkflowsPanel({ channelId, onClose }) {
       <header className="flex items-center justify-between border-b border-slate-200 px-5 py-3 dark:border-slate-800">
         <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">⚡ Workflows</h2>
         <div className="flex items-center gap-2">
-          <button onClick={() => setCreating(true)} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
+          <button onClick={() => setCreating(true)} className="rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700">
             + New workflow
           </button>
           <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-slate-600">✕</button>
@@ -148,20 +148,20 @@ function WorkflowForm({ channelId, onCreated, onClose }) {
         <label className="text-[11px] font-medium text-slate-500">Name</label>
         <input
           autoFocus required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Welcome new members"
-          className="mt-0.5 mb-3 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+          className="mt-0.5 mb-3 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
         />
 
         <label className="text-[11px] font-medium text-slate-500">When…</label>
         <select
           value={triggerType} onChange={(e) => setTriggerType(e.target.value)}
-          className="mt-0.5 mb-2 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+          className="mt-0.5 mb-2 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
         >
           {Object.entries(TRIGGER_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
         </select>
         {triggerType === 'message_contains' && (
           <input
             value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="keyword, e.g. help"
-            className="mb-3 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+            className="mb-3 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
           />
         )}
         {triggerType === 'schedule' && (
@@ -176,7 +176,7 @@ function WorkflowForm({ channelId, onCreated, onClose }) {
               {DAY_LABELS.map((label, i) => (
                 <button
                   type="button" key={label} onClick={() => toggleDay(i)}
-                  className={`rounded-full px-2 py-1 text-[11px] font-medium ${days.includes(i) ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}
+                  className={`rounded-full px-2 py-1 text-[11px] font-medium ${days.includes(i) ? 'bg-accent-600 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}
                 >
                   {label}
                 </button>
@@ -188,7 +188,7 @@ function WorkflowForm({ channelId, onCreated, onClose }) {
         <label className="text-[11px] font-medium text-slate-500">Then…</label>
         <select
           value={actionType} onChange={(e) => setActionType(e.target.value)}
-          className="mt-0.5 mb-2 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+          className="mt-0.5 mb-2 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
         >
           {Object.entries(ACTION_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
         </select>
@@ -204,13 +204,13 @@ function WorkflowForm({ channelId, onCreated, onClose }) {
         <textarea
           value={actionBody} onChange={(e) => setActionBody(e.target.value)} rows={3}
           placeholder={actionType === 'post_message' ? 'Message text — use {{user}} for the triggering person\'s name' : 'Item title — use {{user}} for the triggering person\'s name'}
-          className="mb-3 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+          className="mb-3 w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
         />
 
         {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</button>
-          <button type="submit" disabled={busy} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+          <button type="submit" disabled={busy} className="rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50">
             {busy ? 'Creating…' : 'Create workflow'}
           </button>
         </div>

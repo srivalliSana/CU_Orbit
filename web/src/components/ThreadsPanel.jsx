@@ -63,7 +63,7 @@ function ThreadsHome({ onOpenThread, onClose }) {
               className="flex w-full flex-col items-start gap-0.5 border-b border-slate-100 px-5 py-3 text-left transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
             >
               <div className="flex w-full items-center justify-between gap-2">
-                <span className="truncate text-xs font-semibold text-blue-600 dark:text-blue-400">
+                <span className="truncate text-xs font-semibold text-accent-600 dark:text-accent-400">
                   {t.is_dm ? 'Direct message' : `# ${t.channel_name || 'channel'}`}
                 </span>
                 <span className="shrink-0 text-[11px] text-slate-400">{timeLabel(preview.sent_at)}</span>
@@ -73,7 +73,7 @@ function ThreadsHome({ onOpenThread, onClose }) {
                 <p className="line-clamp-1 flex-1 text-sm text-slate-700 dark:text-slate-200">
                   <b>{preview.sender_name}:</b> {preview.text || 'Attachment'}
                 </p>
-                {t.has_unread && <span className="h-2 w-2 shrink-0 rounded-full bg-blue-600" />}
+                {t.has_unread && <span className="h-2 w-2 shrink-0 rounded-full bg-accent-600" />}
               </div>
               <span className="text-[11px] text-slate-400">{t.reply_count} {t.reply_count === 1 ? 'reply' : 'replies'}</span>
             </button>
@@ -108,7 +108,7 @@ function ThreadDetail({ parentId, user, onBack, onClose, onOpenDm, onOpenProfile
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2">
         <p className="text-sm text-red-600">{error}</p>
-        <button onClick={onBack} className="text-xs text-blue-600 underline">Back to threads</button>
+        <button onClick={onBack} className="text-xs text-accent-600 underline">Back to threads</button>
       </div>
     );
   }

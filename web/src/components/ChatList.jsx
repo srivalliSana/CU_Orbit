@@ -98,7 +98,7 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
           onClick={onNewGroup}
           title="New group"
           aria-label="New group"
-          className="shrink-0 rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800"
+          className="shrink-0 rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-accent-600 dark:hover:bg-slate-800"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M19 8v6M22 11h-6" />
@@ -119,7 +119,7 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
             placeholder="Search"
             title="Try from:, in:, before:, or after: to filter results"
             aria-label="Search conversations. Supports from:, in:, before:, and after: filters"
-            className="w-full rounded-lg bg-slate-100 py-2 pl-9 pr-3 text-sm outline-none ring-blue-500/40 placeholder:text-slate-400 transition focus:bg-white focus:ring-2 dark:bg-slate-800/70 dark:text-slate-100 dark:focus:bg-slate-800"
+            className="w-full rounded-lg bg-slate-100 py-2 pl-9 pr-3 text-sm outline-none ring-accent-500/40 placeholder:text-slate-400 transition focus:bg-white focus:ring-2 dark:bg-slate-800/70 dark:text-slate-100 dark:focus:bg-slate-800"
           />
         </div>
         {searchFocused && q.trim().length === 0 && (
@@ -137,7 +137,7 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
               onClick={() => onTabChange(t)}
               className={`rounded-full px-3 py-1 text-xs font-semibold capitalize transition ${
                 tab === t
-                  ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
+                  ? 'bg-accent-600 text-white shadow-sm shadow-accent-600/30'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
               }`}
             >
@@ -197,7 +197,7 @@ export default function ChatList({ user, chats, workspaces, workspaceId, onSwitc
                   onClick={() => onSelect({ id: r.container_id, kind: isDm ? 'dm' : 'channel', title })}
                   className="flex w-full flex-col items-start gap-0.5 px-4 py-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/60"
                 >
-                  <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">{title}</span>
+                  <span className="text-xs font-semibold text-accent-600 dark:text-accent-400">{title}</span>
                   <span className="line-clamp-2 text-xs text-slate-500">
                     <b>{r.sender_name}:</b> {r.text}
                   </span>
@@ -310,10 +310,10 @@ function Row({ active, onClick, avatar, title, preview, time, unread, mention, m
   return (
     <div
       className={`group relative flex w-full items-center gap-3 py-2.5 pl-4 pr-2 text-left transition ${
-        active ? 'bg-blue-50 dark:bg-slate-800/80' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+        active ? 'bg-accent-50 dark:bg-slate-800/80' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
       }`}
     >
-      {active && <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-blue-600" />}
+      {active && <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-accent-600" />}
       <button onClick={onClick} className="flex min-w-0 flex-1 items-center gap-3 text-left">
         {avatar}
         <div className="min-w-0 flex-1">
@@ -329,7 +329,7 @@ function Row({ active, onClick, avatar, title, preview, time, unread, mention, m
             <span className="flex shrink-0 items-center gap-1">
               {mention ? <span className="text-xs font-bold text-red-500">@</span> : null}
               {unread > 0 ? (
-                <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                <span className="rounded-full bg-accent-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
                   {unread > 99 ? '99+' : unread}
                 </span>
               ) : null}

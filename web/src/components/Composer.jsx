@@ -362,7 +362,7 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
               onMouseDown={(e) => { e.preventDefault(); pickSlashCommand(c); }}
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-700"
             >
-              <span className="shrink-0 font-mono font-semibold text-blue-600 dark:text-blue-400">/{c.command}</span>
+              <span className="shrink-0 font-mono font-semibold text-accent-600 dark:text-accent-400">/{c.command}</span>
               <span className="truncate text-xs text-slate-500">{c.usage_hint || c.description}</span>
             </button>
           ))}
@@ -383,7 +383,7 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
         </div>
       )}
       {replyTo && (
-        <div className="mb-2 flex items-center gap-2 rounded-lg border-l-2 border-blue-500 bg-slate-100 px-3 py-1.5 text-xs dark:bg-slate-800">
+        <div className="mb-2 flex items-center gap-2 rounded-lg border-l-2 border-accent-500 bg-slate-100 px-3 py-1.5 text-xs dark:bg-slate-800">
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-slate-600 dark:text-slate-300">Replying to {replyTo.sender_name}</p>
             <p className="truncate text-slate-500 dark:text-slate-400">{replyTo.text ? renderInlineText(replyTo.text, 'underline') : 'Attachment'}</p>
@@ -488,7 +488,7 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
           aria-label="Formatting"
           title="Formatting"
           aria-pressed={formattingOpen}
-          className={`shrink-0 rounded-full p-2 text-sm font-semibold ${formattingOpen ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+          className={`shrink-0 rounded-full p-2 text-sm font-semibold ${formattingOpen ? 'bg-accent-100 text-accent-700 dark:bg-accent-900/50 dark:text-accent-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
         >
           Aa
         </button>
@@ -502,7 +502,7 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
           onPaste={onPaste}
           placeholder="Type a message"
           aria-label="Message"
-          className="max-h-40 flex-1 resize-none rounded-2xl bg-slate-100 px-4 py-2.5 text-sm outline-none ring-blue-500/40 placeholder:text-slate-400 focus:ring-2 dark:bg-slate-800 dark:text-slate-100"
+          className="max-h-40 flex-1 resize-none rounded-2xl bg-slate-100 px-4 py-2.5 text-sm outline-none ring-accent-500/40 placeholder:text-slate-400 focus:ring-2 dark:bg-slate-800 dark:text-slate-100"
         />
 
         <div className="relative shrink-0">
@@ -577,12 +577,12 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
                     value={scheduleAt}
                     onChange={(e) => setScheduleAt(e.target.value)}
                     min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
-                    className="w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-900 dark:text-slate-200"
+                    className="w-full rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-900 dark:text-slate-200"
                   />
                   <button
                     onClick={scheduleSubmit}
                     disabled={!scheduleAt}
-                    className="mt-2 w-full rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    className="mt-2 w-full rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
                   >
                     Schedule
                   </button>
@@ -596,7 +596,7 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
           onClick={submit}
           disabled={!text.trim() && !file}
           aria-label="Send message"
-          className="shrink-0 rounded-full bg-blue-600 p-2.5 text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+          className="shrink-0 rounded-full bg-accent-600 p-2.5 text-white transition hover:bg-accent-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />

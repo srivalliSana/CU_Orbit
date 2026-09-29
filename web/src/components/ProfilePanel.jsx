@@ -70,7 +70,7 @@ export default function ProfilePanel({ user, onClose, onUpdated, onOpenSettings,
         <div className="flex flex-col items-center text-center">
           <label className="group relative cursor-pointer">
             <Avatar name={user?.name} url={user?.avatarUrl} size={88} />
-            <span className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-[11px] text-white ring-2 ring-white dark:ring-slate-900">
+            <span className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-accent-600 text-[11px] text-white ring-2 ring-white dark:ring-slate-900">
               {uploading ? '…' : '📷'}
             </span>
             <input type="file" accept="image/*" className="hidden" onChange={changeAvatar} disabled={uploading} />
@@ -105,7 +105,7 @@ export default function ProfilePanel({ user, onClose, onUpdated, onOpenSettings,
                 <select
                   value={statusDuration}
                   onChange={(e) => setStatusDuration(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:text-slate-100"
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:text-slate-100"
                 >
                   <option value="">Don't clear automatically</option>
                   <option value="30">In 30 minutes</option>
@@ -122,7 +122,7 @@ export default function ProfilePanel({ user, onClose, onUpdated, onOpenSettings,
                   onChange={(e) => setBio(e.target.value)}
                   rows={3}
                   placeholder="A little about you"
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:text-slate-100"
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:text-slate-100"
                 />
               </div>
               {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
@@ -137,7 +137,7 @@ export default function ProfilePanel({ user, onClose, onUpdated, onOpenSettings,
                 <button
                   onClick={save}
                   disabled={saving}
-                  className="rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  className="rounded-lg bg-accent-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
                 >
                   {saving ? 'Saving…' : 'Save'}
                 </button>
@@ -199,7 +199,7 @@ function Field({ label, value, onChange, placeholder }) {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="mt-1 w-full rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:text-slate-100"
+        className="mt-1 w-full rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:text-slate-100"
       />
     </div>
   );

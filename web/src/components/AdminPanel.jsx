@@ -36,7 +36,7 @@ export default function AdminPanel({ currentUser, onClose }) {
               onClick={() => setTab(t.id)}
               className={`rounded-t-lg px-3 py-2 text-xs font-medium ${
                 tab === t.id
-                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  ? 'border-b-2 border-accent-600 text-accent-600'
                   : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
               }`}
             >
@@ -132,12 +132,12 @@ function MembersTab({ currentUser }) {
             value={promoteEmail}
             onChange={(e) => setPromoteEmail(e.target.value)}
             placeholder="name@cutm.ac.in"
-            className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:text-slate-100"
+            className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:text-slate-100"
           />
           <button
             type="submit"
             disabled={promoteBusy || !promoteEmail.trim()}
-            className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="shrink-0 rounded-lg bg-accent-600 px-3 py-2 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
           >
             {promoteBusy ? 'Promoting…' : promoteDone ? 'Done ✓' : 'Promote'}
           </button>
@@ -154,13 +154,13 @@ function MembersTab({ currentUser }) {
           onChange={(e) => setBulkEmails(e.target.value)}
           placeholder="one@cutm.ac.in, two@cutmap.ac.in ..."
           rows={2}
-          className="mt-1 w-full rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:text-slate-100"
+          className="mt-1 w-full rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:text-slate-100"
         />
         <div className="mt-2 flex items-center justify-between">
           <button
             type="submit"
             disabled={bulkBusy || !bulkEmails.trim()}
-            className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
           >
             {bulkBusy ? 'Adding…' : 'Add'}
           </button>

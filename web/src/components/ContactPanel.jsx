@@ -101,7 +101,7 @@ export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMess
     <aside className="fixed inset-0 z-30 flex w-full flex-col bg-white dark:bg-slate-900 md:static md:z-auto md:w-full md:max-w-sm md:shrink-0 md:border-l md:border-slate-200 md:dark:border-slate-800">
       <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
         {view !== 'main' ? (
-          <button onClick={() => setView('main')} className="text-sm font-medium text-blue-600 hover:text-blue-700">
+          <button onClick={() => setView('main')} className="text-sm font-medium text-accent-600 hover:text-accent-700">
             ← Back
           </button>
         ) : (
@@ -119,7 +119,7 @@ export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMess
                   key={c.key}
                   onClick={() => setMediaCategory(c.key)}
                   className={`flex-1 rounded-md py-1.5 text-xs font-medium ${
-                    mediaCategory === c.key ? 'bg-white text-blue-600 shadow dark:bg-slate-700' : 'text-slate-500'
+                    mediaCategory === c.key ? 'bg-white text-accent-600 shadow dark:bg-slate-700' : 'text-slate-500'
                   }`}
                 >
                   {c.label}
@@ -142,7 +142,7 @@ export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMess
                 <p className="text-xs font-semibold text-slate-500">{it.sender_name}</p>
                 {view === 'media' && mediaCategory === 'link' ? (
                   (it.links || []).map((url, i) => (
-                    <a key={i} href={url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="block truncate text-blue-600 underline underline-offset-2 dark:text-blue-400">
+                    <a key={i} href={url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="block truncate text-accent-600 underline underline-offset-2 dark:text-accent-400">
                       {url}
                     </a>
                   ))
@@ -160,13 +160,13 @@ export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMess
                           target="_blank"
                           rel="noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="text-blue-600 underline underline-offset-2 dark:text-blue-400"
+                          className="text-accent-600 underline underline-offset-2 dark:text-accent-400"
                         >
                           Open
                         </a>
                         <button
                           onClick={(e) => { e.stopPropagation(); saveFile(it.attachments[0].url, it.attachments[0].name); }}
-                          className="text-blue-600 underline underline-offset-2 dark:text-blue-400"
+                          className="text-accent-600 underline underline-offset-2 dark:text-accent-400"
                         >
                           Save
                         </button>
@@ -229,7 +229,7 @@ export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMess
               <button
                 onClick={openChat}
                 disabled={opening}
-                className="mt-6 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                className="mt-6 w-full rounded-lg bg-accent-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-700 disabled:opacity-50"
               >
                 {opening ? 'Opening…' : 'Send message'}
               </button>
@@ -273,7 +273,7 @@ export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMess
                   onChange={(e) => setReportReason(e.target.value)}
                   placeholder="What happened? (optional)"
                   rows={3}
-                  className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                 />
                 <div className="mt-3 flex justify-end gap-2">
                   <button type="button" onClick={() => setReportOpen(false)} className="rounded-lg px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">

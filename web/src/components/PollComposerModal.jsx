@@ -51,7 +51,7 @@ export default function PollComposerModal({ onCreate, onClose }) {
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           placeholder="Ask a question"
-          className="w-full rounded-lg bg-slate-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+          className="w-full rounded-lg bg-slate-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
         />
 
         <div className="mt-3 space-y-2">
@@ -61,7 +61,7 @@ export default function PollComposerModal({ onCreate, onClose }) {
                 value={opt}
                 onChange={(e) => updateOption(i, e.target.value)}
                 placeholder={`Option ${i + 1}`}
-                className="min-w-0 flex-1 rounded-lg bg-slate-100 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+                className="min-w-0 flex-1 rounded-lg bg-slate-100 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
               />
               {options.length > 2 && (
                 <button type="button" onClick={() => removeOption(i)} className="shrink-0 text-slate-400 hover:text-slate-600">✕</button>
@@ -70,7 +70,7 @@ export default function PollComposerModal({ onCreate, onClose }) {
           ))}
         </div>
 
-        <button type="button" onClick={addOption} className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-700">
+        <button type="button" onClick={addOption} className="mt-2 text-xs font-medium text-accent-600 hover:text-accent-700">
           + Add option
         </button>
 
@@ -82,7 +82,7 @@ export default function PollComposerModal({ onCreate, onClose }) {
         <button
           type="submit"
           disabled={busy}
-          className="mt-4 w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="mt-4 w-full rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-700 disabled:opacity-50"
         >
           {busy ? 'Creating…' : 'Create poll'}
         </button>

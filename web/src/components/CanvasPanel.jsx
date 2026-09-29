@@ -76,7 +76,7 @@ export default function CanvasPanel({ channelId, onClose }) {
               <button onClick={() => setEditing(false)} className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">
                 Cancel
               </button>
-              <button onClick={save} disabled={saving} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+              <button onClick={save} disabled={saving} className="rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50">
                 {saving ? 'Saving…' : 'Save'}
               </button>
             </>
@@ -96,7 +96,7 @@ export default function CanvasPanel({ channelId, onClose }) {
             <p className="max-w-sm text-xs text-slate-400">
               A canvas is a shared doc pinned to the channel — meeting notes, a project brief, onboarding info, anything worth keeping visible and editable by the whole channel.
             </p>
-            <button onClick={startCreate} disabled={saving} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+            <button onClick={startCreate} disabled={saving} className="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-700 disabled:opacity-50">
               {saving ? 'Creating…' : 'Create canvas'}
             </button>
           </div>
@@ -108,7 +108,7 @@ export default function CanvasPanel({ channelId, onClose }) {
             {canvas.body ? (
               <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700 dark:text-slate-200">
                 {renderMessageText(canvas.body, {
-                  linkClassName: 'underline underline-offset-2 text-blue-600 dark:text-blue-400',
+                  linkClassName: 'underline underline-offset-2 text-accent-600 dark:text-accent-400',
                 })}
               </div>
             ) : (
@@ -124,14 +124,14 @@ export default function CanvasPanel({ channelId, onClose }) {
               value={titleDraft}
               onChange={(e) => setTitleDraft(e.target.value)}
               placeholder="Title"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-lg font-bold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-lg font-bold text-slate-800 outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             />
             <textarea
               value={bodyDraft}
               onChange={(e) => setBodyDraft(e.target.value)}
               placeholder="Write anything — **bold**, _italic_, links, @mentions all render the same as in chat."
               rows={20}
-              className="w-full flex-1 resize-none rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              className="w-full flex-1 resize-none rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
             />
           </div>
         )}

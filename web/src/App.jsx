@@ -264,7 +264,7 @@ export default function App() {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
         <div className="text-center">
-          <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
+          <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-accent-600" />
           <p className="text-sm text-slate-500">Connecting to Let's Connect…</p>
         </div>
       </div>
@@ -320,7 +320,7 @@ export default function App() {
       />
       <div
         onMouseDown={startResizing}
-        className="hidden w-1 shrink-0 cursor-col-resize bg-slate-200 hover:bg-blue-400 active:bg-blue-500 dark:bg-slate-800 dark:hover:bg-blue-500 md:block"
+        className="hidden w-1 shrink-0 cursor-col-resize bg-slate-200 hover:bg-accent-400 active:bg-accent-500 dark:bg-slate-800 dark:hover:bg-accent-500 md:block"
         role="separator"
         aria-orientation="vertical"
         aria-label="Resize chat list"
@@ -476,7 +476,7 @@ export default function App() {
           <span className="text-sm text-slate-700 dark:text-slate-200">Get notified about new messages?</span>
           <button
             onClick={async () => { await requestPermission(); setAskNotify(false); }}
-            className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+            className="rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700"
           >
             Enable
           </button>

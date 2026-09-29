@@ -77,7 +77,7 @@ export default function NewGroupModal({ user, workspaceId, onClose, onCreated })
             onChange={(e) => setName(e.target.value)}
             maxLength={80}
             placeholder="e.g. BCA 2024 Project Team"
-            className="mt-1 w-full rounded-lg bg-slate-100 px-3 py-2 text-sm outline-none ring-blue-500/40 focus:ring-2 dark:bg-slate-800 dark:text-slate-100"
+            className="mt-1 w-full rounded-lg bg-slate-100 px-3 py-2 text-sm outline-none ring-accent-500/40 focus:ring-2 dark:bg-slate-800 dark:text-slate-100"
           />
 
           <label className="mt-4 block text-xs font-medium text-slate-500">Description (optional)</label>
@@ -86,7 +86,7 @@ export default function NewGroupModal({ user, workspaceId, onClose, onCreated })
             onChange={(e) => setTopic(e.target.value)}
             maxLength={140}
             placeholder="What is this group for?"
-            className="mt-1 w-full rounded-lg bg-slate-100 px-3 py-2 text-sm outline-none ring-blue-500/40 focus:ring-2 dark:bg-slate-800 dark:text-slate-100"
+            className="mt-1 w-full rounded-lg bg-slate-100 px-3 py-2 text-sm outline-none ring-accent-500/40 focus:ring-2 dark:bg-slate-800 dark:text-slate-100"
           />
 
           {user?.role === 'admin' && (
@@ -104,7 +104,7 @@ export default function NewGroupModal({ user, workspaceId, onClose, onCreated })
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search people"
-            className="mt-1 w-full rounded-lg bg-slate-100 px-3 py-2 text-sm outline-none ring-blue-500/40 focus:ring-2 dark:bg-slate-800 dark:text-slate-100"
+            className="mt-1 w-full rounded-lg bg-slate-100 px-3 py-2 text-sm outline-none ring-accent-500/40 focus:ring-2 dark:bg-slate-800 dark:text-slate-100"
           />
 
           <ul className="mt-2 max-h-52 overflow-y-auto">
@@ -130,7 +130,7 @@ export default function NewGroupModal({ user, workspaceId, onClose, onCreated })
           <button
             type="submit"
             disabled={!name.trim() || busy}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40"
+            className="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-700 disabled:opacity-40"
           >
             {busy ? 'Creating…' : 'Create group'}
           </button>

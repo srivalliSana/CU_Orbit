@@ -122,7 +122,7 @@ export function renderMarkdown(text, linkClassName) {
 }
 
 const BROADCAST_TAGS = ['@all', '@everyone', '@channel', '@here'];
-const MENTION_CHIP_CLASS = 'rounded bg-blue-100 px-1 font-medium text-blue-700 dark:bg-blue-900/50 dark:text-blue-300';
+const MENTION_CHIP_CLASS = 'rounded bg-accent-100 px-1 font-medium text-accent-700 dark:bg-accent-900/50 dark:text-accent-300';
 
 /**
  * Same as renderMarkdown, but first pulls out @mention spans (matched

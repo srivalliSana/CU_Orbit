@@ -261,7 +261,7 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
     <aside className="fixed inset-0 z-30 flex w-full flex-col bg-white dark:bg-slate-900 md:static md:z-auto md:w-full md:max-w-sm md:shrink-0 md:border-l md:border-slate-200 md:dark:border-slate-800">
       <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
         {view !== 'main' ? (
-          <button onClick={() => setView('main')} className="text-sm font-medium text-blue-600 hover:text-blue-700">
+          <button onClick={() => setView('main')} className="text-sm font-medium text-accent-600 hover:text-accent-700">
             ← Back
           </button>
         ) : (
@@ -279,7 +279,7 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                   key={c.key}
                   onClick={() => setMediaCategory(c.key)}
                   className={`flex-1 rounded-md py-1.5 text-xs font-medium ${
-                    mediaCategory === c.key ? 'bg-white text-blue-600 shadow dark:bg-slate-700' : 'text-slate-500'
+                    mediaCategory === c.key ? 'bg-white text-accent-600 shadow dark:bg-slate-700' : 'text-slate-500'
                   }`}
                 >
                   {c.label}
@@ -302,7 +302,7 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                 <p className="text-xs font-semibold text-slate-500">{it.sender_name}</p>
                 {view === 'media' && mediaCategory === 'link' ? (
                   (it.links || []).map((url, i) => (
-                    <a key={i} href={url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="block truncate text-blue-600 underline underline-offset-2 dark:text-blue-400">
+                    <a key={i} href={url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="block truncate text-accent-600 underline underline-offset-2 dark:text-accent-400">
                       {url}
                     </a>
                   ))
@@ -320,13 +320,13 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                           target="_blank"
                           rel="noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="text-blue-600 underline underline-offset-2 dark:text-blue-400"
+                          className="text-accent-600 underline underline-offset-2 dark:text-accent-400"
                         >
                           Open
                         </a>
                         <button
                           onClick={(e) => { e.stopPropagation(); saveFile(it.attachments[0].url, it.attachments[0].name); }}
-                          className="text-blue-600 underline underline-offset-2 dark:text-blue-400"
+                          className="text-accent-600 underline underline-offset-2 dark:text-accent-400"
                         >
                           Save
                         </button>
@@ -352,7 +352,7 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
               {isChannelAdmin || isSuperAdmin ? (
                 <label className="group relative cursor-pointer">
                   <Avatar name={channel.name} url={channel.avatar_url} kind="channel" size={72} />
-                  <span className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-[11px] text-white ring-2 ring-white dark:ring-slate-900">
+                  <span className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-accent-600 text-[11px] text-white ring-2 ring-white dark:ring-slate-900">
                     {uploadingAvatar ? '…' : '📷'}
                   </span>
                   <input type="file" accept="image/*" className="hidden" onChange={changeAvatar} disabled={uploadingAvatar} />
@@ -367,20 +367,20 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                     value={nameInput}
                     onChange={(e) => setNameInput(e.target.value)}
                     placeholder="Channel name"
-                    className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-center text-sm outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-center text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                   />
                   <textarea
                     value={topicInput}
                     onChange={(e) => setTopicInput(e.target.value)}
                     placeholder="What's this channel about?"
                     rows={2}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-center text-xs outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-center text-xs outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                   />
                   <div className="flex justify-center gap-2">
                     <button onClick={() => setEditingInfo(false)} disabled={savingInfo} className="rounded-lg px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">
                       Cancel
                     </button>
-                    <button onClick={saveInfo} disabled={savingInfo || !nameInput.trim()} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+                    <button onClick={saveInfo} disabled={savingInfo || !nameInput.trim()} className="rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50">
                       {savingInfo ? 'Saving…' : 'Save'}
                     </button>
                   </div>
@@ -391,7 +391,7 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                   {channel.topic && <p className="mt-1 text-sm text-slate-500">{channel.topic}</p>}
                   <p className="mt-1 text-xs text-slate-400">{channel.member_count} member{channel.member_count === 1 ? '' : 's'}</p>
                   {isChannelAdmin || isSuperAdmin ? (
-                    <button onClick={startEditingInfo} className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-700">
+                    <button onClick={startEditingInfo} className="mt-2 text-xs font-medium text-accent-600 hover:text-accent-700">
                       Edit name & topic
                     </button>
                   ) : null}
@@ -418,7 +418,7 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                       setCopied(true);
                       setTimeout(() => setCopied(false), 1500);
                     }}
-                    className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                    className="shrink-0 rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700"
                   >
                     {copied ? 'Copied' : 'Copy'}
                   </button>
@@ -439,12 +439,12 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
                     placeholder="name@cutm.ac.in"
-                    className="min-w-0 flex-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+                    className="min-w-0 flex-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
                   />
                   <button
                     type="submit"
                     disabled={invitingByEmail}
-                    className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    className="shrink-0 rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
                   >
                     {invitingByEmail ? 'Sending…' : inviteSent ? 'Sent ✓' : 'Send'}
                   </button>
@@ -466,7 +466,7 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                         <button
                           disabled={busyRequestId === r.id}
                           onClick={() => respondToRequest(r.id, true)}
-                          className="text-[11px] font-medium text-blue-600 hover:text-blue-700 disabled:opacity-40"
+                          className="text-[11px] font-medium text-accent-600 hover:text-accent-700 disabled:opacity-40"
                         >
                           Approve
                         </button>
@@ -510,7 +510,7 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                 <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Members</h4>
                 <button
                   onClick={startAdding}
-                  className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                  className="text-xs font-medium text-accent-600 hover:text-accent-700"
                 >
                   + Add
                 </button>
@@ -534,7 +534,7 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                           )}
                           {isCreator(m.id) && <span className="ml-1.5 text-[10px] text-slate-400">creator</span>}
                         </p>
-                        {m.role === 'admin' && <p className="text-[11px] text-blue-500">Admin</p>}
+                        {m.role === 'admin' && <p className="text-[11px] text-accent-500">Admin</p>}
                       </div>
                     </button>
                     {isChannelAdmin && !isCreator(m.id) && m.id !== currentUser?.id && (
@@ -585,7 +585,7 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Apps</h4>
                   <button
                     onClick={startAddingApp}
-                    className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                    className="text-xs font-medium text-accent-600 hover:text-accent-700"
                   >
                     + Add app
                   </button>

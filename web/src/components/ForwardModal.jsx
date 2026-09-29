@@ -80,7 +80,7 @@ export default function ForwardModal({ message, onClose, onForwarded }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search channels and people"
-            className="w-full rounded-lg bg-slate-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-slate-800 dark:text-slate-200"
+            className="w-full rounded-lg bg-slate-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
           />
         </div>
 
@@ -94,14 +94,14 @@ export default function ForwardModal({ message, onClose, onForwarded }) {
               key={r.id}
               onClick={() => toggle(r.id)}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800 ${
-                selected.has(r.id) ? 'bg-blue-50 dark:bg-slate-800' : ''
+                selected.has(r.id) ? 'bg-accent-50 dark:bg-slate-800' : ''
               }`}
             >
               <Avatar name={r.title} kind={r.kind === 'channel' ? 'channel' : undefined} size={32} />
               <span className="min-w-0 flex-1 truncate text-sm text-slate-700 dark:text-slate-200">{r.title}</span>
               <span
                 className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-xs text-white ${
-                  selected.has(r.id) ? 'border-blue-600 bg-blue-600' : 'border-slate-300 dark:border-slate-600'
+                  selected.has(r.id) ? 'border-accent-600 bg-accent-600' : 'border-slate-300 dark:border-slate-600'
                 }`}
               >
                 {selected.has(r.id) ? '✓' : ''}
@@ -114,7 +114,7 @@ export default function ForwardModal({ message, onClose, onForwarded }) {
           <button
             onClick={send}
             disabled={selected.size === 0 || sending}
-            className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="w-full rounded-lg bg-accent-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-700 disabled:opacity-50"
           >
             {sending ? 'Sending…' : selected.size > 0 ? `Send to ${selected.size}` : 'Select where to send'}
           </button>
