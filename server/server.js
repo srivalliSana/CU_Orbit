@@ -957,7 +957,6 @@ app.get('/', async (req, res) => {
             <title>Let's Connect | Centurion University Messaging</title>
             <meta name="description" content="Let's Connect — real-time messaging, channels, and an app platform built for Centurion University.">
             <script>
-                // Runs before paint — no light-flash for a visitor who already chose dark.
                 if (localStorage.getItem('lc-theme') === 'dark') document.documentElement.classList.add('dark');
             </script>
             <script src="https://cdn.tailwindcss.com"></script>
@@ -986,10 +985,9 @@ app.get('/', async (req, res) => {
                     --shadow: 0 24px 70px rgba(0,0,0,.35);
                     --soft-shadow: 0 10px 32px rgba(0,0,0,.22);
                 }
-
                 * { box-sizing: border-box; }
                 html { scroll-behavior: smooth; }
-                body { margin: 0; background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; line-height: 1.55; transition: background .25s, color .25s; }
+                body { margin: 0; background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; line-height: 1.55; transition: background .25s, color .25s; overflow-x: hidden; }
                 .font-display { font-family: 'Newsreader', serif; font-weight: 600; letter-spacing: -.03em; }
                 .bg-page { background: var(--bg); }
                 .bg-alt { background: var(--paper-2); }
@@ -1002,32 +1000,17 @@ app.get('/', async (req, res) => {
                 .bg-accent-tok { background: var(--mint-deep); }
                 .bg-accent-soft { background: color-mix(in srgb, var(--mint) 35%, var(--paper)); }
 
-                header.nav { background: color-mix(in srgb, var(--bg) 88%, transparent); border-color: var(--line); }
+                .shell { width: min(1180px, calc(100% - 40px)); margin-inline: auto; }
+                header.nav { background: color-mix(in srgb, var(--bg) 88%, transparent); border-color: var(--line); backdrop-filter: blur(16px); }
+                .btn { min-height: 44px; padding: 0 18px; border-radius: 999px; border: 1px solid transparent; display: inline-flex; align-items: center; justify-content: center; gap: 9px; text-decoration: none; font-weight: 700; font-size: 14px; cursor: pointer; transition: transform .2s ease, background .2s ease; }
+                .btn:hover { transform: translateY(-2px); }
                 .btn-primary { background: var(--coral); color: #23100c; letter-spacing: .01em; }
+                .btn-dark { background: var(--navy); color: #fff; }
+                .btn-ghost { border-color: var(--line); background: var(--paper); color: var(--ink); }
                 .btn-shine { position: relative; overflow: hidden; }
                 .btn-shine::after { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: linear-gradient(45deg, transparent, rgba(255,255,255,0.35), transparent); transform: rotate(45deg); transition: 0.5s; }
                 .btn-shine:hover::after { left: 120%; }
-
-                .hero-banner { background: var(--navy); position: relative; overflow: hidden; }
-                .hero-banner:before { content: ''; position: absolute; width: 420px; height: 420px; left: -260px; top: -160px; border-radius: 50%; border: 85px solid color-mix(in srgb, var(--mint) 22%, transparent); pointer-events: none; }
-                .hero-curve { display: block; width: 100%; height: 64px; margin-bottom: -1px; }
-                .hero-curve path { fill: var(--bg); }
-
-                .launch-card { background: var(--paper); border: 1px solid var(--line); box-shadow: var(--shadow); }
-
-                .feature-card { background: var(--paper); border: 1px solid var(--line); box-shadow: var(--soft-shadow); border-radius: 20px; transition: transform .25s ease, border-color .25s; }
-                .feature-card:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--mint-deep) 45%, var(--line)); }
-                .step-card { background: var(--paper); border: 1px solid var(--line); box-shadow: var(--soft-shadow); border-radius: 20px; }
-                .step-num { font-family: 'Newsreader', serif; font-weight: 600; color: var(--coral); }
-
-                code.inline { background: var(--paper-2); color: var(--mint-deep); padding: 1px 7px; border-radius: 5px; font-family: ui-monospace, 'IBM Plex Mono', monospace; font-size: 0.88em; }
-                pre.code-block { background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 12px; padding: 18px 20px; overflow-x: auto; font-family: ui-monospace, 'IBM Plex Mono', monospace; font-size: 12.5px; line-height: 1.7; color: var(--code-text); box-shadow: var(--soft-shadow); }
-
-                .theme-toggle { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--paper); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--muted); transition: border-color .2s, color .2s; }
-                .theme-toggle:hover { color: var(--mint-deep); border-color: color-mix(in srgb, var(--mint-deep) 40%, var(--line)); }
-                .theme-toggle .fa-sun { display: none; }
-                html.dark .theme-toggle .fa-sun { display: inline; }
-                html.dark .theme-toggle .fa-moon { display: none; }
+                .text-link { border: 0; background: none; cursor: pointer; font-weight: 700; text-decoration: underline; text-underline-offset: 5px; }
 
                 .pulse-mark { width: 28px; height: 18px; position: relative; flex-shrink: 0; }
                 .pulse-mark span { position: absolute; width: 7px; border-radius: 999px; bottom: 0; background: var(--mint-deep); }
@@ -1035,7 +1018,172 @@ app.get('/', async (req, res) => {
                 .pulse-mark span:nth-child(2) { left: 10px; height: 18px; background: var(--coral); }
                 .pulse-mark span:nth-child(3) { left: 20px; height: 13px; }
 
-                /* Scroll-reveal — respects prefers-reduced-motion below */
+                .theme-toggle { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--paper); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--muted); transition: border-color .2s, color .2s; }
+                .theme-toggle:hover { color: var(--mint-deep); border-color: color-mix(in srgb, var(--mint-deep) 40%, var(--line)); }
+                .theme-toggle .fa-sun { display: none; }
+                html.dark .theme-toggle .fa-sun { display: inline; }
+                html.dark .theme-toggle .fa-moon { display: none; }
+
+                .hero { position: relative; padding: 86px 0 42px; }
+                .hero:before { content: ""; position: absolute; width: 420px; height: 420px; left: -260px; top: -110px; border-radius: 50%; border: 85px solid color-mix(in srgb, var(--mint) 30%, transparent); pointer-events: none; }
+                .hero-copy { text-align: center; max-width: 880px; margin: 0 auto; position: relative; z-index: 2; }
+                .eyebrow { display: inline-flex; align-items: center; gap: 9px; margin-bottom: 22px; font-size: 13px; font-weight: 700; color: var(--mint-deep); }
+                .eyebrow:before { content: ""; width: 28px; height: 2px; background: currentColor; }
+                h1 { font-family: 'Newsreader', serif; font-size: clamp(46px, 7vw, 84px); line-height: .97; letter-spacing: -.04em; margin: 0 0 28px; font-weight: 600; }
+                h1 em { font-style: italic; color: var(--coral); }
+                .hero-lede { max-width: 670px; margin: 0 auto 30px; font-size: clamp(17px, 2vw, 21px); color: var(--muted); }
+                .hero-ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+                .proof-line { margin-top: 22px; color: var(--muted); font-size: 13px; display: flex; justify-content: center; align-items: center; gap: 12px; flex-wrap: wrap; }
+                .mini-faces { display: flex; }
+                .mini-faces span { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--bg); display: grid; place-items: center; color: #071b20; font-weight: 800; font-size: 10px; margin-left: -7px; }
+                .mini-faces span:first-child { margin-left: 0; background: var(--yellow); }
+                .mini-faces span:nth-child(2) { background: var(--mint); }
+                .mini-faces span:nth-child(3) { background: #b6d7ff; }
+                .mini-faces span:nth-child(4) { background: #ffc3b6; }
+
+                .product-stage { margin-top: 70px; position: relative; }
+                .stage-card { background: var(--navy); border-radius: 34px; padding: 22px; box-shadow: var(--shadow); position: relative; overflow: hidden; }
+                .stage-card:before { content: ""; position: absolute; width: 260px; height: 260px; right: -40px; bottom: -160px; border: 55px solid rgba(142,230,198,.18); border-radius: 50%; }
+                .window { border-radius: 17px; background: #f7faf9; display: grid; grid-template-columns: 210px 1fr 270px; min-height: 500px; overflow: hidden; color: #16363e; position: relative; z-index: 1; }
+                .app-sidebar { background: #0c3b45; color: #c9dfdf; padding: 18px 15px; }
+                .traffic { display: flex; gap: 6px; margin-bottom: 24px; }
+                .traffic i { width: 9px; height: 9px; border-radius: 50%; background: #5e7a7f; }
+                .traffic i:first-child { background: #ff8068; }
+                .traffic i:nth-child(2) { background: #f5c95e; }
+                .traffic i:nth-child(3) { background: #7cdbb9; }
+                .workspace-name { color: white; font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+                .presence { width: 7px; height: 7px; border-radius: 50%; background: #72d7b7; box-shadow: 0 0 0 3px rgba(114,215,183,.15); }
+                .side-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; opacity: .65; margin: 18px 8px 7px; }
+                .channel { padding: 8px 9px; border-radius: 8px; display: flex; gap: 9px; align-items: center; font-size: 12px; margin-bottom: 2px; }
+                .channel.active { background: #175261; color: white; }
+                .channel .hash { opacity: .55; }
+                .dm-dot { width: 7px; height: 7px; border-radius: 50%; background: #68d1ad; }
+                .app-main { min-width: 0; background: white; }
+                .app-head { height: 62px; border-bottom: 1px solid #dce7e5; padding: 13px 19px; display: flex; justify-content: space-between; align-items: center; }
+                .app-head strong { display: block; font-size: 14px; }
+                .app-head small { color: #6c858a; }
+                .head-avatars { display: flex; }
+                .head-avatars span { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: #dff0eb; font-size: 9px; font-weight: 800; margin-left: -7px; border: 2px solid white; }
+                .message-list { padding: 20px; }
+                .msg { display: grid; grid-template-columns: 36px 1fr; gap: 11px; margin-bottom: 20px; }
+                .avatar { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; color: #16363e; font-weight: 800; font-size: 11px; background: #a6ebd3; }
+                .msg:nth-child(2) .avatar { background: #ffc2b5; }
+                .msg:nth-child(3) .avatar { background: #f7d778; }
+                .msg-meta { font-size: 12px; color: #769095; margin-bottom: 4px; }
+                .msg-meta strong { color: #183840; margin-right: 8px; }
+                .msg p { font-size: 12px; margin: 0; line-height: 1.55; }
+                .composer { margin: 10px 20px 20px; height: 46px; border: 1px solid #cfdfdc; border-radius: 11px; color: #91a3a5; font-size: 12px; padding: 13px 15px; display: flex; justify-content: space-between; }
+                .thread { background: #eef5f3; border-left: 1px solid #d8e5e3; padding: 18px; }
+                .thread-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; font-size: 13px; }
+                .thread-head button { border: 0; background: transparent; font-size: 18px; }
+                .thread .msg { grid-template-columns: 31px 1fr; gap: 8px; margin-bottom: 17px; }
+                .thread .avatar { width: 31px; height: 31px; border-radius: 9px; font-size: 9px; }
+                .call-card { background: #0f3c47; color: white; border-radius: 14px; padding: 12px; margin-top: 18px; }
+                .call-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+                .call-person { aspect-ratio: 1.1; border-radius: 9px; background: #1b5867; display: grid; place-items: center; font-size: 11px; color: #b7d6d8; }
+                .call-person:first-child { background: #2f6d79; }
+                .call-controls { display: flex; justify-content: center; gap: 7px; margin-top: 10px; }
+                .call-controls i { width: 22px; height: 22px; background: rgba(255,255,255,.12); border-radius: 50%; }
+                .call-controls i:last-child { background: var(--coral); }
+                .float-note { position: absolute; z-index: 3; background: var(--paper); border: 1px solid var(--line); box-shadow: var(--soft-shadow); border-radius: 15px; padding: 13px 16px; display: flex; align-items: center; gap: 11px; font-size: 12px; font-weight: 700; color: var(--ink); }
+                .float-note.one { left: -24px; top: 18%; }
+                .float-note.two { right: -16px; bottom: 12%; }
+                .float-icon { width: 31px; height: 31px; border-radius: 10px; display: grid; place-items: center; background: color-mix(in srgb, var(--mint) 40%, var(--paper)); color: var(--mint-deep); }
+
+                .trust { padding: 42px 0 84px; }
+                .trust-line { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 21px 0; display: flex; justify-content: space-between; gap: 24px; align-items: center; flex-wrap: wrap; }
+                .trust-line p { margin: 0; font-size: 13px; color: var(--muted); font-weight: 600; }
+                .campuses { display: flex; gap: 28px; flex-wrap: wrap; justify-content: flex-end; }
+                .campuses span { color: var(--ink); font-weight: 700; font-size: 13px; display: flex; gap: 7px; align-items: center; }
+                .campuses i { width: 8px; height: 8px; background: var(--mint-deep); transform: rotate(45deg); }
+
+                section { padding: 92px 0; }
+                .section-head { text-align: center; max-width: 720px; margin: 0 auto 48px; }
+                .section-head h2 { font-family: 'Newsreader', serif; font-size: clamp(36px, 4.5vw, 54px); line-height: 1.04; letter-spacing: -.03em; margin: 10px 0 0; }
+                .section-head p { margin: 14px 0 0; color: var(--muted); font-size: 16px; }
+
+                .feature-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+                .feature-card { border: 1px solid var(--line); background: var(--paper); padding: 28px; min-height: 220px; position: relative; overflow: hidden; box-shadow: var(--soft-shadow); }
+                .feature-card:nth-child(1) { grid-column: span 7; border-radius: 28px 8px 28px 8px; background: var(--navy); color: white; }
+                .feature-card:nth-child(2) { grid-column: span 5; border-radius: 8px 28px 8px 28px; }
+                .feature-card:nth-child(3), .feature-card:nth-child(4), .feature-card:nth-child(5) { grid-column: span 4; border-radius: 20px; }
+                .feature-icon-chip { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; background: var(--paper-2); color: var(--mint-deep); margin-bottom: 30px; }
+                .feature-card:first-child .feature-icon-chip { background: rgba(255,255,255,.12); color: var(--mint); }
+                .feature-card h3 { font-size: 18px; margin: 0 0 8px; }
+                .feature-card p { color: var(--muted); margin: 0; font-size: 14px; max-width: 390px; }
+                .feature-card:first-child p { color: #b7d0d2; }
+                .orbit { position: absolute; width: 190px; height: 190px; border: 1px solid rgba(142,230,198,.3); border-radius: 50%; right: -40px; bottom: -60px; }
+
+                .step-card { background: var(--paper); border: 1px solid var(--line); box-shadow: var(--soft-shadow); border-radius: 20px; padding: 30px; position: relative; }
+                .step-num { font-family: 'Newsreader', serif; font-weight: 600; color: var(--coral); font-size: 34px; display: block; margin-bottom: 20px; }
+                .step-card h3 { font-size: 18px; margin: 0 0 8px; color: var(--ink); }
+                .step-card p { color: var(--muted); font-size: 14px; margin: 0; }
+
+                code.inline { background: var(--paper-2); color: var(--mint-deep); padding: 1px 7px; border-radius: 5px; font-family: ui-monospace, 'IBM Plex Mono', monospace; font-size: 0.88em; }
+                pre.code-block { background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 12px; padding: 18px 20px; overflow-x: auto; font-family: ui-monospace, 'IBM Plex Mono', monospace; font-size: 12.5px; line-height: 1.7; color: var(--code-text); box-shadow: var(--soft-shadow); }
+
+                .showcase { background: var(--navy); color: white; }
+                .showcase .section-head p { color: #aac4c7; }
+                .showcase .section-head h2 { color: white; }
+                .tabs { display: inline-flex; background: #0e3c46; padding: 5px; border-radius: 999px; gap: 4px; margin: 0 auto 28px; }
+                .tab { border: 0; background: transparent; color: #b4ced0; padding: 10px 18px; border-radius: 999px; cursor: pointer; font-weight: 700; font-size: 13px; }
+                .tab.active { background: var(--mint); color: #082b35; }
+                .tabs-wrap { text-align: center; }
+                .demo-panel { background: #f7faf9; color: #17363e; border-radius: 24px; min-height: 420px; overflow: hidden; display: none; box-shadow: 0 24px 70px rgba(0,0,0,.28); }
+                .demo-panel.active { display: grid; }
+                .chat-demo { grid-template-columns: 180px 1fr; }
+                .demo-mini-side { background: #154550; padding: 25px 18px; color: #c8dfe0; }
+                .demo-mini-side h4 { color: white; margin: 0 0 28px; font-size: 14px; }
+                .mini-row { height: 10px; border-radius: 9px; background: rgba(255,255,255,.12); margin: 15px 0; }
+                .mini-row.active { background: var(--mint); width: 80%; }
+                .demo-feed { padding: 36px; }
+                .demo-feed h3 { font-size: 20px; padding-bottom: 20px; border-bottom: 1px solid #d6e3e1; margin: 0 0 20px; }
+                .demo-post { display: flex; gap: 13px; margin: 22px 0; max-width: 670px; }
+                .demo-post .avatar { flex: 0 0 auto; }
+                .lines { flex: 1; }
+                .lines b { font-size: 12px; display: block; margin-bottom: 8px; }
+                .lines i { height: 9px; display: block; background: #dce9e7; border-radius: 5px; margin: 7px 0; font-style: normal; }
+                .lines i:nth-child(2) { width: 92%; } .lines i:nth-child(3) { width: 68%; }
+                .video-demo { padding: 22px; grid-template-columns: 1fr 1fr; gap: 12px; background: #092f39; }
+                .video-tile { border-radius: 17px; background: #154f5c; color: #bfdbdc; display: grid; place-items: center; position: relative; min-height: 170px; }
+                .video-tile span { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 20px; background: var(--mint); color: #12363e; font-weight: 800; font-size: 20px; }
+                .video-tile:nth-child(2) span { background: #ffd179; }
+                .video-tile:nth-child(3) span { background: #ff9d89; }
+                .video-tile:nth-child(4) span { background: #b6d7ff; }
+                .video-tile small { position: absolute; left: 16px; bottom: 13px; font-weight: 700; }
+                .files-demo { padding: 32px; grid-template-columns: 1fr; }
+                .files-top { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #d8e6e3; padding-bottom: 20px; }
+                .file-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding-top: 24px; }
+                .doc { border: 1px solid #d5e3e0; border-radius: 14px; padding: 18px; }
+                .doc-icon { width: 40px; height: 48px; border-radius: 7px; display: grid; place-items: center; background: #e1f2ed; color: #1f8a70; font-size: 10px; font-weight: 800; margin-bottom: 24px; }
+                .doc b { display: block; font-size: 13px; margin-bottom: 5px; }
+                .doc small { color: #718b90; }
+
+                .voices { background: var(--paper); }
+                .quote-grid { display: grid; grid-template-columns: 1.2fr .9fr .9fr; gap: 16px; }
+                .quote { padding: 30px; border: 1px solid var(--line); border-radius: 18px; }
+                .quote:first-child { background: var(--yellow); color: #263333; border-color: transparent; }
+                .quote blockquote { font-family: 'Newsreader', serif; font-size: 22px; line-height: 1.28; margin: 0 0 32px; }
+                .quote:first-child blockquote { font-size: 28px; }
+                .quote-person { display: flex; gap: 11px; align-items: center; }
+                .quote-person b { display: block; font-size: 13px; }
+                .quote-person span { display: block; color: var(--muted); font-size: 11px; }
+                .quote:first-child .quote-person span { color: #526163; }
+
+                .cta-box { background: var(--coral); color: #24120f; padding: 60px; border-radius: 40px 10px 40px 10px; display: grid; grid-template-columns: 1fr auto; gap: 40px; align-items: center; position: relative; overflow: hidden; }
+                .cta-box:after { content: ""; width: 190px; height: 190px; border: 36px solid rgba(255,255,255,.22); border-radius: 50%; position: absolute; right: 170px; bottom: -125px; }
+                .cta-box h2 { font-family: 'Newsreader', serif; font-size: clamp(34px, 4.5vw, 52px); line-height: 1.04; letter-spacing: -.03em; margin: 0; max-width: 620px; }
+                .cta-box .btn { position: relative; z-index: 2; background: #fff; color: #142f35; }
+
+                footer.site-footer { background: var(--navy); color: white; padding: 58px 0 30px; }
+                .footer-grid { display: grid; grid-template-columns: 2fr repeat(3, 1fr); gap: 44px; padding-bottom: 48px; }
+                .footer-intro { max-width: 320px; }
+                .footer-intro p { color: #aac3c5; font-size: 14px; margin-top: 18px; }
+                .footer-col h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--mint); margin-bottom: 16px; }
+                .footer-col a { display: block; color: #bed0d2; text-decoration: none; font-size: 13px; margin: 11px 0; }
+                .footer-col a:hover { color: white; }
+                .footer-bottom { border-top: 1px solid rgba(255,255,255,.12); padding-top: 23px; display: flex; justify-content: space-between; gap: 20px; color: #8eaeb1; font-size: 12px; flex-wrap: wrap; }
+
                 .reveal { opacity: 0; transform: translateY(18px); transition: opacity .7s ease, transform .7s ease; }
                 .reveal.in-view { opacity: 1; transform: translateY(0); }
                 .hero-in { animation: heroIn .8s ease both; }
@@ -1046,175 +1194,220 @@ app.get('/', async (req, res) => {
                     .reveal, .hero-in, .hero-in-delay-1, .hero-in-delay-2 { animation: none !important; transition: none !important; opacity: 1 !important; transform: none !important; }
                 }
 
-                .shell { width: min(1180px, calc(100% - 40px)); margin-inline: auto; }
-                .btn { min-height: 44px; padding: 0 18px; border-radius: 999px; border: 1px solid transparent; display: inline-flex; align-items: center; justify-content: center; gap: 9px; text-decoration: none; font-weight: 700; font-size: 14px; cursor: pointer; transition: transform .2s ease, background .2s ease; }
-                .btn:hover { transform: translateY(-2px); }
-                .btn-dark { background: var(--navy); color: #fff; }
-                .btn-ghost { border-color: var(--line); background: var(--paper); color: var(--ink); }
-
+                @media (max-width: 900px) {
+                    .window { grid-template-columns: 170px 1fr; min-height: 460px; }
+                    .thread { display: none; }
+                    .feature-card:nth-child(1), .feature-card:nth-child(2) { grid-column: span 6; }
+                    .feature-card:nth-child(3), .feature-card:nth-child(4), .feature-card:nth-child(5) { grid-column: span 4; }
+                    .quote-grid { grid-template-columns: 1fr 1fr; }
+                    .quote:first-child { grid-column: span 2; }
+                    .cta-box { grid-template-columns: 1fr; padding: 44px; }
+                    .footer-grid { grid-template-columns: 1.5fr 1fr 1fr; }
+                    .footer-intro { grid-column: span 3; }
+                }
                 @media (max-width: 640px) {
-                    .feature-grid-9 { grid-template-columns: 1fr !important; }
+                    .shell { width: min(100% - 28px, 1180px); }
+                    h1 { font-size: clamp(42px, 14vw, 60px); }
+                    .hero-ctas .btn, .hero-ctas .text-link { width: 100%; min-height: 48px; }
+                    .product-stage { margin-top: 48px; }
+                    .stage-card { padding: 9px; border-radius: 20px; }
+                    .window { grid-template-columns: 1fr; min-height: 440px; }
+                    .app-sidebar { display: none; }
+                    .float-note.one { top: -17px; left: 6px; }
+                    .float-note.two { bottom: -16px; right: 6px; }
+                    .feature-grid { grid-template-columns: 1fr; }
+                    .feature-card:nth-child(n) { grid-column: auto; min-height: auto; border-radius: 18px; }
+                    .tabs { width: 100%; }
+                    .tab { flex: 1; padding-inline: 9px; }
+                    .chat-demo { grid-template-columns: 1fr; }
+                    .demo-mini-side { display: none; }
+                    .video-demo { grid-template-columns: 1fr; }
+                    .video-tile:nth-child(n+3) { display: none; }
+                    .file-grid { grid-template-columns: 1fr; }
+                    .quote-grid { grid-template-columns: 1fr; }
+                    .quote:first-child { grid-column: auto; }
+                    .cta-box { padding: 36px 24px; border-radius: 28px 8px; }
+                    .cta-box .btn { width: 100%; }
+                    .footer-grid { grid-template-columns: 1fr 1fr; gap: 30px 20px; }
+                    .footer-intro { grid-column: span 2; }
+                    .footer-bottom { flex-direction: column; }
                 }
             </style>
         </head>
         <body class="bg-page min-h-screen">
 
             <!-- NAV -->
-            <header class="nav sticky top-0 z-30 border-b backdrop-blur-md">
-                <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+            <header class="nav sticky top-0 z-30 border-b">
+                <nav class="shell" style="min-height:70px; display:flex; align-items:center; justify-content:space-between; gap:24px;">
                     <a href="/" class="flex items-center gap-2.5">
-                        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-400 to-blue-600 shadow shadow-blue-500/30">
-                            <i class="fa-solid fa-satellite-dish text-sm text-white"></i>
-                        </div>
+                        <div class="pulse-mark" aria-hidden="true"><span></span><span></span><span></span></div>
                         <span class="font-display text-body text-lg font-semibold">Let's Connect</span>
                     </a>
-                    <nav class="text-muted-tok hidden items-center gap-8 text-sm font-medium sm:flex">
+                    <div class="text-muted-tok hidden items-center gap-8 text-sm font-medium sm:flex">
                         <a href="#features" class="hover:text-accent-tok">Features</a>
                         <a href="#apps" class="hover:text-accent-tok">Apps &amp; Integrations</a>
                         <a href="#guide" class="hover:text-accent-tok">Developer Guide</a>
                         <a href="#download" class="hover:text-accent-tok">Download</a>
-                    </nav>
+                    </div>
                     <div class="flex items-center gap-3">
                         <button class="theme-toggle" onclick="lcToggleTheme()" aria-label="Toggle dark mode">
                             <i class="fa-solid fa-moon"></i>
                             <i class="fa-solid fa-sun"></i>
                         </button>
-                        <a href="/portal" class="btn-primary rounded-lg px-4 py-2 text-sm font-bold hover:opacity-90">
-                            Open Web Portal
-                        </a>
+                        <a href="/portal" class="btn btn-dark">Open Web Portal</a>
                     </div>
-                </div>
+                </nav>
             </header>
 
             <!-- HERO -->
-            <section class="hero-banner">
-                <div class="mx-auto max-w-6xl px-6 pb-24 pt-16 text-center sm:pt-20">
-                    <div class="hero-in mx-auto mb-7 inline-flex items-center rounded-full border border-white/25 bg-white/10 px-4 py-2 backdrop-blur">
-                        <span class="mr-3 h-2 w-2 animate-pulse rounded-full bg-white"></span>
-                        <span class="text-xs font-bold uppercase tracking-widest text-white">System Detected: ${osName}</span>
+            <section class="hero">
+                <div class="shell">
+                    <div class="hero-copy">
+                        <div class="eyebrow">System Detected: ${osName}</div>
+                        <h1 class="hero-in-delay-1">Turn campus conversations into <em>real momentum.</em></h1>
+                        <p class="hero-in-delay-1 hero-lede">Real-time messaging, channels, and an app platform — built for Centurion University, not adapted from someone else's.</p>
+
+                        <div class="hero-in-delay-2 hero-ctas">
+                            <a class="btn btn-shine btn-primary" href="/?download=true">
+                                <i class="fa-brands fa-android" aria-hidden="true"></i> Download Android APK
+                            </a>
+                            <a class="btn btn-ghost" href="/portal">
+                                Continue in Web Portal <span aria-hidden="true">→</span>
+                            </a>
+                        </div>
+
+                        <div class="proof-line">
+                            <div class="mini-faces" aria-hidden="true"><span>AN</span><span>RP</span><span>SK</span><span>LM</span></div>
+                            <span>Built for students, faculty, clubs, and research teams at CUTM</span>
+                            ${history[0] ? `<span>&middot; Latest: v${history[0].version} (build ${history[0].build_number})</span>` : ''}
+                        </div>
                     </div>
 
-                    <h1 class="hero-in-delay-1 font-display text-5xl text-white sm:text-6xl">
-                        Let's Connect
-                    </h1>
-                    <p class="hero-in-delay-1 mx-auto mt-5 max-w-xl text-lg leading-relaxed text-blue-100 sm:text-xl">
-                        Real-time messaging, channels, and an app platform — built for Centurion University, not adapted from someone else's.
-                    </p>
+                    <div class="product-stage" aria-label="Illustrative Let's Connect workspace preview">
+                        <div class="float-note one"><span class="float-icon">#</span> New idea in research-lab</div>
+                        <div class="float-note two"><span class="float-icon">✓</span> Field report shared</div>
+                        <div class="stage-card">
+                            <div class="window">
+                                <aside class="app-sidebar" aria-label="Workspace channels">
+                                    <div class="traffic"><i></i><i></i><i></i></div>
+                                    <div class="workspace-name">CUTM Community <span class="presence"></span></div>
+                                    <div class="side-label">Campus</div>
+                                    <div class="channel"><span class="hash">#</span><b>announcements</b></div>
+                                    <div class="channel active"><span class="hash">#</span><b>research-lab</b></div>
+                                    <div class="channel"><span class="hash">#</span><b>student-life</b></div>
+                                    <div class="channel"><span class="hash">#</span><b>club-house</b></div>
+                                    <div class="side-label">Direct messages</div>
+                                    <div class="channel"><span class="dm-dot"></span><b>Ananya</b></div>
+                                    <div class="channel"><span class="dm-dot"></span><b>Rishi</b></div>
+                                    <div class="channel"><span class="dm-dot"></span><b>Studio team</b></div>
+                                </aside>
+                                <div class="app-main">
+                                    <div class="app-head">
+                                        <div><strong># research-lab</strong><small>Ideas, papers, and open questions</small></div>
+                                        <div class="head-avatars"><span>AN</span><span>RP</span><span>+8</span></div>
+                                    </div>
+                                    <div class="message-list">
+                                        <div class="msg">
+                                            <div class="avatar">AN</div>
+                                            <div><div class="msg-meta"><strong>Ananya N.</strong> 10:24</div><p>I mapped the first set of interview themes. The strongest signal is cross-campus mentorship.</p></div>
+                                        </div>
+                                        <div class="msg">
+                                            <div class="avatar">RP</div>
+                                            <div><div class="msg-meta"><strong>Rishi P.</strong> 10:31</div><p>Nice. I added the notes from our engineering cohort and tagged the open questions.</p></div>
+                                        </div>
+                                        <div class="msg">
+                                            <div class="avatar">SK</div>
+                                            <div><div class="msg-meta"><strong>Sana K.</strong> 10:43</div><p>Let's review this together at 3 PM. I opened a room for the team.</p></div>
+                                        </div>
+                                    </div>
+                                    <div class="composer"><span>Message #research-lab</span><span>＋ &nbsp; @ &nbsp; ◉</span></div>
+                                </div>
+                                <aside class="thread" aria-label="Message thread preview">
+                                    <div class="thread-head"><strong>Thread</strong><button aria-label="Close thread">×</button></div>
+                                    <div class="msg"><div class="avatar">AN</div><div><div class="msg-meta"><strong>Ananya</strong></div><p>Should we split the next round by discipline?</p></div></div>
+                                    <div class="msg"><div class="avatar">RP</div><div><div class="msg-meta"><strong>Rishi</strong></div><p>Yes—engineering, design, and policy.</p></div></div>
+                                    <div class="call-card">
+                                        <strong style="font-size:12px">Research sync · live</strong>
+                                        <div class="call-grid"><div class="call-person">AN</div><div class="call-person">RP</div><div class="call-person">SK</div><div class="call-person">+3</div></div>
+                                        <div class="call-controls"><i></i><i></i><i></i></div>
+                                    </div>
+                                </aside>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <svg class="hero-curve" viewBox="0 0 1440 64" preserveAspectRatio="none" aria-hidden="true">
-                    <path d="M0,64 C240,0 480,0 720,20 C960,40 1200,64 1440,24 L1440,64 L0,64 Z"></path>
-                </svg>
             </section>
 
-            <!-- LAUNCH CARD -->
-            <section class="mx-auto max-w-3xl px-6">
-                <div class="hero-in-delay-2 launch-card -mt-16 rounded-3xl p-8 text-center sm:-mt-20 sm:p-10">
-                    <p class="text-faint-tok text-xs font-bold uppercase tracking-widest">Get started</p>
-                    <h2 class="text-body font-display mt-2 text-2xl sm:text-[28px]">Ready to launch</h2>
-
-                    <div class="mx-auto mt-8 grid max-w-lg grid-cols-1 gap-4 sm:grid-cols-2">
-                        <a href="/?download=true" class="btn-shine btn-primary group flex items-center justify-center space-x-4 rounded-2xl px-8 py-5 font-bold shadow-lg shadow-blue-500/20 transition-all hover:opacity-90">
-                            <i class="fa-brands fa-android text-3xl transition-transform group-hover:scale-110"></i>
-                            <div class="text-left">
-                                <div class="text-[10px] uppercase opacity-70">Download for</div>
-                                <div class="text-lg leading-none">Android APK</div>
-                            </div>
-                        </a>
-
-                        <button onclick="alert('iOS App is currently in development. Registration will open soon!')" class="bg-card text-body border-tok group flex items-center justify-center space-x-4 rounded-2xl border px-8 py-5 font-bold transition-all hover:opacity-80">
-                            <i class="fa-brands fa-apple text-3xl transition-transform group-hover:scale-110"></i>
-                            <div class="text-left">
-                                <div class="text-faint-tok text-[10px] uppercase">Coming Soon</div>
-                                <div class="text-lg leading-none">iOS Mobile</div>
-                            </div>
-                        </button>
-                    </div>
-
-                    <div class="mt-7 flex flex-col items-center justify-center gap-2 text-sm sm:flex-row sm:gap-8">
-                        <a href="/portal" class="text-accent-tok group flex items-center font-bold hover:opacity-80">
-                            <span>Continue in Web Portal</span>
-                            <i class="fa-solid fa-arrow-right ml-2 transition-transform group-hover:translate-x-1"></i>
-                        </a>
-                        ${history[0] ? `<span class="text-faint-tok">Latest: v${history[0].version} (build ${history[0].build_number})</span>` : ''}
-                    </div>
+            <div class="trust">
+                <div class="shell trust-line">
+                    <p>Built around the rhythms of campus life</p>
+                    <div class="campuses"><span><i></i>Channels &amp; DMs</span><span><i></i>Voice &amp; video</span><span><i></i>Files &amp; polls</span><span><i></i>Apps &amp; bots</span></div>
                 </div>
-            </section>
-
-            <div class="h-16 sm:h-20"></div>
+            </div>
 
             <!-- FEATURES -->
-            <section id="features" class="mx-auto max-w-6xl px-6 py-20">
-                <p class="text-accent-tok reveal text-center text-xs font-bold uppercase tracking-widest">Everything in one place</p>
-                <h2 class="font-display text-body reveal mt-2 text-center text-3xl font-semibold sm:text-4xl">Built for how a campus actually talks</h2>
-
-                <div class="mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                    ${[
-                        ['fa-comments', 'Channels &amp; DMs', 'Public and private channels, one-to-one messages, invite links gated to your campus domains.'],
-                        ['fa-at', '@Mentions', 'Get called out directly, with a dedicated unread badge and a feed of everything you were tagged in.'],
-                        ['fa-text-height', 'Rich formatting', 'Bold, italic, underline, strikethrough, lists, and code — right from the composer, on web and mobile.'],
-                        ['fa-microphone', 'Voice &amp; files', 'Record a voice note, share photos and documents, snap a photo straight from the camera.'],
-                        ['fa-square-poll-vertical', 'Polls', 'Ask a question, let a channel vote, watch the results update live for everyone.'],
-                        ['fa-bell', 'Push notifications', 'Real alerts for messages and mentions, even with the app closed — not just a browser tab trick.'],
-                        ['fa-user-shield', 'Admin oversight', 'Deactivate a channel instead of deleting it, an audit log, and live server health &amp; security monitoring.'],
-                        ['fa-shield-halved', 'Campus-locked sign-in', 'Google sign-in or a one-time email code, gated to your campus domains — no open registration.'],
-                        ['fa-plug', 'Apps &amp; integrations', 'A real OAuth platform: install apps, wire up slash commands, let a bot post on your behalf. See below.'],
-                    ].map(([icon, title, desc], i) => `
-                        <div class="feature-card reveal rounded-2xl p-6" style="transition-delay:${(i % 3) * 70}ms">
-                            <div class="bg-accent-soft mb-4 flex h-10 w-10 items-center justify-center rounded-xl">
-                                <i class="fa-solid ${icon} text-accent-tok"></i>
-                            </div>
-                            <h3 class="text-body font-semibold">${title}</h3>
-                            <p class="text-muted-tok mt-1.5 text-sm leading-relaxed">${desc}</p>
-                        </div>
-                    `).join('')}
+            <section id="features">
+                <div class="shell">
+                    <div class="section-head">
+                        <p class="text-accent-tok reveal text-xs font-bold uppercase tracking-widest">Everything in one place</p>
+                        <h2 class="reveal">Built for how a campus actually talks</h2>
+                    </div>
+                    <div class="feature-grid">
+                        <article class="feature-card reveal"><div class="feature-icon-chip"><i class="fa-solid fa-comments"></i></div><h3>Channels &amp; DMs</h3><p>Public and private channels, one-to-one messages, invite links gated to your campus domains.</p><div class="orbit"></div></article>
+                        <article class="feature-card reveal" style="transition-delay:80ms"><div class="feature-icon-chip"><i class="fa-solid fa-plug"></i></div><h3>Apps &amp; integrations</h3><p>A real OAuth platform: install apps, wire up slash commands, let a bot post on your behalf.</p></article>
+                        <article class="feature-card reveal" style="transition-delay:120ms"><div class="feature-icon-chip"><i class="fa-solid fa-microphone"></i></div><h3>Voice &amp; files</h3><p>Record a voice note, share photos and documents, snap a photo straight from the camera.</p></article>
+                        <article class="feature-card reveal" style="transition-delay:160ms"><div class="feature-icon-chip"><i class="fa-solid fa-square-poll-vertical"></i></div><h3>Polls</h3><p>Ask a question, let a channel vote, watch the results update live for everyone.</p></article>
+                        <article class="feature-card reveal" style="transition-delay:200ms"><div class="feature-icon-chip"><i class="fa-solid fa-shield-halved"></i></div><h3>Campus-locked sign-in</h3><p>Google sign-in or a one-time email code, gated to your campus domains — no open registration.</p></article>
+                    </div>
                 </div>
             </section>
 
-            <!-- APPS & INTEGRATIONS -->
-            <section id="apps" class="bg-alt border-tok border-y py-20">
-                <div class="mx-auto max-w-6xl px-6">
-                    <p class="text-accent-tok reveal text-center text-xs font-bold uppercase tracking-widest">Apps &amp; Integrations</p>
-                    <h2 class="font-display text-body reveal mt-2 text-center text-3xl font-semibold sm:text-4xl">Let's Connect isn't a closed box</h2>
-                    <p class="text-muted-tok reveal mx-auto mt-4 max-w-2xl text-center">
-                        A real OAuth 2.0 platform sits underneath — third-party apps can install with a proper consent screen, post as their own bot, and respond to slash commands. Built the same way Slack's is, from the ground up for this campus.
-                    </p>
-
+            <!-- APPS & INTEGRATIONS (as numbered steps, same layout language as "how it works") -->
+            <section id="apps" class="bg-alt border-tok border-y">
+                <div class="shell">
+                    <div class="section-head">
+                        <p class="text-accent-tok reveal text-xs font-bold uppercase tracking-widest">Apps &amp; Integrations</p>
+                        <h2 class="reveal">Let's Connect isn't a closed box</h2>
+                        <p class="reveal">A real OAuth 2.0 platform sits underneath — any user can build an app, install it with a proper consent screen, post as their own bot, and respond to slash commands. Built the same way Slack's is, from the ground up for this campus.</p>
+                    </div>
                     <div class="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-3">
-                        <div class="step-card reveal rounded-2xl p-6">
-                            <div class="step-num mb-3 text-3xl font-semibold">01</div>
-                            <h3 class="text-body font-semibold">Register &amp; install</h3>
-                            <p class="text-muted-tok mt-1.5 text-sm leading-relaxed">An admin registers the app, then approves it through a real consent screen — same shape as any OAuth login you've already used.</p>
+                        <div class="step-card reveal">
+                            <span class="step-num">01</span>
+                            <h3>Register your app</h3>
+                            <p>Any signed-in user can register an app from <strong class="text-body">Profile &rarr; My apps</strong> — you don't need to be an admin to build one.</p>
                         </div>
-                        <div class="step-card reveal rounded-2xl p-6" style="transition-delay:80ms">
-                            <div class="step-num mb-3 text-3xl font-semibold">02</div>
-                            <h3 class="text-body font-semibold">Add the bot to a channel</h3>
-                            <p class="text-muted-tok mt-1.5 text-sm leading-relaxed">Installing grants API access; posting anywhere still needs an explicit invite into that channel, same as adding a person.</p>
+                        <div class="step-card reveal" style="transition-delay:80ms">
+                            <span class="step-num">02</span>
+                            <h3>Get it installed</h3>
+                            <p>A workspace admin approves it through a real consent screen, then adds the bot to a channel — same as adding a person.</p>
                         </div>
-                        <div class="step-card reveal rounded-2xl p-6" style="transition-delay:160ms">
-                            <div class="step-num mb-3 text-3xl font-semibold">03</div>
-                            <h3 class="text-body font-semibold">Wire up a slash command</h3>
-                            <p class="text-muted-tok mt-1.5 text-sm leading-relaxed">Type <code class="inline">/command</code> anywhere the bot can see, and its webhook replies — publicly to the channel, or privately, just to you.</p>
+                        <div class="step-card reveal" style="transition-delay:160ms">
+                            <span class="step-num">03</span>
+                            <h3>Wire up a slash command</h3>
+                            <p>Type <code class="inline">/command</code> anywhere the bot can see, and its webhook replies — publicly to the channel, or privately, just to you.</p>
                         </div>
                     </div>
                 </div>
             </section>
 
             <!-- DEVELOPER GUIDE -->
-            <section id="guide" class="mx-auto max-w-3xl px-6 py-20">
-                <p class="text-accent-tok reveal text-center text-xs font-bold uppercase tracking-widest">For developers</p>
-                <h2 class="font-display text-body reveal mt-2 text-center text-3xl font-semibold sm:text-4xl">Building your own app</h2>
-                <p class="text-muted-tok reveal mt-4 text-center">Everything you need to install, post messages, and handle a slash command — with real requests.</p>
-
-                <div class="mt-10 space-y-10">
-                    <div class="reveal">
-                        <h3 class="text-body flex items-center gap-2.5 font-semibold"><span class="step-num">1</span> Register your app</h3>
-                        <p class="text-muted-tok mt-1.5 text-sm">A workspace admin registers it from <strong class="text-body">Admin panel &rarr; Apps</strong>. You get a <code class="inline">client_id</code> and a <code class="inline">client_secret</code> — the secret is shown once, copy it immediately.</p>
+            <section id="guide">
+                <div class="shell" style="max-width:760px;">
+                    <div class="section-head">
+                        <p class="text-accent-tok reveal text-xs font-bold uppercase tracking-widest">For developers</p>
+                        <h2 class="reveal">Building your own app</h2>
+                        <p class="reveal">Everything you need to install, post messages, and handle a slash command — with real requests.</p>
                     </div>
 
-                    <div class="reveal">
-                        <h3 class="text-body flex items-center gap-2.5 font-semibold"><span class="step-num">2</span> Send an admin to install it</h3>
-                        <p class="text-muted-tok mt-1.5 mb-3 text-sm">Link your app's own "Install" button here, then trade the code you get back for tokens:</p>
-                        <pre class="code-block">GET https://cumess.cutm.ac.in/portal
+                    <div class="space-y-10">
+                        <div class="reveal">
+                            <h3 class="text-body flex items-center gap-2.5 font-semibold"><span class="step-num" style="font-size:20px; margin:0;">1</span> Register your app</h3>
+                            <p class="text-muted-tok mt-1.5 text-sm">Register it from <strong class="text-body">Profile &rarr; My apps</strong>. You get a <code class="inline">client_id</code> and a <code class="inline">client_secret</code> — the secret is shown once, copy it immediately.</p>
+                        </div>
+                        <div class="reveal">
+                            <h3 class="text-body flex items-center gap-2.5 font-semibold"><span class="step-num" style="font-size:20px; margin:0;">2</span> Send an admin to install it</h3>
+                            <p class="text-muted-tok mt-1.5 mb-3 text-sm">Link your app's own "Install" button here, then trade the code you get back for tokens:</p>
+                            <pre class="code-block">GET https://cumess.cutm.ac.in/portal
   ?oauth_client_id=YOUR_CLIENT_ID
   &oauth_redirect_uri=YOUR_REDIRECT_URI
   &oauth_scope=chat:write commands
@@ -1223,77 +1416,88 @@ app.get('/', async (req, res) => {
 POST https://cumess.cutm.ac.in/oauth/token
 { "grant_type": "authorization_code", "code": "...",
   "redirect_uri": "...", "client_id": "...", "client_secret": "..." }</pre>
-                    </div>
-
-                    <div class="reveal">
-                        <h3 class="text-body flex items-center gap-2.5 font-semibold"><span class="step-num">3</span> Post as your bot</h3>
-                        <p class="text-muted-tok mt-1.5 mb-3 text-sm">Once an admin has added your bot to a channel:</p>
-                        <pre class="code-block">POST https://cumess.cutm.ac.in/api/app/messages
+                        </div>
+                        <div class="reveal">
+                            <h3 class="text-body flex items-center gap-2.5 font-semibold"><span class="step-num" style="font-size:20px; margin:0;">3</span> Post as your bot</h3>
+                            <p class="text-muted-tok mt-1.5 mb-3 text-sm">Once an admin has added your bot to a channel:</p>
+                            <pre class="code-block">POST https://cumess.cutm.ac.in/api/app/messages
 Authorization: Bearer YOUR_ACCESS_TOKEN
 
 { "channelId": "...", "text": "hello from your app" }</pre>
-                    </div>
-
-                    <div class="reveal">
-                        <h3 class="text-body flex items-center gap-2.5 font-semibold"><span class="step-num">4</span> Handle a slash command</h3>
-                        <p class="text-muted-tok mt-1.5 mb-3 text-sm">Every webhook call is signed with <code class="inline">X-CU-Orbit-Signature</code> — an HMAC using <code class="inline">SHA-256(your client_secret)</code> as the key. Reply within 3 seconds:</p>
-                        <pre class="code-block">// what you receive
+                        </div>
+                        <div class="reveal">
+                            <h3 class="text-body flex items-center gap-2.5 font-semibold"><span class="step-num" style="font-size:20px; margin:0;">4</span> Handle a slash command</h3>
+                            <p class="text-muted-tok mt-1.5 mb-3 text-sm">Every webhook call is signed with <code class="inline">X-CU-Orbit-Signature</code> — an HMAC using <code class="inline">SHA-256(your client_secret)</code> as the key. Reply within 3 seconds:</p>
+                            <pre class="code-block">// what you receive
 { "command": "/yours", "text": "...", "user_name": "...", "channel_id": "..." }
 
 // what you reply with
 { "text": "here's your answer", "response_type": "in_channel" }
 // or, visible only to whoever ran it:
 { "text": "just for you", "response_type": "ephemeral" }</pre>
-                    </div>
-                </div>
-            </section>
-
-            <!-- DOWNLOAD -->
-            <section id="download" class="bg-alt border-tok border-t py-20">
-                <div class="mx-auto max-w-2xl px-6 text-center">
-                    <h2 class="font-display text-body reveal text-3xl font-semibold sm:text-4xl">Get Let's Connect</h2>
-                    <p class="text-muted-tok reveal mt-4">Android today, iOS on the way, or just open the web portal — same account, same conversations, everywhere.</p>
-
-                    <div class="reveal mx-auto mt-10 grid max-w-lg grid-cols-1 gap-4 sm:grid-cols-2">
-                        <a href="/?download=true" class="btn-shine btn-primary group flex items-center justify-center space-x-4 rounded-2xl px-8 py-5 font-bold shadow-lg shadow-blue-500/20 transition-all hover:opacity-90">
-                            <i class="fa-brands fa-android text-3xl transition-transform group-hover:scale-110"></i>
-                            <div class="text-left">
-                                <div class="text-[10px] uppercase opacity-70">Download for</div>
-                                <div class="text-lg leading-none">Android APK</div>
-                            </div>
-                        </a>
-                        <a href="/portal" class="bg-card text-body border-tok group flex items-center justify-center space-x-4 rounded-2xl border px-8 py-5 font-bold transition-all hover:opacity-80">
-                            <i class="fa-solid fa-globe text-accent-tok text-3xl transition-transform group-hover:scale-110"></i>
-                            <div class="text-left">
-                                <div class="text-faint-tok text-[10px] uppercase">Use in browser</div>
-                                <div class="text-lg leading-none">Web Portal</div>
-                            </div>
-                        </a>
-                    </div>
-
-                    <div class="reveal bg-card border-tok mx-auto mt-10 max-w-lg rounded-3xl border p-6 text-left" style="box-shadow:var(--shadow)">
-                        <div class="grid grid-cols-2 gap-4">
-                            <div class="flex items-start space-x-3 text-sm">
-                                <i class="fa-solid fa-shield-halved text-accent-tok mt-1"></i>
-                                <div>
-                                    <span class="text-body block font-bold">Secure</span>
-                                    <span class="text-faint-tok text-xs">University Locked</span>
-                                </div>
-                            </div>
-                            <div class="flex items-start space-x-3 text-sm">
-                                <i class="fa-solid fa-bolt text-accent-tok mt-1"></i>
-                                <div>
-                                    <span class="text-body block font-bold">Real-time</span>
-                                    <span class="text-faint-tok text-xs">Zero Latency</span>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <footer class="border-tok text-faint-tok border-t py-10 text-center text-xs">
-                Let's Connect &middot; Centurion University
+            <!-- SHOWCASE -->
+            <section class="showcase">
+                <div class="shell">
+                    <div class="section-head">
+                        <h2>One workspace.<br>Every mode of work.</h2>
+                        <p>Move from quick updates to deep collaboration without switching context — or losing the people who need to be there.</p>
+                    </div>
+                    <div class="tabs-wrap">
+                        <div class="tabs" role="tablist" aria-label="Product preview">
+                            <button class="tab active" role="tab" aria-selected="true" data-panel="chatPanel">Chat</button>
+                            <button class="tab" role="tab" aria-selected="false" data-panel="videoPanel">Video rooms</button>
+                            <button class="tab" role="tab" aria-selected="false" data-panel="filesPanel">Files</button>
+                        </div>
+                    </div>
+                    <div class="demo-panel chat-demo active" id="chatPanel" role="tabpanel">
+                        <aside class="demo-mini-side"><h4>Community space</h4><div class="mini-row"></div><div class="mini-row active"></div><div class="mini-row"></div><div class="mini-row"></div><div class="mini-row"></div></aside>
+                        <div class="demo-feed"><h3># sustainability-challenge</h3><div class="demo-post"><div class="avatar">MI</div><div class="lines"><b>Mira · Design program</b><i></i><i></i></div></div><div class="demo-post"><div class="avatar" style="background:#ffd179">AR</div><div class="lines"><b>Arjun · Environmental science</b><i></i><i></i></div></div><div class="demo-post"><div class="avatar" style="background:#ffb3a4">LE</div><div class="lines"><b>Leena · Community partner</b><i></i><i></i></div></div></div>
+                    </div>
+                    <div class="demo-panel video-demo" id="videoPanel" role="tabpanel"><div class="video-tile"><span>MI</span><small>Mira</small></div><div class="video-tile"><span>AR</span><small>Arjun</small></div><div class="video-tile"><span>LE</span><small>Leena</small></div><div class="video-tile"><span>+4</span><small>Working group</small></div></div>
+                    <div class="demo-panel files-demo" id="filesPanel" role="tabpanel"><div class="files-top"><div><strong>Shared project files</strong><br><small>Everything attached to #sustainability-challenge</small></div><span>12 items</span></div><div class="file-grid"><div class="doc"><div class="doc-icon">PDF</div><b>Research brief</b><small>Updated today</small></div><div class="doc"><div class="doc-icon" style="background:#fff0d1;color:#9a6a12">DOC</div><b>Interview notes</b><small>Edited by Mira</small></div><div class="doc"><div class="doc-icon" style="background:#ffe2dc;color:#b64f3b">PPT</div><b>Concept review</b><small>8 comments</small></div></div></div>
+                </div>
+            </section>
+
+            <!-- VOICES -->
+            <section class="voices">
+                <div class="shell">
+                    <div class="section-head">
+                        <h2>A better rhythm for academic communities.</h2>
+                        <p>Illustrative voices from the people Let's Connect is designed to serve.</p>
+                    </div>
+                    <div class="quote-grid">
+                        <article class="quote reveal"><blockquote>"The conversation doesn't disappear when the class ends. Ideas keep moving, and everyone can find their way back in."</blockquote><div class="quote-person"><div class="avatar">ST</div><div><b>Student team lead</b><span>Interdisciplinary project group</span></div></div></article>
+                        <article class="quote reveal" style="transition-delay:80ms"><blockquote>"Threads give us room to go deep without turning the main channel into a wall of text."</blockquote><div class="quote-person"><div class="avatar" style="background:#ffd179">FA</div><div><b>Faculty collaborator</b><span>Cross-campus research lab</span></div></div></article>
+                        <article class="quote reveal" style="transition-delay:160ms"><blockquote>"New members can understand what happened before they arrived. That changes how quickly a club can grow."</blockquote><div class="quote-person"><div class="avatar" style="background:#ffb6a8">CL</div><div><b>Club coordinator</b><span>Student community</span></div></div></article>
+                    </div>
+                </div>
+            </section>
+
+            <!-- DOWNLOAD / CTA -->
+            <section id="download">
+                <div class="shell">
+                    <div class="cta-box reveal">
+                        <h2>Give every campus conversation a place to go next.</h2>
+                        <a class="btn btn-shine" style="background:#fff;color:#142f35;" href="/?download=true">Download the APK <span aria-hidden="true">→</span></a>
+                    </div>
+                </div>
+            </section>
+
+            <footer class="site-footer">
+                <div class="shell">
+                    <div class="footer-grid">
+                        <div class="footer-intro"><div class="pulse-mark" aria-hidden="true"><span></span><span></span><span></span></div><p>Real-time messaging, channels, and an app platform — built for the people learning, teaching, researching, and building across Centurion University.</p></div>
+                        <div class="footer-col"><h3>Product</h3><a href="#features">Features</a><a href="#apps">Apps &amp; integrations</a><a href="#guide">Developer guide</a></div>
+                        <div class="footer-col"><h3>Get started</h3><a href="/?download=true">Android APK</a><a href="/portal">Web portal</a><a href="#download">Download</a></div>
+                        <div class="footer-col"><h3>Campus</h3><a href="/portal">Sign in</a><a href="#apps">Register an app</a></div>
+                    </div>
+                    <div class="footer-bottom"><span>&copy; 2026 Let's Connect</span><span>Built for Centurion University.</span></div>
+                </div>
             </footer>
 
             <script>
@@ -1302,6 +1506,19 @@ Authorization: Bearer YOUR_ACCESS_TOKEN
                     var dark = root.classList.toggle('dark');
                     try { localStorage.setItem('lc-theme', dark ? 'dark' : 'light'); } catch (e) {}
                 }
+                (function () {
+                    var tabs = document.querySelectorAll('.tab');
+                    var panels = document.querySelectorAll('.demo-panel');
+                    tabs.forEach(function (tab) {
+                        tab.addEventListener('click', function () {
+                            tabs.forEach(function (item) { item.classList.remove('active'); item.setAttribute('aria-selected', 'false'); });
+                            panels.forEach(function (panel) { panel.classList.remove('active'); });
+                            tab.classList.add('active');
+                            tab.setAttribute('aria-selected', 'true');
+                            document.getElementById(tab.getAttribute('data-panel')).classList.add('active');
+                        });
+                    });
+                })();
                 (function () {
                     var els = document.querySelectorAll('.reveal');
                     if (!('IntersectionObserver' in window) || !els.length) {
