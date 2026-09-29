@@ -194,7 +194,10 @@ export default function MessageBubble({
   const canDelete = (own || canModerate) && !m.pending;
 
   return (
-    <div className={`group mb-1.5 flex ${own ? 'justify-end' : 'justify-start'}`}>
+    <div className={`group mb-1.5 flex items-end gap-2 ${own ? 'justify-end' : 'justify-start'}`}>
+      {showSender && !own && (
+        <Avatar name={m.sender_name} url={m.sender_avatar_url} size={30} />
+      )}
       <div className={`relative max-w-[75%] ${own ? 'order-2' : ''}`}>
         {m.is_pinned && (
           <p className="mb-0.5 text-[10px] font-medium text-slate-400">📌 Pinned</p>

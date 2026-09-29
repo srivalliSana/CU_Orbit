@@ -346,6 +346,59 @@ export default function App() {
           />
         )
         : <EmptyState user={user} onNewGroup={() => setNewGroup(true)} />}
+
+        {/* These four share a "fixed overlay on mobile, side panel on
+            desktop" layout (md:static ... md:max-w-sm). They must live
+            inside this flex row, not as top-level siblings of it — the
+            root container is flex-col, so a md:static panel placed outside
+            this row stacks underneath it in the column flow instead of
+            sitting beside it, collapsing to almost no height. */}
+        {contact && (
+          <ContactPanel
+            target={contact}
+            onClose={() => setContact(null)}
+            onOpenChat={(chat) => { setContact(null); setActive(chat); refreshChats(); }}
+            onJumpToMessage={(id) => { setContact(null); setScrollToMessageId(id); }}
+          />
+        )}
+
+        {channelInfoId && (
+          <ChannelInfoPanel
+            channelId={channelInfoId}
+            currentUser={user}
+            onClose={() => setChannelInfoId(null)}
+            onChanged={refreshChats}
+            onJumpToMessage={(id) => { setChannelInfoId(null); setScrollToMessageId(id); }}
+            onOpenProfile={(userId) => setProfileUserId(userId)}
+          />
+        )}
+
+        {mentionsOpen && (
+          <MentionsPanel
+            onClose={closeMentions}
+            onOpenChat={(chat) => setActive(chat)}
+          />
+        )}
+
+        {profileOpen && (
+          <ProfilePanel
+            user={user}
+            onClose={() => setProfileOpen(false)}
+            onUpdated={(u) => setUser(u)}
+            onOpenSettings={() => { setProfileOpen(false); setSettingsOpen(true); }}
+            onOpenThreads={() => { setProfileOpen(false); setThreadsOpen(true); }}
+            onOpenAdmin={() => { setProfileOpen(false); setAdminOpen(true); }}
+          />
+        )}
+
+        {settingsOpen && (
+          <SettingsPanel
+            user={user}
+            onClose={() => setSettingsOpen(false)}
+            onSignOut={() => { signOut(); location.reload(); }}
+            onUpdated={(u) => setUser(u)}
+          />
+        )}
       </div>
 
       {/* IconRail is hidden below md — this is its mobile equivalent, a real
@@ -359,26 +412,6 @@ export default function App() {
           onOpenMentions={() => setMentionsOpen(true)}
           onOpenProfile={() => setProfileOpen(true)}
           onGoHome={() => setActive(null)}
-        />
-      )}
-
-      {contact && (
-        <ContactPanel
-          target={contact}
-          onClose={() => setContact(null)}
-          onOpenChat={(chat) => { setContact(null); setActive(chat); refreshChats(); }}
-          onJumpToMessage={(id) => { setContact(null); setScrollToMessageId(id); }}
-        />
-      )}
-
-      {channelInfoId && (
-        <ChannelInfoPanel
-          channelId={channelInfoId}
-          currentUser={user}
-          onClose={() => setChannelInfoId(null)}
-          onChanged={refreshChats}
-          onJumpToMessage={(id) => { setChannelInfoId(null); setScrollToMessageId(id); }}
-          onOpenProfile={(userId) => setProfileUserId(userId)}
         />
       )}
 
@@ -417,33 +450,6 @@ export default function App() {
             );
             setScrollToMessageId(r.id);
           }}
-        />
-      )}
-
-      {mentionsOpen && (
-        <MentionsPanel
-          onClose={closeMentions}
-          onOpenChat={(chat) => setActive(chat)}
-        />
-      )}
-
-      {profileOpen && (
-        <ProfilePanel
-          user={user}
-          onClose={() => setProfileOpen(false)}
-          onUpdated={(u) => setUser(u)}
-          onOpenSettings={() => { setProfileOpen(false); setSettingsOpen(true); }}
-          onOpenThreads={() => { setProfileOpen(false); setThreadsOpen(true); }}
-          onOpenAdmin={() => { setProfileOpen(false); setAdminOpen(true); }}
-        />
-      )}
-
-      {settingsOpen && (
-        <SettingsPanel
-          user={user}
-          onClose={() => setSettingsOpen(false)}
-          onSignOut={() => { signOut(); location.reload(); }}
-          onUpdated={(u) => setUser(u)}
         />
       )}
 
