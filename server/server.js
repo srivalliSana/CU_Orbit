@@ -1805,6 +1805,11 @@ app.get('/api/unread', auth.requireAuth, async (req, res) => {
  * matter what role the caller holds.
  */
 const isGroupAdmin = (user) => user?.role === 'admin';
+// Matches real Slack: building/configuring an app doesn't need workspace-admin
+// rights (anyone can be a developer) — only installing it into the actual
+// workspace (POST /api/oauth/authorize) and workspace-wide moderation
+// (suspend, revoke installations) stay admin-only.
+const canManageApp = (user, app_) => isGroupAdmin(user) || app_?.owner_user_id === user?.id;
 
 // --- Apps platform auth helpers ---
 //
@@ -5376,34 +5381,67 @@ app.get('/api/admin/apps', auth.requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
+/** Shared by both the admin and self-service create routes. Throws
+ *  {status, error, message} on validation failure. */
+async function createAppRecord(user, body) {
+    const { name, description, icon_url, redirect_uris, scopes } = body;
+    if (!name || !String(name).trim()) throw { status: 400, error: 'bad_request', message: 'name required' };
+    const uris = Array.isArray(redirect_uris) ? redirect_uris.filter(Boolean) : [];
+    if (!uris.length) throw { status: 400, error: 'bad_request', message: 'At least one redirect_uri is required' };
+    for (const uri of uris) {
+        if (!/^https?:\/\//.test(uri)) throw { status: 400, error: 'bad_request', message: `Invalid redirect_uri: ${uri}` };
+    }
+    const scopeList = Array.isArray(scopes) && scopes.length ? scopes : ['commands', 'chat:write', 'channels:read'];
+
+    const client_id = `app_${crypto.randomBytes(8).toString('hex')}`;
+    const client_secret = randomToken();
+    const app_ = await App.create({
+        name: String(name).trim(), description: description || '', icon_url: icon_url || '',
+        owner_user_id: user.id, client_id, client_secret_hash: sha256Hex(client_secret),
+        redirect_uris: uris, scopes: scopeList, is_first_party: false, status: 'approved',
+    });
+    await logAudit(user, 'app.registered', 'app', app_.id, app_.name);
+    return {
+        app: { id: app_.id, name: app_.name, client_id: app_.client_id, redirect_uris: uris, scopes: scopeList, status: app_.status },
+        client_secret,
+    };
+}
+
 /** Register a new app. The client_secret is returned exactly once, here — it
  *  is never stored in recoverable form and is never sent back by any other
  *  route, same handling as a GitHub PAT. */
 app.post('/api/admin/apps', auth.requireAuth, async (req, res) => {
     if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
     try {
-        const { name, description, icon_url, redirect_uris, scopes } = req.body;
-        if (!name || !String(name).trim()) return res.status(400).json({ error: 'bad_request', message: 'name required' });
-        const uris = Array.isArray(redirect_uris) ? redirect_uris.filter(Boolean) : [];
-        if (!uris.length) return res.status(400).json({ error: 'bad_request', message: 'At least one redirect_uri is required' });
-        for (const uri of uris) {
-            if (!/^https?:\/\//.test(uri)) return res.status(400).json({ error: 'bad_request', message: `Invalid redirect_uri: ${uri}` });
-        }
-        const scopeList = Array.isArray(scopes) && scopes.length ? scopes : ['commands', 'chat:write', 'channels:read'];
+        res.json(await createAppRecord(req.user, req.body));
+    } catch (e) {
+        if (e?.status) return res.status(e.status).json({ error: e.error, message: e.message });
+        console.error('[admin-apps-create]', e.message); res.status(500).json({ error: 'server_error' });
+    }
+});
 
-        const client_id = `app_${crypto.randomBytes(8).toString('hex')}`;
-        const client_secret = randomToken();
-        const app_ = await App.create({
-            name: String(name).trim(), description: description || '', icon_url: icon_url || '',
-            owner_user_id: req.user.id, client_id, client_secret_hash: sha256Hex(client_secret),
-            redirect_uris: uris, scopes: scopeList, is_first_party: false, status: 'approved',
-        });
-        await logAudit(req.user, 'app.registered', 'app', app_.id, app_.name);
-        res.json({
-            app: { id: app_.id, name: app_.name, client_id: app_.client_id, redirect_uris: uris, scopes: scopeList, status: app_.status },
-            client_secret,
-        });
-    } catch (e) { console.error('[admin-apps-create]', e.message); res.status(500).json({ error: 'server_error' }); }
+// Self-service developer routes: matches real Slack — anyone can build an
+// app (this section); only installing it into the actual workspace
+// (POST /api/oauth/authorize) needs a workspace admin.
+app.post('/api/apps', auth.requireAuth, async (req, res) => {
+    try {
+        res.json(await createAppRecord(req.user, req.body));
+    } catch (e) {
+        if (e?.status) return res.status(e.status).json({ error: e.error, message: e.message });
+        console.error('[apps-create]', e.message); res.status(500).json({ error: 'server_error' });
+    }
+});
+
+app.get('/api/apps/mine', auth.requireAuth, async (req, res) => {
+    try {
+        const apps = await App.findAll({ where: { owner_user_id: req.user.id }, order: [['createdAt', 'DESC']] });
+        res.json(apps.map((a) => ({
+            id: a.id, name: a.name, description: a.description, icon_url: a.icon_url,
+            client_id: a.client_id, redirect_uris: a.redirect_uris, scopes: a.scopes,
+            status: a.status, createdAt: a.createdAt,
+            event_subscriptions: a.event_subscriptions || [], events_webhook_url: a.events_webhook_url,
+        })));
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
 /** Suspend/reactivate an app — a suspended app can no longer complete the OAuth
@@ -5430,10 +5468,10 @@ const KNOWN_APP_EVENTS = ['app_mention'];
  *  url blank disables events without affecting slash commands/chat:write —
  *  they're independent capabilities. */
 app.put('/api/admin/apps/:id/events', auth.requireAuth, async (req, res) => {
-    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
     try {
         const app_ = await App.findByPk(req.params.id);
         if (!app_) return res.status(404).json({ error: 'not_found' });
+        if (!canManageApp(req.user, app_)) return res.status(403).json({ error: 'forbidden' });
         const { events_webhook_url, event_subscriptions } = req.body;
         if (events_webhook_url && !isValidWebhookUrl(events_webhook_url)) {
             return res.status(400).json({ error: 'bad_request', message: 'events_webhook_url must be https:// (or http://localhost for local testing)' });
@@ -5482,8 +5520,10 @@ app.post('/api/admin/apps/:id/installations/:instId/revoke', auth.requireAuth, a
 
 /** Slash commands registered by one app. */
 app.get('/api/admin/apps/:id/slash-commands', auth.requireAuth, async (req, res) => {
-    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
     try {
+        const app_ = await App.findByPk(req.params.id);
+        if (!app_) return res.status(404).json({ error: 'not_found' });
+        if (!canManageApp(req.user, app_)) return res.status(403).json({ error: 'forbidden' });
         const rows = await SlashCommand.findAll({ where: { app_id: req.params.id }, order: [['command', 'ASC']] });
         res.json(rows);
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
@@ -5492,10 +5532,10 @@ app.get('/api/admin/apps/:id/slash-commands', auth.requireAuth, async (req, res)
 /** Register a slash command for an app. Command names are global — first to
  *  register "/foo" owns it — so a duplicate is a 409, not a silent overwrite. */
 app.post('/api/admin/apps/:id/slash-commands', auth.requireAuth, async (req, res) => {
-    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
     try {
         const app_ = await App.findByPk(req.params.id);
         if (!app_) return res.status(404).json({ error: 'not_found' });
+        if (!canManageApp(req.user, app_)) return res.status(403).json({ error: 'forbidden' });
         let { command, description, usage_hint, webhook_url } = req.body;
         command = String(command || '').trim().replace(/^\//, '').toLowerCase();
         if (!command || !/^[a-z0-9_-]+$/.test(command)) {
