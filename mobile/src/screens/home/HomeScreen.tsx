@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
+import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { useHome } from "../../hooks/useHome";
@@ -24,10 +25,16 @@ import { useAuthStore } from "../../state/authStore";
 import { useThemeColors } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
 
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 type Props = NativeStackScreenProps<HomeStackParamList, "List">;
 
 type ListItem =
-  | { kind: "shortcut"; id: string; label: string; icon: string; badge?: number; onPress: () => void }
   | { kind: "sectionHeader"; id: string; label: string; onAdd?: () => void }
   | { kind: "row"; id: string; row: ChatRowItem }
   | { kind: "message"; id: string; result: SearchResult };
@@ -54,6 +61,7 @@ export default function HomeScreen({ navigation }: Props) {
   const debouncedQuery = useDebounced(query.trim(), 300);
   const pendingJoinCode = useAuthStore((s) => s.pendingJoinCode);
   const setPendingJoinCode = useAuthStore((s) => s.setPendingJoinCode);
+  const currentUser = useAuthStore((s) => s.user);
 
   // A join link opened before signing in is held in authStore (see
   // RootNavigator) since AuthStack has no route for it — resume it here,
@@ -76,6 +84,15 @@ export default function HomeScreen({ navigation }: Props) {
     [mentions]
   );
 
+  // The channel to feature at the top: whichever has the most unread, or
+  // failing that the most recently active one — never a blank/empty pick
+  // as long as at least one channel exists.
+  const featuredChannel = useMemo(() => {
+    const rows = (data?.channels ?? []).map(channelToRow);
+    if (!rows.length) return null;
+    return [...rows].sort((a, b) => (b.unreadCount ?? 0) - (a.unreadCount ?? 0) || (b.sentAt ?? 0) - (a.sentAt ?? 0))[0];
+  }, [data]);
+
   const items: ListItem[] = useMemo(() => {
     const term = query.trim().toLowerCase();
     const match = (title: string) => !term || title.toLowerCase().includes(term);
@@ -93,30 +110,6 @@ export default function HomeScreen({ navigation }: Props) {
     const dmRows = allDmRows.filter((r) => !r.isPinned).sort(byRecency);
 
     const list: ListItem[] = [];
-    if (!term) {
-      list.push({
-        kind: "shortcut",
-        id: "search",
-        label: "Search",
-        icon: "🔍",
-        onPress: () => navigation.navigate("Search"),
-      });
-      list.push({
-        kind: "shortcut",
-        id: "threads",
-        label: "Threads",
-        icon: "💬",
-        onPress: () => navigation.navigate("Threads"),
-      });
-      list.push({
-        kind: "shortcut",
-        id: "mentions",
-        label: "Mentions",
-        icon: "@",
-        badge: unreadMentionCount || undefined,
-        onPress: () => navigation.navigate("Mentions"),
-      });
-    }
     if (term.length >= 2 && messageResults && messageResults.length > 0) {
       list.push({ kind: "sectionHeader", id: "messages-header", label: "Messages" });
       list.push(
@@ -159,6 +152,17 @@ export default function HomeScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      <View style={styles.greetingRow}>
+        <View>
+          <Text style={styles.greetingDate}>
+            {new Date().toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" })}
+          </Text>
+          <Text style={styles.greetingText}>
+            {greeting()}{currentUser?.name ? `, ${currentUser.name.split(" ")[0]}.` : "."}
+          </Text>
+        </View>
+      </View>
+
       <TextInput
         value={query}
         onChangeText={setQuery}
@@ -170,20 +174,69 @@ export default function HomeScreen({ navigation }: Props) {
         data={items}
         keyExtractor={(item) => item.id}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
-        renderItem={({ item }) => {
-          if (item.kind === "shortcut") {
-            return (
-              <Pressable style={styles.shortcutRow} onPress={item.onPress}>
-                <Text style={styles.shortcutIcon}>{item.icon}</Text>
-                <Text style={styles.shortcutLabel}>{item.label}</Text>
-                {item.badge ? (
-                  <View style={styles.shortcutBadge}>
-                    <Text style={styles.shortcutBadgeText}>{item.badge}</Text>
+        ListHeaderComponent={
+          query.trim() ? null : (
+            <View>
+              {featuredChannel ? (
+                <Pressable
+                  style={styles.featuredCard}
+                  onPress={() =>
+                    navGuard(() =>
+                      navigation.navigate("Chat", { containerId: featuredChannel.id, title: featuredChannel.title, kind: "channel" })
+                    )
+                  }
+                >
+                  <View style={styles.featuredTopRow}>
+                    <View style={styles.featuredMark}>
+                      <Text style={styles.featuredMarkText}>#</Text>
+                    </View>
+                    <Text style={styles.featuredEyebrow} numberOfLines={1}>Your busiest channel</Text>
                   </View>
-                ) : null}
-              </Pressable>
-            );
-          }
+                  <Text style={styles.featuredTitle} numberOfLines={1}># {featuredChannel.title}</Text>
+                  <Text style={styles.featuredPreview} numberOfLines={1}>{featuredChannel.previewText}</Text>
+                  {featuredChannel.unreadCount ? (
+                    <View style={styles.featuredBadge}>
+                      <Text style={styles.featuredBadgeText}>{featuredChannel.unreadCount} new</Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+              ) : null}
+
+              <View style={styles.quickGrid}>
+                <Pressable style={styles.quickTile} onPress={() => navigation.navigate("Search")}>
+                  <View style={styles.quickIcon}>
+                    <Ionicons name="search" size={20} color={colors.primary} />
+                  </View>
+                  <Text style={styles.quickLabel}>Search</Text>
+                </Pressable>
+                <Pressable style={styles.quickTile} onPress={() => navigation.navigate("Mentions")}>
+                  <View style={styles.quickIcon}>
+                    <Ionicons name="at" size={20} color={colors.primary} />
+                  </View>
+                  <Text style={styles.quickLabel}>Mentions</Text>
+                  {unreadMentionCount ? (
+                    <View style={styles.quickBadge}>
+                      <Text style={styles.quickBadgeText}>{unreadMentionCount}</Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+                <Pressable style={styles.quickTile} onPress={() => navigation.navigate("Threads")}>
+                  <View style={styles.quickIcon}>
+                    <Ionicons name="chatbubbles" size={20} color={colors.primary} />
+                  </View>
+                  <Text style={styles.quickLabel}>Threads</Text>
+                </Pressable>
+                <Pressable style={styles.quickTile} onPress={() => setFabMenuOpen(true)}>
+                  <View style={styles.quickIcon}>
+                    <Ionicons name="add" size={22} color={colors.primary} />
+                  </View>
+                  <Text style={styles.quickLabel}>New</Text>
+                </Pressable>
+              </View>
+            </View>
+          )
+        }
+        renderItem={({ item }) => {
           if (item.kind === "sectionHeader") {
             return (
               <View style={styles.sectionHeader}>
@@ -300,6 +353,21 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   errorText: {
     color: colors.danger,
   },
+  greetingRow: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  greetingDate: {
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  greetingText: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: colors.text,
+    marginTop: 2,
+  },
   search: {
     margin: 12,
     backgroundColor: colors.surface,
@@ -309,37 +377,100 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     fontSize: 15,
     color: colors.text,
   },
-  shortcutRow: {
+  featuredCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 18,
+    borderRadius: 21,
+    backgroundColor: "#0f3d2f",
+    overflow: "hidden",
+  },
+  featuredTopRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    gap: 9,
+    marginBottom: 14,
   },
-  shortcutIcon: {
-    width: 22,
-    textAlign: "center",
-    fontSize: 16,
-    color: colors.primary,
+  featuredMark: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: "#c6f16d",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  featuredMarkText: {
+    color: "#133d30",
+    fontWeight: "800",
+    fontSize: 13,
+  },
+  featuredEyebrow: {
+    color: "#cfe6dd",
+    fontSize: 12,
+    flexShrink: 1,
+  },
+  featuredTitle: {
+    color: "#fff",
+    fontSize: 20,
     fontWeight: "700",
   },
-  shortcutLabel: {
-    fontSize: 15,
-    color: colors.text,
-    flex: 1,
+  featuredPreview: {
+    color: "#bfd7ce",
+    fontSize: 12,
+    marginTop: 6,
   },
-  shortcutBadge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
+  featuredBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#c6f16d",
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginTop: 12,
+  },
+  featuredBadgeText: {
+    color: "#163428",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  quickGrid: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    gap: 10,
+  },
+  quickTile: {
+    flex: 1,
+    alignItems: "center",
+    gap: 6,
+  },
+  quickIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  quickLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: colors.textMuted,
+  },
+  quickBadge: {
+    position: "absolute",
+    top: -2,
+    right: 6,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: colors.primary,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 5,
+    paddingHorizontal: 3,
   },
-  shortcutBadgeText: {
+  quickBadgeText: {
     color: colors.primaryText,
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: "700",
   },
   sectionHeader: {
