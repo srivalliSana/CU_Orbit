@@ -589,32 +589,21 @@ export default function Composer({
                     <Text style={styles.attachMenuText}>Poll</Text>
                   </Pressable>
                 ) : null}
+                <Pressable
+                  style={styles.attachMenuRow}
+                  onPress={() => { setAttachMenuOpen(false); setFormattingOpen((v) => !v); }}
+                >
+                  <Text style={styles.attachMenuIcon}>Aa</Text>
+                  <Text style={styles.attachMenuText}>Formatting</Text>
+                </Pressable>
               </View>
             </>
           ) : null}
         </View>
 
-        <Pressable
-          onPress={() => setFormattingOpen((v) => !v)}
-          style={[styles.iconButton, formattingOpen && styles.iconButtonActive]}
-        >
-          <Text style={[styles.formatToggleText, formattingOpen && { color: colors.primary }]}>Aa</Text>
-        </Pressable>
-
         <Pressable onPress={() => setEmojiPickerOpen(true)} style={styles.iconButton}>
           <Text style={styles.icon}>😊</Text>
         </Pressable>
-
-        <TextInput
-          value={text}
-          onChangeText={onChangeText}
-          onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
-          placeholder="Type a message"
-          placeholderTextColor={colors.textMuted}
-          style={styles.input}
-          multiline
-          textAlignVertical="top"
-        />
 
         {recorderState.isRecording ? (
           <View style={styles.recordingRow}>
@@ -628,19 +617,33 @@ export default function Composer({
             </Pressable>
           </View>
         ) : (
-          <Pressable onPress={startVoiceRecording} style={styles.iconButton}>
-            <Text style={styles.icon}>🎙️</Text>
-          </Pressable>
+          <View style={styles.inputWrap}>
+            <TextInput
+              value={text}
+              onChangeText={onChangeText}
+              onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
+              placeholder="Type a message"
+              placeholderTextColor={colors.textMuted}
+              style={styles.input}
+              multiline
+              textAlignVertical="top"
+            />
+          </View>
         )}
 
-        <Pressable
-          onPress={submitText}
-          onLongPress={startScheduling}
-          disabled={!text.trim()}
-          style={[styles.sendButton, !text.trim() && styles.sendButtonDisabled]}
-        >
-          <Ionicons name="send" size={17} color={colors.primaryText} />
-        </Pressable>
+        {!recorderState.isRecording && !text.trim() ? (
+          <Pressable onPress={startVoiceRecording} style={styles.sendButton}>
+            <Ionicons name="mic" size={18} color={colors.primaryText} />
+          </Pressable>
+        ) : !recorderState.isRecording ? (
+          <Pressable
+            onPress={submitText}
+            onLongPress={startScheduling}
+            style={styles.sendButton}
+          >
+            <Ionicons name="send" size={17} color={colors.primaryText} />
+          </Pressable>
+        ) : null}
 
         {scheduleStep && Platform.OS === "android" && (
           <DateTimePicker
@@ -761,18 +764,8 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   iconButton: {
     padding: 8,
   },
-  iconButtonActive: {
-    backgroundColor: `${colors.primary}1a`,
-    borderRadius: 14,
-  },
   icon: {
     fontSize: 20,
-  },
-  formatToggleText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: colors.textMuted,
-    paddingHorizontal: 2,
   },
   formattingBar: {
     flexDirection: "row",
@@ -883,13 +876,16 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     fontSize: 14,
     color: colors.text,
   },
-  input: {
+  inputWrap: {
     flex: 1,
     minHeight: 42,
     maxHeight: 120,
     backgroundColor: colors.surface,
-    borderRadius: 18,
-    paddingHorizontal: 14,
+    borderRadius: 21,
+    justifyContent: "center",
+  },
+  input: {
+    paddingHorizontal: 16,
     paddingVertical: 10,
     fontSize: 15,
     lineHeight: 20,
@@ -902,9 +898,6 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-  },
-  sendButtonDisabled: {
-    opacity: 0.4,
   },
   scheduleBackdrop: {
     flex: 1,
