@@ -1,33 +1,37 @@
-// Ported from app/src/main/res/values/colors.xml's "CU Orbit Redesign
-// Palette" — the one real, defined brand color system in the project — so
-// the new app matches the intended look instead of placeholder colors.
+// Matches the web app's brand palette (see web/tailwind.config.js's
+// "accent" scale and the landing page's --mint-deep/--coral tokens) so the
+// two clients read as the same product. "primary" is used across ~40
+// screens for icon tints, links, and button fills alike — that's the same
+// broad role web's mint accent plays, so it maps there (not to coral,
+// which web itself reserves for a rare CTA-button accent, not everyday
+// chrome).
 export const lightColors = {
-  background: "#FFFFFF", // surface_1
-  surface: "#F1F5F9", // surface_2
-  border: "#E2E8F0", // border
-  text: "#0F172A", // text_primary
-  textMuted: "#475569", // text_secondary
-  primary: "#1E40AF", // orbit_primary
-  accent: "#38BDF8", // orbit_accent
-  primaryText: "#FFFFFF", // on_accent
-  bubbleSelf: "#EFF6FF", // orbit_blue_bg
-  bubbleOther: "#F1F5F9", // surface_2
-  success: "#10B981", // orbit_success
-  warning: "#F59E0B", // orbit_warning
-  danger: "#EF4444", // orbit_error / fill_danger
+  background: "#F7FBFA", // web --bg
+  surface: "#EEF6F4", // web --paper-2
+  border: "#D5E3E0", // web --line
+  text: "#102F36", // web --ink
+  textMuted: "#587279", // web --muted
+  primary: "#1A8E72", // web --mint-deep
+  accent: "#FF795F", // web --coral
+  primaryText: "#FFFFFF", // on primary
+  bubbleSelf: "#EAFBF6", // accent-50
+  bubbleOther: "#EEF6F4", // web --paper-2
+  success: "#10B981",
+  warning: "#F59E0B",
+  danger: "#EF4444",
 };
 
 export const darkColors = {
-  background: "#0B1220",
-  surface: "#161F2E",
-  border: "#293548",
-  text: "#E2E8F0",
-  textMuted: "#94A3B8",
-  primary: "#5B8DEF",
-  accent: "#38BDF8",
+  background: "#071B20", // web dark --bg
+  surface: "#12323A", // web dark --paper-2
+  border: "#24444A", // web dark --line
+  text: "#EDF8F5", // web dark --ink
+  textMuted: "#A9C3C4", // web dark --muted
+  primary: "#3DC496", // brighter mint for contrast against a dark ground
+  accent: "#FF876F", // web dark --coral
   primaryText: "#FFFFFF",
-  bubbleSelf: "#1E3A5F",
-  bubbleOther: "#1B2536",
+  bubbleSelf: "#123A33",
+  bubbleOther: "#12323A",
   success: "#10B981",
   warning: "#F59E0B",
   danger: "#F87171",
