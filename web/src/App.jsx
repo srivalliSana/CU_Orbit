@@ -125,6 +125,17 @@ export default function App() {
     getMentions().then((rows) => setMentionsUnread(rows.filter((r) => !r.is_read).length)).catch(() => {});
   }, []);
 
+  // The banner only makes sense once, and only if the browser hasn't
+  // already been asked (permission stays 'default' until the user
+  // answers) — otherwise it'd pop back up every load after "Not now".
+  useEffect(() => {
+    if (status !== 'ready') return;
+    if (permission() !== 'default') return;
+    if (localStorage.getItem('lc-notify-dismissed') === '1') return;
+    const t = setTimeout(() => setAskNotify(true), 2000);
+    return () => clearTimeout(t);
+  }, [status]);
+
   useEffect(() => {
     if (status === 'ready') refreshMentionsUnread();
   }, [status, refreshMentionsUnread]);
@@ -486,7 +497,12 @@ export default function App() {
           >
             Enable
           </button>
-          <button onClick={() => setAskNotify(false)} className="text-xs text-slate-400 hover:text-slate-600">Not now</button>
+          <button
+            onClick={() => { localStorage.setItem('lc-notify-dismissed', '1'); setAskNotify(false); }}
+            className="text-xs text-slate-400 hover:text-slate-600"
+          >
+            Not now
+          </button>
         </div>
       )}
 
