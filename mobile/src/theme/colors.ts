@@ -14,8 +14,8 @@ export const lightColors = {
   primary: "#1A8E72", // web --mint-deep
   accent: "#FF795F", // web --coral
   primaryText: "#FFFFFF", // on primary
-  bubbleSelf: "#D9FDD3", // WhatsApp's own-message green, exactly
-  bubbleOther: "#FFFFFF", // WhatsApp's received-message white, exactly
+  bubbleSelf: "#167A62", // web's own-message bubble (accent-600), same value in both themes
+  bubbleOther: "#FFFFFF", // web's received-message bubble (light mode)
   success: "#10B981",
   warning: "#F59E0B",
   danger: "#EF4444",
@@ -30,8 +30,8 @@ export const darkColors = {
   primary: "#3DC496", // brighter mint for contrast against a dark ground
   accent: "#FF876F", // web dark --coral
   primaryText: "#FFFFFF",
-  bubbleSelf: "#005C4B", // WhatsApp's own-message dark teal, exactly
-  bubbleOther: "#202C33", // WhatsApp's received-message dark slate, exactly
+  bubbleSelf: "#167A62", // web's own-message bubble (accent-600) — same value as light mode, matching web exactly
+  bubbleOther: "#1E293B", // web's received-message bubble in dark mode (slate-800)
   success: "#10B981",
   warning: "#F59E0B",
   danger: "#F87171",

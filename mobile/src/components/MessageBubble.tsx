@@ -358,7 +358,7 @@ export default function MessageBubble({
         ) : null}
 
         {message.text && message.type !== "poll" ? (
-          <Text style={styles.text}>
+          <Text style={[styles.text, isOwn && styles.textOwn]}>
             {renderMessageText(
               message.text,
               styles.link,
@@ -378,13 +378,13 @@ export default function MessageBubble({
         <ActionButtonsRow message={message} isOwn={isOwn} onAction={onAction} styles={styles} colors={colors} />
 
         <Pressable onPress={showReads} disabled={!isOwn || !isGroup} style={styles.metaRow}>
-          {message.edited_at ? <Text style={styles.edited}>edited</Text> : null}
-          <Text style={styles.time}>{clockLabel(message.sent_at)}</Text>
+          {message.edited_at ? <Text style={[styles.edited, isOwn && styles.textOwn]}>edited</Text> : null}
+          <Text style={[styles.time, isOwn && styles.textOwn]}>{clockLabel(message.sent_at)}</Text>
           {isOwn ? (
             <Ionicons
               name={message.status === "sent" ? "checkmark" : "checkmark-done"}
               size={13}
-              color={message.status === "read" ? "#60A5FA" : colors.textMuted}
+              color={message.status === "read" ? "#60A5FA" : "#FFFFFF"}
             />
           ) : null}
         </Pressable>
@@ -665,6 +665,12 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   text: {
     fontSize: 15,
     color: colors.text,
+  },
+  // Own-message bubble is a solid dark accent fill (matches web exactly) —
+  // colors.text assumes a bubble pale enough for dark text, which doesn't
+  // hold here, so own messages need white text specifically.
+  textOwn: {
+    color: "#FFFFFF",
   },
   link: {
     color: colors.primary,
