@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAuthSession } from "../../hooks/useAuthSession";
@@ -42,16 +42,21 @@ export default function SignInScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <View style={styles.card}>
-        <View style={styles.logo}>
-          <Ionicons name="planet" size={32} color="#fff" />
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <View style={styles.topRow}>
+          <View style={styles.lockPill}>
+            <Ionicons name="lock-closed" size={12} color={colors.primary} />
+            <Text style={styles.lockText}>University access</Text>
+          </View>
         </View>
-        <Text style={styles.title}>Let's Connect</Text>
-        <Text style={styles.subtitle}>Sign in with your CUTM campus email</Text>
+
+        <View style={styles.mark}>
+          <Ionicons name="chatbubble-ellipses" size={26} color={colors.primaryText} />
+        </View>
+
+        <Text style={styles.title}>Welcome back.</Text>
+        <Text style={styles.subtitle}>Sign in with your university account to reach your classes, teams, and conversations.</Text>
 
         {twofaPending ? (
           <View style={styles.form}>
@@ -86,31 +91,22 @@ export default function SignInScreen() {
           <ActivityIndicator size="large" color={colors.primary} style={styles.spinner} />
         ) : (
           <>
-            <Pressable
-              style={({ pressed }) => [styles.googleButton, pressed && styles.buttonPressed]}
-              onPress={signInWithGoogleAsync}
-            >
-              <Ionicons name="logo-google" size={18} color="#4285F4" />
-              <Text style={styles.googleButtonText}>Sign in with Google</Text>
-            </Pressable>
-
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
             {stage === "email" ? (
               <View style={styles.form}>
-                <TextInput
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="you@cutm.ac.in"
-                  placeholderTextColor={colors.textMuted}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  style={styles.input}
-                />
+                <Text style={styles.label}>University email</Text>
+                <View style={styles.inputWrap}>
+                  <Ionicons name="mail-outline" size={16} color={colors.textMuted} />
+                  <TextInput
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="name@cutm.ac.in"
+                    placeholderTextColor={colors.textMuted}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    style={styles.input}
+                  />
+                </View>
+
                 <Pressable
                   style={({ pressed }) => [
                     styles.primaryButton,
@@ -121,6 +117,21 @@ export default function SignInScreen() {
                   disabled={sending || !email.trim()}
                 >
                   <Text style={styles.primaryButtonText}>{sending ? "Sending…" : "Email me a code"}</Text>
+                  {!sending && <Ionicons name="arrow-forward" size={16} color={colors.primaryText} />}
+                </Pressable>
+
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>or</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+
+                <Pressable
+                  style={({ pressed }) => [styles.googleButton, pressed && styles.buttonPressed]}
+                  onPress={signInWithGoogleAsync}
+                >
+                  <Ionicons name="logo-google" size={16} color={colors.text} />
+                  <Text style={styles.googleButtonText}>Continue with Google</Text>
                 </Pressable>
               </View>
             ) : (
@@ -163,7 +174,9 @@ export default function SignInScreen() {
         )}
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
-      </View>
+
+        <Text style={styles.footer}>Need access? <Text style={styles.footerLink}>Contact your university administrator.</Text></Text>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -171,77 +184,129 @@ export default function SignInScreen() {
 const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
     backgroundColor: colors.background,
   },
-  card: {
-    width: "100%",
-    maxWidth: 340,
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: 24,
-    paddingVertical: 32,
-    paddingHorizontal: 24,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
+  scroll: {
+    flexGrow: 1,
+    padding: 28,
+    paddingTop: 20,
+    justifyContent: "center",
   },
-  logo: {
-    width: 64,
-    height: 64,
+  topRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginBottom: 24,
+  },
+  lockPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
     borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  lockText: {
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: "600",
+  },
+  mark: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
     backgroundColor: colors.primary,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 20,
   },
   title: {
-    fontSize: 22,
+    fontSize: 34,
     fontWeight: "700",
     color: colors.text,
+    marginBottom: 10,
   },
   subtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: colors.textMuted,
-    marginTop: 4,
-    marginBottom: 22,
-    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 28,
+    maxWidth: 320,
   },
   spinner: {
     marginVertical: 12,
   },
-  googleButton: {
+  form: {
+    width: "100%",
+    gap: 8,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 2,
+  },
+  inputWrap: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    width: "100%",
+    gap: 8,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 12,
-    paddingVertical: 12,
-    backgroundColor: colors.background,
+    borderRadius: 13,
+    paddingHorizontal: 14,
+    backgroundColor: colors.surface,
   },
-  googleButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
+  input: {
+    flex: 1,
+    paddingVertical: 13,
+    fontSize: 15,
     color: colors.text,
   },
+  codeInput: {
+    textAlign: "center",
+    letterSpacing: 6,
+    fontSize: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 13,
+    paddingHorizontal: 14,
+    backgroundColor: colors.surface,
+  },
+  codeHint: {
+    fontSize: 12,
+    color: colors.textMuted,
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  primaryButton: {
+    flexDirection: "row",
+    width: "100%",
+    borderRadius: 15,
+    paddingVertical: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: colors.primary,
+    marginTop: 8,
+  },
+  primaryButtonText: {
+    color: colors.primaryText,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  buttonDisabled: {
+    opacity: 0.45,
+  },
   buttonPressed: {
-    opacity: 0.8,
+    opacity: 0.85,
   },
   dividerRow: {
     flexDirection: "row",
     alignItems: "center",
     width: "100%",
     gap: 10,
-    marginVertical: 18,
+    marginVertical: 6,
   },
   dividerLine: {
     flex: 1,
@@ -252,44 +317,22 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     fontSize: 12,
     color: colors.textMuted,
   },
-  form: {
-    width: "100%",
+  googleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 10,
-  },
-  input: {
+    width: "100%",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: colors.text,
-    backgroundColor: colors.background,
+    borderRadius: 15,
+    paddingVertical: 14,
+    backgroundColor: colors.surface,
   },
-  codeInput: {
-    textAlign: "center",
-    letterSpacing: 6,
-    fontSize: 18,
-  },
-  codeHint: {
-    fontSize: 12,
-    color: colors.textMuted,
-    textAlign: "center",
-  },
-  primaryButton: {
-    width: "100%",
-    borderRadius: 12,
-    paddingVertical: 13,
-    alignItems: "center",
-    backgroundColor: colors.primary,
-  },
-  primaryButtonText: {
-    color: colors.primaryText,
+  googleButtonText: {
     fontSize: 14,
     fontWeight: "700",
-  },
-  buttonDisabled: {
-    opacity: 0.45,
+    color: colors.text,
   },
   formFooter: {
     flexDirection: "row",
@@ -309,5 +352,15 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     textAlign: "center",
     fontSize: 13,
     marginTop: 14,
+  },
+  footer: {
+    marginTop: 32,
+    textAlign: "center",
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+  footerLink: {
+    color: colors.primary,
+    fontWeight: "700",
   },
 });
