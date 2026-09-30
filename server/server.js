@@ -87,9 +87,25 @@ app.get('/api/config', (req, res) => {
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // FILE UPLOAD SETUP
+//
+// file.originalname comes from the multipart Content-Disposition header,
+// which some clients can't control — notably expo-file-system's
+// File.upload() (mobile's uploader), which has no filename option and
+// always advertises the picked file's local cache-path basename instead
+// (often a UUID-looking temp name for content:// picks). The mobile
+// client knows the real name and passes it as ?name=, which — when
+// present — wins over whatever the multipart header says.
+const desiredUploadName = (req) => {
+    const raw = req.query?.name;
+    if (!raw || typeof raw !== 'string') return null;
+    // Strip path separators and control chars — this only ever becomes a
+    // disk filename fragment, never a path.
+    const cleaned = raw.replace(/[/\\]/g, '_').replace(/[\x00-\x1f]/g, '').trim();
+    return cleaned ? cleaned.slice(0, 200) : null;
+};
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, uploadDir),
-    filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
+    filename: (req, file, cb) => cb(null, Date.now() + '-' + (desiredUploadName(req) || file.originalname))
 });
 const upload = multer({ storage: storage });
 
@@ -6138,8 +6154,9 @@ app.post('/api/upload', auth.requireAuth, upload.single('file'), async (req, res
 
     // req.file.filename is the on-disk name (timestamp-prefixed to avoid
     // collisions) — originalname is what the sender actually called it, and
-    // is what should be shown to and saved by the recipient.
-    res.json({ url: `/uploads/${req.file.filename}`, name: req.file.originalname });
+    // is what should be shown to and saved by the recipient. See
+    // desiredUploadName() above for why the query param can override it.
+    res.json({ url: `/uploads/${req.file.filename}`, name: desiredUploadName(req) || req.file.originalname });
 });
 
 // SPA FALLBACK — must stay last, after every route above, so it only catches

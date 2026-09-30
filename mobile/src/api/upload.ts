@@ -22,7 +22,13 @@ export async function uploadFile(file: PickedFile): Promise<{ url: string; name:
   let result;
   try {
     const fsFile = new File(file.uri);
-    result = await fsFile.upload(`${API_BASE_URL}/upload`, {
+    // File.upload() has no filename option — it always advertises the
+    // local cache file's own basename in the multipart header, which for
+    // a content:// pick is often a meaningless generated name, not what
+    // the user actually picked. The server prefers this query param over
+    // that header when present (see desiredUploadName() in server.js).
+    const uploadUrl = `${API_BASE_URL}/upload?name=${encodeURIComponent(file.name)}`;
+    result = await fsFile.upload(uploadUrl, {
       httpMethod: "POST",
       uploadType: UploadType.MULTIPART,
       fieldName: "file",

@@ -28,6 +28,23 @@ import { clockLabel } from "../lib/format";
 import { useThemeColors } from "../state/themeStore";
 import type { Message } from "../types/api";
 
+/** A short, common-case guess only — used purely for a display label when
+ *  the real filename is unrecoverable, never for anything functional. */
+function mimeExtension(mimeType?: string | null): string | null {
+  const map: Record<string, string> = {
+    "application/pdf": "pdf",
+    "application/msword": "doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/vnd.ms-excel": "xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "application/vnd.ms-powerpoint": "ppt",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+    "application/zip": "zip",
+    "text/plain": "txt",
+  };
+  return mimeType ? map[mimeType] || null : null;
+}
+
 export default function MessageBubble({
   message,
   isOwn,
@@ -179,9 +196,15 @@ export default function MessageBubble({
   const attachmentUrl = resolveMediaUrl(message.attachments?.[0]?.url);
   // The server stores files under a timestamp-prefixed name to avoid
   // collisions on disk — attachments[0].name is the sender's original
-  // filename, shown/saved instead of "1755000000000-report.pdf".
-  const fileName = message.attachments?.[0]?.name || attachmentUrl?.split("/").pop() || "file";
+  // filename, shown/saved instead of "1755000000000-report.pdf". Messages
+  // sent before the upload endpoint accepted a real filename (see
+  // api/upload.ts) may still have a raw generated name like a UUID stored
+  // — that can't be recovered after the fact, so at least don't show the
+  // ugly raw value for those.
+  const rawFileName = message.attachments?.[0]?.name || attachmentUrl?.split("/").pop() || "file";
   const mimeType = message.attachments?.[0]?.mimeType;
+  const looksGenerated = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(rawFileName);
+  const fileName = looksGenerated ? `Document${mimeExtension(mimeType) ? `.${mimeExtension(mimeType)}` : ""}` : rawFileName;
   // "SUPERADMIN: edit any message" / "ADMIN: cannot edit others' messages" —
   // edit override is admin-only, unlike delete which channel admins share.
   const canEdit = (isOwn || !!isSuperAdmin) && message.type === "text";
