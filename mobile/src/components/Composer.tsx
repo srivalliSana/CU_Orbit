@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, FlatList, Image, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -638,7 +639,7 @@ export default function Composer({
           disabled={!text.trim()}
           style={[styles.sendButton, !text.trim() && styles.sendButtonDisabled]}
         >
-          <Text style={styles.sendText}>Send</Text>
+          <Ionicons name="send" size={17} color={colors.primaryText} />
         </Pressable>
 
         {scheduleStep && Platform.OS === "android" && (
@@ -896,18 +897,14 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   },
   sendButton: {
     backgroundColor: colors.primary,
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    minWidth: 64,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: "center",
+    justifyContent: "center",
   },
   sendButtonDisabled: {
     opacity: 0.4,
-  },
-  sendText: {
-    color: colors.primaryText,
-    fontWeight: "600",
   },
   scheduleBackdrop: {
     flex: 1,

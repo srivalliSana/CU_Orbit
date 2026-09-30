@@ -10,10 +10,10 @@ import { getBlockedUsers, unblockUser, updateProfile } from "../../api/users";
 import { confirmTwoFactorEnroll, disableTwoFactor, startTwoFactorEnroll } from "../../api/auth";
 import type { User } from "../../types/api";
 
-const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
-  { value: "system", label: "System default" },
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
+const THEME_OPTIONS: { value: ThemeMode; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { value: "system", label: "System default", icon: "phone-portrait-outline" },
+  { value: "light", label: "Light", icon: "sunny-outline" },
+  { value: "dark", label: "Dark", icon: "moon-outline" },
 ];
 
 const DND_OPTIONS = [
@@ -116,7 +116,10 @@ export default function SettingsScreen() {
               i < THEME_OPTIONS.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
             ]}
           >
-            <Text style={[styles.rowText, { color: colors.text }]}>{opt.label}</Text>
+            <View style={[styles.menuIcon, { backgroundColor: `${colors.primary}1a` }]}>
+              <Ionicons name={opt.icon} size={16} color={colors.primary} />
+            </View>
+            <Text style={[styles.rowText, { color: colors.text, flex: 1 }]}>{opt.label}</Text>
             {mode === opt.value && <Ionicons name="checkmark" size={20} color={colors.primary} />}
           </Pressable>
         ))}
@@ -264,6 +267,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     overflow: "hidden",
+  },
+  menuIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
   row: {
     flexDirection: "row",

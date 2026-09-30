@@ -125,17 +125,25 @@ export default function ProfileScreen({ navigation }: Props) {
           <Text style={styles.name}>{user?.name}</Text>
           <Text style={styles.email}>{user?.campusEmail ?? user?.campus_email ?? user?.email}</Text>
           {!!user?.status_text && (
-            <Text style={styles.statusText}>
-              {user.status_text}
-              {user.status_expires_at ? <Text style={styles.statusExpiry}> · clears {statusExpiryLabel(user.status_expires_at)}</Text> : null}
-            </Text>
+            <View style={styles.statusChip}>
+              <View style={styles.statusDot} />
+              <Text style={styles.statusText}>
+                {user.status_text}
+                {user.status_expires_at ? <Text style={styles.statusExpiry}> · clears {statusExpiryLabel(user.status_expires_at)}</Text> : null}
+              </Text>
+            </View>
           )}
           {!!user?.bio && <Text style={styles.bio}>{user.bio}</Text>}
 
-          <Pressable onPress={startEditing} style={styles.editButton}>
-            <Ionicons name="create-outline" size={16} color={colors.primary} />
-            <Text style={styles.editButtonText}>Edit profile</Text>
-          </Pressable>
+          <View style={styles.menuList}>
+            <Pressable onPress={startEditing} style={styles.menuRow}>
+              <View style={styles.menuIcon}>
+                <Ionicons name="create-outline" size={17} color={colors.primary} />
+              </View>
+              <Text style={styles.menuRowText}>Edit profile</Text>
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+            </Pressable>
+          </View>
         </>
       ) : (
         <View style={styles.form}>
@@ -178,25 +186,25 @@ export default function ProfileScreen({ navigation }: Props) {
 
       <View style={styles.spacer} />
 
-      <Pressable
-        onPress={openSettings}
-        style={styles.settingsRow}
-      >
-        <Ionicons name="settings-outline" size={20} color={colors.text} />
-        <Text style={styles.settingsRowText}>Settings</Text>
-        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-      </Pressable>
-
-      {user?.role === "admin" && (
-        <Pressable
-          onPress={openAdmin}
-          style={styles.settingsRow}
-        >
-          <Ionicons name="shield-checkmark-outline" size={20} color={colors.text} />
-          <Text style={styles.settingsRowText}>Admin</Text>
+      <View style={styles.menuList}>
+        <Pressable onPress={openSettings} style={styles.menuRow}>
+          <View style={styles.menuIcon}>
+            <Ionicons name="settings-outline" size={17} color={colors.primary} />
+          </View>
+          <Text style={styles.menuRowText}>Settings</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
         </Pressable>
-      )}
+
+        {user?.role === "admin" && (
+          <Pressable onPress={openAdmin} style={[styles.menuRow, styles.menuRowDivider]}>
+            <View style={styles.menuIcon}>
+              <Ionicons name="shield-checkmark-outline" size={17} color={colors.primary} />
+            </View>
+            <Text style={styles.menuRowText}>Admin</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          </Pressable>
+        )}
+      </View>
 
       <View style={styles.spacer} />
       <Pressable onPress={signOut} style={styles.signOutButton}>
@@ -240,10 +248,26 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     fontSize: 14,
     color: colors.textMuted,
   },
+  statusChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: `${colors.primary}1f`,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
+  },
   statusText: {
-    fontSize: 14,
-    color: colors.text,
-    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.primary,
   },
   statusExpiry: {
     fontSize: 12,
@@ -277,16 +301,6 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     color: colors.textMuted,
     marginTop: 4,
     textAlign: "center",
-  },
-  editButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 16,
-  },
-  editButtonText: {
-    color: colors.primary,
-    fontWeight: "600",
   },
   form: {
     width: "100%",
@@ -360,18 +374,33 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   spacer: {
     height: 24,
   },
-  settingsRow: {
+  menuList: {
+    width: "100%",
+    marginTop: 16,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    overflow: "hidden",
+  },
+  menuRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    width: "100%",
-    paddingVertical: 14,
-    paddingHorizontal: 4,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: colors.border,
+    gap: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
   },
-  settingsRowText: {
+  menuRowDivider: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  menuIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: `${colors.primary}1a`,
+  },
+  menuRowText: {
     flex: 1,
     fontSize: 15,
     color: colors.text,
