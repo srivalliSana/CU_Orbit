@@ -53,7 +53,9 @@ export default function ChatScreen({ route, navigation }: Props) {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [ephemeralNotice, setEphemeralNotice] = useState<{ app_name: string; text: string } | null>(null);
   const listRef = useRef<FlatList<Message>>(null);
-  const pinnedMessage = messages?.find((m) => m.is_pinned);
+  const [pinnedDismissed, setPinnedDismissed] = useState(false);
+  const pinnedMessage = pinnedDismissed ? undefined : messages?.find((m) => m.is_pinned);
+  useEffect(() => { setPinnedDismissed(false); }, [containerId]);
 
   // Keep the newest message visible above the keyboard: scroll to the end
   // whenever the keyboard opens (about to type), and whenever a new message
@@ -125,19 +127,21 @@ export default function ChatScreen({ route, navigation }: Props) {
 
   useChannelSocket(containerId);
 
+  const [memberCount, setMemberCount] = useState<number | null>(null);
+
   // "ADMIN: delete messages in own channels (from anyone)" — a channel's
   // own admin qualifies only for that channel; a workspace admin always does.
   useEffect(() => {
-    if (isSuperAdmin) { setCanModerate(true); return; }
-    if (kind !== "channel") { setCanModerate(false); return; }
+    if (kind !== "channel") { setCanModerate(isSuperAdmin); return; }
     let cancelled = false;
     getChannelMembers(containerId)
       .then((members) => {
         if (cancelled) return;
+        setMemberCount(members.length);
         const me = members.find((m) => m.id === selfId);
-        setCanModerate(me?.role === "admin");
+        setCanModerate(isSuperAdmin || me?.role === "admin");
       })
-      .catch(() => setCanModerate(false));
+      .catch(() => setCanModerate(isSuperAdmin));
     return () => { cancelled = true; };
   }, [containerId, kind, selfId, isSuperAdmin]);
 
@@ -149,6 +153,17 @@ export default function ChatScreen({ route, navigation }: Props) {
   useEffect(() => {
     navigation.setOptions({
       title,
+      headerTitle:
+        kind === "channel" && memberCount != null
+          ? () => (
+              <View>
+                <Text style={styles.headerTitleText} numberOfLines={1}>{title}</Text>
+                <Text style={styles.headerSubtitleText} numberOfLines={1}>
+                  {memberCount} member{memberCount === 1 ? "" : "s"}
+                </Text>
+              </View>
+            )
+          : undefined,
       headerRight: () => (
         <View style={styles.headerActions}>
           <Pressable onPress={() => setWallpaperPickerOpen(true)} hitSlop={8}>
@@ -173,7 +188,7 @@ export default function ChatScreen({ route, navigation }: Props) {
         </View>
       ),
     });
-  }, [navigation, title, kind, containerId, otherUserId]);
+  }, [navigation, title, kind, containerId, otherUserId, memberCount]);
 
   useEffect(() => {
     markConversationRead(containerId);
@@ -233,12 +248,17 @@ export default function ChatScreen({ route, navigation }: Props) {
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
       {pinnedMessage ? (
-        <Pressable style={styles.pinnedBar} onPress={() => jumpToMessage(pinnedMessage.id)}>
-          <Text style={styles.pinnedIcon}>📌</Text>
-          <Text style={styles.pinnedText} numberOfLines={1}>
-            Pinned: {pinnedMessage.text || (pinnedMessage.type === "poll" ? pinnedMessage.poll?.question : "Attachment")}
-          </Text>
-        </Pressable>
+        <View style={styles.pinnedBar}>
+          <Pressable style={styles.pinnedTap} onPress={() => jumpToMessage(pinnedMessage.id)}>
+            <Ionicons name="pin" size={14} color={colors.primary} />
+            <Text style={styles.pinnedText} numberOfLines={1}>
+              {pinnedMessage.text || (pinnedMessage.type === "poll" ? pinnedMessage.poll?.question : "Attachment")}
+            </Text>
+          </Pressable>
+          <Pressable onPress={() => setPinnedDismissed(true)} hitSlop={8}>
+            <Ionicons name="close" size={16} color={colors.textMuted} />
+          </Pressable>
+        </View>
       ) : null}
 
       <FlatList
@@ -392,6 +412,16 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     alignItems: "center",
     gap: 16,
   },
+  headerTitleText: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  headerSubtitleText: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 1,
+  },
   scheduledBanner: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
@@ -475,7 +505,12 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  pinnedIcon: { fontSize: 12 },
+  pinnedTap: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   pinnedText: { flex: 1, fontSize: 12, color: colors.textMuted },
   typing: {
     paddingHorizontal: 16,
