@@ -641,15 +641,22 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   },
   bubble: {
     maxWidth: "80%",
-    borderRadius: 14,
+    borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
   bubbleOwn: {
     backgroundColor: colors.bubbleSelf,
+    borderBottomRightRadius: 4,
   },
   bubbleOther: {
     backgroundColor: colors.bubbleOther,
+    borderBottomLeftRadius: 4,
   },
   bubbleHighlighted: {
     borderWidth: 2,
@@ -923,13 +930,15 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     marginTop: 4,
   },
   edited: {
-    fontSize: 10,
+    fontSize: 11,
     fontStyle: "italic",
     color: colors.textMuted,
+    opacity: 0.7,
   },
   time: {
-    fontSize: 10,
+    fontSize: 11,
     color: colors.textMuted,
+    opacity: 0.7,
   },
   reactionsRow: {
     flexDirection: "row",

@@ -19,6 +19,7 @@ import PollComposerModal from "../../components/PollComposerModal";
 import { createPoll } from "../../api/messages";
 import { cancelScheduledMessage, createScheduledMessage, getScheduledMessages, type ScheduledMessageRow } from "../../api/scheduled";
 import { getConversationPrefs, setConversationPref } from "../../api/conversations";
+import { dayLabel } from "../../lib/format";
 import { wallpaperColor } from "../../lib/wallpapers";
 import WallpaperPicker from "../../components/WallpaperPicker";
 import { useThemeColors, useIsDarkMode } from "../../state/themeStore";
@@ -255,30 +256,41 @@ export default function ChatScreen({ route, navigation }: Props) {
             }, 100);
           }, 50);
         }}
-        renderItem={({ item }) => (
-          <MessageBubble
-            message={item}
-            isOwn={item.sender_id === selfId}
-            isGroup={kind === "channel"}
-            canModerate={canModerate}
-            isSuperAdmin={isSuperAdmin}
-            highlighted={highlightId === item.id}
-            onReact={(emoji) => react.mutate({ messageId: item.id, emoji })}
-            onDeleteForMe={() => hide.mutate(item.id)}
-            onDeleteForEveryone={() => remove.mutate(item.id)}
-            onEdit={(text) => edit.mutate({ messageId: item.id, body: text })}
-            onPin={(pinned) => pin.mutate({ messageId: item.id, pinned })}
-            onReply={() => setReplyTo(item)}
-            onForward={() => setForwarding(item)}
-            onStar={(starred) => star.mutate({ messageId: item.id, starred })}
-            onOpenProfile={(userId) => setProfileUserId(userId)}
-            onVote={item.poll ? (optionIndex) => vote.mutate({ pollId: item.poll!.id, optionIndex }) : undefined}
-            onAction={(actionId, value) => action.mutate({ messageId: item.id, actionId, value })}
-            onJumpToMessage={jumpToMessage}
-            currentUserId={selfId}
-            onOpenDm={(chat) => navigation.push("Chat", { containerId: chat.id, title: chat.title, kind: "dm" })}
-          />
-        )}
+        renderItem={({ item, index }) => {
+          const prev = messages?.[index - 1];
+          const showDivider = !prev || dayLabel(prev.sent_at) !== dayLabel(item.sent_at);
+          return (
+            <>
+              {showDivider ? (
+                <View style={styles.dateDividerRow}>
+                  <Text style={styles.dateDividerText}>{dayLabel(item.sent_at)}</Text>
+                </View>
+              ) : null}
+              <MessageBubble
+                message={item}
+                isOwn={item.sender_id === selfId}
+                isGroup={kind === "channel"}
+                canModerate={canModerate}
+                isSuperAdmin={isSuperAdmin}
+                highlighted={highlightId === item.id}
+                onReact={(emoji) => react.mutate({ messageId: item.id, emoji })}
+                onDeleteForMe={() => hide.mutate(item.id)}
+                onDeleteForEveryone={() => remove.mutate(item.id)}
+                onEdit={(text) => edit.mutate({ messageId: item.id, body: text })}
+                onPin={(pinned) => pin.mutate({ messageId: item.id, pinned })}
+                onReply={() => setReplyTo(item)}
+                onForward={() => setForwarding(item)}
+                onStar={(starred) => star.mutate({ messageId: item.id, starred })}
+                onOpenProfile={(userId) => setProfileUserId(userId)}
+                onVote={item.poll ? (optionIndex) => vote.mutate({ pollId: item.poll!.id, optionIndex }) : undefined}
+                onAction={(actionId, value) => action.mutate({ messageId: item.id, actionId, value })}
+                onJumpToMessage={jumpToMessage}
+                currentUserId={selfId}
+                onOpenDm={(chat) => navigation.push("Chat", { containerId: chat.id, title: chat.title, kind: "dm" })}
+              />
+            </>
+          );
+        }}
         contentContainerStyle={styles.list}
       />
       {typingName ? (
@@ -438,6 +450,20 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   },
   list: {
     paddingVertical: 12,
+  },
+  dateDividerRow: {
+    alignItems: "center",
+    marginVertical: 10,
+  },
+  dateDividerText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.textMuted,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    overflow: "hidden",
   },
   pinnedBar: {
     flexDirection: "row",
