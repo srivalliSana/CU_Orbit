@@ -21,7 +21,7 @@ import LinkPreviewCard from "./LinkPreviewCard";
 import AddToListSheet from "./lists/AddToListSheet";
 import { renderMarkdown, renderMessageText } from "../lib/markdown";
 import { openFile, saveFile } from "../lib/fileActions";
-import { getReads } from "../api/messages";
+import { getReads, remindMessage } from "../api/messages";
 import { reportUser } from "../api/users";
 import { resolveMediaUrl } from "../constants/config";
 import { clockLabel } from "../lib/format";
@@ -488,6 +488,14 @@ export default function MessageBubble({
         onStar={() => onStar?.(!message.is_starred)}
         onAddToList={message.channel_id ? () => setAddToListVisible(true) : undefined}
         onReport={!isOwn ? () => setReportOpen(true) : undefined}
+        onRemind={() => {
+          Alert.alert("Remind me", undefined, [
+            { text: "In 1 hour", onPress: () => remindMessage(message.id, 60).catch(() => {}) },
+            { text: "In 3 hours", onPress: () => remindMessage(message.id, 180).catch(() => {}) },
+            { text: "Tomorrow", onPress: () => remindMessage(message.id, 24 * 60).catch(() => {}) },
+            { text: "Cancel", style: "cancel" },
+          ]);
+        }}
         onClose={() => setPickerVisible(false)}
       />
 

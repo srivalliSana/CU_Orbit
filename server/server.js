@@ -492,6 +492,21 @@ const Thread = sequelize.define('Thread', {
     last_reply_at: { type: DataTypes.BIGINT }
 });
 
+/** "Remind me about this" — a personal, private note tied to a message,
+ *  fired once at remind_at via the sweep below, same shape as scheduled
+ *  messages (poll on an interval, not a real job queue — fine at this
+ *  volume). Never visible to anyone but the user who set it. */
+const Reminder = sequelize.define('Reminder', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    user_id: { type: DataTypes.STRING, allowNull: false },
+    message_id: { type: DataTypes.UUID, allowNull: false },
+    channel_id: { type: DataTypes.STRING, allowNull: false },
+    remind_at: { type: DataTypes.BIGINT, allowNull: false },
+    fired_at: { type: DataTypes.BIGINT, allowNull: true },
+}, {
+    indexes: [{ fields: ['user_id', 'fired_at'] }],
+});
+
 const Release = sequelize.define('Release', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     version: { type: DataTypes.STRING, allowNull: false },
@@ -3399,6 +3414,87 @@ async function sendDueScheduledMessages() {
     }
 }
 setInterval(sendDueScheduledMessages, 20000);
+
+/** "Remind me about this" — minutesFromNow or an explicit ISO remindAt. */
+app.post('/api/messages/:id/remind', auth.requireAuth, async (req, res) => {
+    try {
+        const message = await Message.findByPk(req.params.id);
+        if (!message) return res.status(404).json({ error: 'not_found' });
+        let remindAt;
+        if (req.body.minutesFromNow != null) {
+            const minutes = Number(req.body.minutesFromNow);
+            if (!Number.isFinite(minutes) || minutes < 1) return res.status(400).json({ error: 'bad_request' });
+            remindAt = Date.now() + minutes * 60000;
+        } else if (req.body.remindAt) {
+            const when = new Date(req.body.remindAt).getTime();
+            if (!when || when < Date.now() + 60000) return res.status(400).json({ error: 'bad_request', message: 'remindAt must be at least a minute in the future' });
+            remindAt = when;
+        } else {
+            return res.status(400).json({ error: 'bad_request', message: 'minutesFromNow or remindAt required' });
+        }
+        const row = await Reminder.create({
+            user_id: req.user.id, message_id: message.id, channel_id: message.channel_id, remind_at: remindAt,
+        });
+        res.json(row);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.get('/api/reminders', auth.requireAuth, async (req, res) => {
+    try {
+        const rows = await Reminder.findAll({ where: { user_id: req.user.id, fired_at: null }, order: [['remind_at', 'ASC']] });
+        const messages = await Message.findAll({ where: { id: { [Op.in]: rows.map((r) => r.message_id) } } });
+        const byId = new Map(messages.map((m) => [m.id, m]));
+        res.json(rows.map((r) => ({
+            id: r.id, remind_at: Number(r.remind_at), channel_id: r.channel_id, message_id: r.message_id,
+            message_text: byId.get(r.message_id)?.body || null,
+            message_sender_name: byId.get(r.message_id)?.sender_name || null,
+        })));
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.delete('/api/reminders/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const row = await Reminder.findOne({ where: { id: req.params.id, user_id: req.user.id } });
+        if (!row) return res.status(404).json({ error: 'not_found' });
+        await row.destroy();
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** The sweep — same one-at-a-time pattern as sendDueScheduledMessages. A
+ *  reminder landing a few seconds late is a non-issue. */
+async function sendDueReminders() {
+    try {
+        const due = await Reminder.findAll({ where: { fired_at: null, remind_at: { [Op.lte]: Date.now() } } });
+        for (const row of due) {
+            try {
+                const [user, message] = await Promise.all([
+                    User.findByPk(row.user_id),
+                    Message.findByPk(row.message_id),
+                ]);
+                if (user) {
+                    await sendPushNotification(user, {
+                        title: 'Reminder',
+                        body: message?.body || 'You asked to be reminded about this message.',
+                        data: { type: 'reminder', channelId: row.channel_id, messageId: row.message_id },
+                    });
+                    realtime.toUser(user.id, 'reminder', {
+                        id: row.id, channel_id: row.channel_id, message_id: row.message_id,
+                        message_text: message?.body || null,
+                    });
+                }
+                row.fired_at = Date.now();
+            } catch (e) {
+                console.error('[reminder-send] failed for', row.id, e.message);
+                row.fired_at = Date.now();   // don't retry a broken row forever
+            }
+            await row.save();
+        }
+    } catch (e) {
+        console.error('[reminder-sweep]', e.message);
+    }
+}
+setInterval(sendDueReminders, 20000);
 
 /** Clears a status that's past its expiry — "in a meeting" for 1h shouldn't
  *  still say so a week later. A minute of drift on when exactly it clears

@@ -21,6 +21,7 @@ export default function ReactionPicker({
   onStar,
   onAddToList,
   onReport,
+  onRemind,
   onClose,
 }: {
   visible: boolean;
@@ -37,6 +38,7 @@ export default function ReactionPicker({
   onStar?: () => void;
   onAddToList?: () => void;
   onReport?: () => void;
+  onRemind?: () => void;
   onClose: () => void;
 }) {
   const colors = useThemeColors();
@@ -123,6 +125,18 @@ export default function ReactionPicker({
               }}
             >
               <Text style={styles.actionText}>Add to list</Text>
+            </Pressable>
+          ) : null}
+
+          {onRemind ? (
+            <Pressable
+              style={styles.actionButton}
+              onPress={() => {
+                onRemind();
+                onClose();
+              }}
+            >
+              <Text style={styles.actionText}>Remind me</Text>
             </Pressable>
           ) : null}
 

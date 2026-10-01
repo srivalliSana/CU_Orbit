@@ -129,3 +129,19 @@ export const sendMessageAction = (messageId: string, actionId: string, value?: s
   client
     .post<{ success: boolean; updated: boolean }>(`/messages/${messageId}/actions`, { action_id: actionId, value })
     .then((res) => res.data);
+
+export interface Reminder {
+  id: string;
+  remind_at: number;
+  channel_id: string;
+  message_id: string;
+  message_text: string | null;
+  message_sender_name: string | null;
+}
+
+export const remindMessage = (messageId: string, minutesFromNow: number) =>
+  client.post<Reminder>(`/messages/${messageId}/remind`, { minutesFromNow }).then((res) => res.data);
+
+export const getReminders = () => client.get<Reminder[]>("/reminders").then((res) => res.data);
+
+export const cancelReminder = (id: string) => client.delete(`/reminders/${id}`).then((res) => res.data);
