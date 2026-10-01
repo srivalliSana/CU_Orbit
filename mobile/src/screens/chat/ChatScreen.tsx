@@ -289,6 +289,7 @@ export default function ChatScreen({ route, navigation }: Props) {
               <MessageBubble
                 message={item}
                 isOwn={item.sender_id === selfId}
+                showSenderInfo={showDivider || prev?.sender_id !== item.sender_id}
                 isGroup={kind === "channel"}
                 canModerate={canModerate}
                 isSuperAdmin={isSuperAdmin}

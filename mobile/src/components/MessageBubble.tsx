@@ -28,6 +28,17 @@ import { clockLabel } from "../lib/format";
 import { useThemeColors } from "../state/themeStore";
 import type { Message } from "../types/api";
 
+/** File-type icon for the attachment card — cosmetic only. */
+function fileIconFor(name: string, mimeType?: string | null): keyof typeof Ionicons.glyphMap {
+  const ext = (name.split(".").pop() || "").toLowerCase();
+  if (ext === "pdf" || mimeType === "application/pdf") return "document-text";
+  if (["doc", "docx"].includes(ext)) return "document-text";
+  if (["xls", "xlsx", "csv"].includes(ext)) return "grid";
+  if (["ppt", "pptx"].includes(ext)) return "easel";
+  if (["zip", "rar", "7z"].includes(ext)) return "archive";
+  return "document";
+}
+
 /** A short, common-case guess only — used purely for a display label when
  *  the real filename is unrecoverable, never for anything functional. */
 function mimeExtension(mimeType?: string | null): string | null {
@@ -66,6 +77,7 @@ export default function MessageBubble({
   highlighted,
   currentUserId,
   onOpenDm,
+  showSenderInfo = true,
 }: {
   message: Message;
   isOwn: boolean;
@@ -73,6 +85,12 @@ export default function MessageBubble({
   canModerate?: boolean;
   isSuperAdmin?: boolean;
   highlighted?: boolean;
+  // Avatar + sender name show once per consecutive run of messages from
+  // the same sender (the classic WhatsApp/Telegram grouping), not on
+  // every single message — the caller (ChatScreen) knows the neighboring
+  // messages and passes this down; defaults true so every other call site
+  // that doesn't bother with grouping still gets correct behavior.
+  showSenderInfo?: boolean;
   onReact: (emoji: string) => void;
   onDeleteForMe: () => void;
   onDeleteForEveryone: () => void;
@@ -239,8 +257,24 @@ export default function MessageBubble({
 
   return (
     <GestureDetector gesture={rowGesture}>
-    <View style={[styles.row, isOwn ? styles.rowOwn : styles.rowOther]}>
+    <View style={[styles.row, isOwn ? styles.rowOwn : styles.rowOther, !showSenderInfo && styles.rowGrouped]}>
       {message.is_pinned ? <Text style={styles.pinnedLabel}>📌 Pinned</Text> : null}
+      <View style={styles.incomingLayout}>
+        {!isOwn ? (
+          <View style={styles.avatarGutter}>
+            {showSenderInfo ? (
+              <Pressable onPress={() => onOpenProfile?.(message.sender_id)}>
+                <Avatar name={message.sender_name} url={message.sender_avatar_url} size={36} />
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+        <View style={styles.bubbleColumn}>
+          {!isOwn && showSenderInfo ? (
+            <Pressable onPress={() => onOpenProfile?.(message.sender_id)} hitSlop={4}>
+              <Text style={styles.senderName}>{message.sender_name}</Text>
+            </Pressable>
+          ) : null}
         <View style={styles.swipeWrap}>
           <Animated.View style={[styles.swipeReplyIcon, swipeIconStyle]}>
             <Ionicons name="arrow-undo" size={18} color={colors.primary} />
@@ -249,12 +283,6 @@ export default function MessageBubble({
       <Pressable
         style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther, highlighted && styles.bubbleHighlighted]}
       >
-        {!isOwn ? (
-          <Pressable onPress={() => onOpenProfile?.(message.sender_id)} hitSlop={4}>
-            <Text style={styles.senderName}>{message.sender_name}</Text>
-          </Pressable>
-        ) : null}
-
         {message.forwarded_from ? (
           <Text style={styles.forwardedLabel}>➡️ Forwarded from {message.forwarded_from.sender_name}</Text>
         ) : null}
@@ -372,9 +400,11 @@ export default function MessageBubble({
         ) : message.type === "voice" && attachmentUrl ? (
           <VoiceBubble uri={attachmentUrl} styles={styles} />
         ) : message.type === "file" && attachmentUrl ? (
-          <Pressable onPress={handleOpen} onLongPress={onFileLongPress} style={styles.fileRow}>
-            <Text style={styles.fileIcon}>📎</Text>
-            <Text style={styles.fileText} numberOfLines={1}>
+          <Pressable onPress={handleOpen} onLongPress={onFileLongPress} style={styles.fileCard}>
+            <View style={styles.fileIconChip}>
+              <Ionicons name={fileIconFor(fileName, mimeType)} size={20} color={colors.primary} />
+            </View>
+            <Text style={[styles.fileText, isOwn && styles.textOwn]} numberOfLines={1}>
               {fileName}
             </Text>
           </Pressable>
@@ -440,6 +470,8 @@ export default function MessageBubble({
       </Pressable>
           </Animated.View>
         </View>
+        </View>
+      </View>
 
       <ReactionPicker
         visible={pickerVisible}
@@ -609,14 +641,31 @@ function ActionButtonsRow({
 
 const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   row: {
-    marginVertical: 4,
-    paddingHorizontal: 12,
+    marginVertical: 6,
+    paddingHorizontal: 16,
+  },
+  // Grouped = a consecutive message from the same sender, same day — sits
+  // much closer to the one above it than a new sender/first message does.
+  rowGrouped: {
+    marginTop: -4,
   },
   rowOwn: {
     alignItems: "flex-end",
   },
   rowOther: {
     alignItems: "flex-start",
+  },
+  incomingLayout: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+    maxWidth: "100%",
+  },
+  avatarGutter: {
+    width: 36,
+  },
+  bubbleColumn: {
+    flexShrink: 1,
   },
   pinnedLabel: {
     fontSize: 10,
@@ -714,7 +763,7 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   image: {
     width: 220,
     height: 220,
-    borderRadius: 10,
+    borderRadius: 12,
     marginBottom: 4,
     backgroundColor: colors.surface,
   },
@@ -873,19 +922,28 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     color: colors.textMuted,
     fontStyle: "italic",
   },
-  fileRow: {
+  fileCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingVertical: 4,
+    gap: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
   },
-  fileIcon: {
-    fontSize: 18,
+  fileIconChip: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: `${colors.primary}1a`,
   },
   fileText: {
+    flex: 1,
     fontSize: 14,
-    color: colors.primary,
-    maxWidth: 180,
+    fontWeight: "600",
+    color: colors.text,
   },
   voiceRow: {
     flexDirection: "row",
