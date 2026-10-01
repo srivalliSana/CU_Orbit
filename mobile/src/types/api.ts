@@ -39,6 +39,7 @@ export interface ChannelSummary {
   unread_count: number;
   has_unread_mention: boolean;
   avatar_url?: string | null;
+  section?: string | null;
 }
 
 export interface DmSummary {

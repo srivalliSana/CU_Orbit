@@ -37,7 +37,7 @@ export function useChatActions() {
     );
   };
 
-  const onLongPress = (item: ChatRowItem) => {
+  const onLongPress = (item: ChatRowItem, onMoveToSection?: (item: ChatRowItem) => void) => {
     Alert.alert(
       item.title,
       undefined,
@@ -50,7 +50,10 @@ export function useChatActions() {
           text: item.isMuted ? "Unmute notifications" : "Mute notifications…",
           onPress: () => (item.isMuted ? setMute.mutate({ containerId: item.id, muted: false }) : promptMuteDuration(item)),
         },
-        { text: "Cancel", style: "cancel" },
+        ...(item.kind === "channel" && onMoveToSection
+          ? [{ text: item.section ? `Section: ${item.section}` : "Move to section…", onPress: () => onMoveToSection(item) }]
+          : []),
+        { text: "Cancel", style: "cancel" as const },
       ]
     );
   };

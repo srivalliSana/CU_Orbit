@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -9,7 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
@@ -18,6 +19,7 @@ import { useMentions } from "../../hooks/useMentions";
 import { useChatActions } from "../../hooks/useChatActions";
 import { useNavGuard } from "../../hooks/useNavGuard";
 import { searchMessages, type SearchResult } from "../../api/search";
+import { setConversationPref } from "../../api/conversations";
 import ChatListRow, { type ChatRowItem } from "../../components/ChatListRow";
 import { channelToRow, dmToRow } from "../../lib/chatRows";
 import { timeLabel } from "../../lib/format";
@@ -56,12 +58,22 @@ export default function HomeScreen({ navigation }: Props) {
   const { data: mentions } = useMentions();
   const { onLongPress } = useChatActions();
   const navGuard = useNavGuard();
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [fabMenuOpen, setFabMenuOpen] = useState(false);
   const debouncedQuery = useDebounced(query.trim(), 300);
   const pendingJoinCode = useAuthStore((s) => s.pendingJoinCode);
   const setPendingJoinCode = useAuthStore((s) => s.setPendingJoinCode);
   const currentUser = useAuthStore((s) => s.user);
+  const [sectionTarget, setSectionTarget] = useState<ChatRowItem | null>(null);
+  const [sectionInput, setSectionInput] = useState("");
+
+  const saveSection = async (value: string | null) => {
+    if (!sectionTarget) return;
+    await setConversationPref(sectionTarget.id, "section", value).catch(() => {});
+    setSectionTarget(null);
+    queryClient.invalidateQueries({ queryKey: ["home"] });
+  };
 
   // A join link opened before signing in is held in authStore (see
   // RootNavigator) since AuthStack has no route for it — resume it here,
@@ -122,13 +134,31 @@ export default function HomeScreen({ navigation }: Props) {
       list.push(...pinnedRows.map((row) => ({ kind: "row" as const, id: `pinned-${row.id}`, row })));
     }
 
+    // Channels carrying a custom section (set via long-press → Move to
+    // section) get their own group, sorted alphabetically for a stable
+    // order; everything else falls under the default "Channels" group.
+    const sectioned = new Map<string, ChatRowItem[]>();
+    const unsectioned: ChatRowItem[] = [];
+    for (const row of channelRows) {
+      if (row.section) {
+        if (!sectioned.has(row.section)) sectioned.set(row.section, []);
+        sectioned.get(row.section)!.push(row);
+      } else {
+        unsectioned.push(row);
+      }
+    }
+    for (const name of [...sectioned.keys()].sort((a, b) => a.localeCompare(b))) {
+      list.push({ kind: "sectionHeader", id: `section-${name}`, label: name });
+      list.push(...sectioned.get(name)!.map((row) => ({ kind: "row" as const, id: row.id, row })));
+    }
+
     list.push({
       kind: "sectionHeader",
       id: "channels-header",
       label: "Channels",
       onAdd: () => navigation.navigate("CreateChannel"),
     });
-    list.push(...channelRows.map((row) => ({ kind: "row" as const, id: row.id, row })));
+    list.push(...unsectioned.map((row) => ({ kind: "row" as const, id: row.id, row })));
     list.push({ kind: "sectionHeader", id: "dms-header", label: "Direct messages" });
     list.push(...dmRows.map((row) => ({ kind: "row" as const, id: row.id, row })));
     return list;
@@ -293,7 +323,7 @@ export default function HomeScreen({ navigation }: Props) {
                   })
                 )
               }
-              onLongPress={() => onLongPress(item.row)}
+              onLongPress={() => onLongPress(item.row, (row) => { setSectionTarget(row); setSectionInput(row.section || ""); })}
             />
           );
         }}
@@ -335,6 +365,37 @@ export default function HomeScreen({ navigation }: Props) {
       <Pressable style={styles.fab} onPress={() => setFabMenuOpen((v) => !v)}>
         <Text style={styles.fabIcon}>{fabMenuOpen ? "×" : "+"}</Text>
       </Pressable>
+
+      <Modal visible={!!sectionTarget} transparent animationType="fade" onRequestClose={() => setSectionTarget(null)}>
+        <Pressable style={styles.sectionBackdrop} onPress={() => setSectionTarget(null)}>
+          <Pressable style={styles.sectionSheet} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.sectionTitle}>Move "{sectionTarget?.title}" to a section</Text>
+            <TextInput
+              value={sectionInput}
+              onChangeText={setSectionInput}
+              placeholder="e.g. Clubs, Classes, Projects"
+              placeholderTextColor={colors.textMuted}
+              style={styles.sectionInput}
+              autoFocus
+            />
+            <View style={styles.sectionActions}>
+              {sectionTarget?.section ? (
+                <Pressable onPress={() => saveSection(null)}>
+                  <Text style={styles.sectionRemove}>Remove from section</Text>
+                </Pressable>
+              ) : <View />}
+              <View style={{ flexDirection: "row", gap: 16 }}>
+                <Pressable onPress={() => setSectionTarget(null)}>
+                  <Text style={{ color: colors.textMuted, fontWeight: "600" }}>Cancel</Text>
+                </Pressable>
+                <Pressable onPress={() => saveSection(sectionInput.trim())} disabled={!sectionInput.trim()}>
+                  <Text style={{ color: colors.primary, fontWeight: "700", opacity: sectionInput.trim() ? 1 : 0.4 }}>Save</Text>
+                </Pressable>
+              </View>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -472,6 +533,43 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     color: colors.primaryText,
     fontSize: 9,
     fontWeight: "700",
+  },
+  sectionBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  sectionSheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: 20,
+    paddingBottom: 32,
+    gap: 14,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  sectionInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: colors.text,
+  },
+  sectionActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  sectionRemove: {
+    color: colors.danger,
+    fontWeight: "600",
+    fontSize: 13,
   },
   sectionHeader: {
     flexDirection: "row",

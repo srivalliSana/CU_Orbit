@@ -2,7 +2,7 @@ import { client } from "./client";
 
 export const setConversationPref = (
   containerId: string,
-  action: "pin" | "mute" | "hide" | "delete" | "wallpaper",
+  action: "pin" | "mute" | "hide" | "delete" | "wallpaper" | "section",
   value: boolean | string | null,
   durationMinutes?: number
 ) =>

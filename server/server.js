@@ -262,7 +262,14 @@ const ConversationPref = sequelize.define('ConversationPref', {
     isHidden: { type: DataTypes.BOOLEAN, defaultValue: false },
     // A preset key ('ocean', 'sunset', ...) or null for the default
     // background — per-user, per-conversation, same as pin/mute.
-    wallpaper: { type: DataTypes.STRING, allowNull: true }
+    wallpaper: { type: DataTypes.STRING, allowNull: true },
+    // Free-text sidebar folder name ("Clubs", "Classes", ...) or null for
+    // the default, unsectioned group — per-user, per-conversation, same
+    // shape as wallpaper. Not a separate Sections table: a section only
+    // exists as the set of conversations currently carrying its name,
+    // same "no table when a scalar column already covers it" call this
+    // session already made for wallpaper/2FA/report audit entries.
+    section: { type: DataTypes.STRING, allowNull: true }
 }, {
     // findOne({ userId, containerId }) runs once per channel/DM on every
     // home-feed load — unindexed, that's a full table scan per row.
@@ -2685,6 +2692,7 @@ app.get('/api/home/:userId/:workspaceId', auth.requireAuth, async (req, res) => 
                 is_member: memberOf.has(ch.id),
                 is_muted: pref ? isConversationMuted(pref) : !!ch.is_muted,
                 is_pinned: pref ? pref.isPinned : false,
+                section: pref ? pref.section : null,
                 last_message_preview: lastMsg ? {
                     sender_id: lastMsg.senderId,
                     sender_name: lastMsg.senderName,
@@ -2799,6 +2807,7 @@ app.post('/api/conversations/:id/prefs', auth.requireAuth, async (req, res) => {
         if (action === 'hide') pref.isHidden = isTrue;
         if (action === 'delete' && isTrue) pref.isHidden = true;
         if (action === 'wallpaper') pref.wallpaper = value || null;
+        if (action === 'section') pref.section = (value && String(value).trim().slice(0, 60)) || null;
         await pref.save();
         res.json({ success: true, pref });
     } catch (e) {

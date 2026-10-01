@@ -17,6 +17,7 @@ export const channelToRow = (c: ChannelSummary): ChatRowItem & { isPinned: boole
   hasMention: c.has_unread_mention,
   isPinned: c.is_pinned,
   isMuted: c.is_muted,
+  section: c.section ?? null,
 });
 
 export const dmToRow = (d: DmSummary): ChatRowItem & { isPinned: boolean } => ({

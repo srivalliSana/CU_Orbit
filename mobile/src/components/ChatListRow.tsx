@@ -17,6 +17,7 @@ export interface ChatRowItem {
   isPinned?: boolean;
   isMuted?: boolean;
   presence?: string;
+  section?: string | null;
 }
 
 export default function ChatListRow({
