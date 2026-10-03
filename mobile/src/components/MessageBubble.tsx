@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Dimensions, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { Ionicons } from "@expo/vector-icons";
@@ -667,13 +667,18 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     flexDirection: "row",
     alignItems: "flex-end",
     gap: 8,
-    maxWidth: "100%",
   },
   avatarGutter: {
     width: 36,
   },
+  // A fixed pixel cap, not a percentage: this sits inside a chain of
+  // nested flex-row wrappers (incomingLayout > bubbleColumn > swipeWrap >
+  // bubble) with no single ancestor carrying a definite width, so a
+  // percentage maxWidth anywhere in that chain has nothing real to
+  // resolve against — RN's layout engine collapses it to near-zero,
+  // which is what wrapped "Hello" into "Hel/lo" one letter-run per line.
   bubbleColumn: {
-    flexShrink: 1,
+    maxWidth: Dimensions.get("window").width * 0.72,
   },
   pinnedLabel: {
     fontSize: 10,
@@ -684,7 +689,6 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   swipeWrap: {
     flexDirection: "row",
     alignItems: "center",
-    maxWidth: "100%",
   },
   swipeReplyIcon: {
     position: "absolute",
@@ -697,7 +701,6 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     justifyContent: "center",
   },
   bubble: {
-    maxWidth: "80%",
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 8,
