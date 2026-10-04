@@ -517,6 +517,23 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
                     <span className="w-4 text-center">📊</span><span>Poll</span>
                   </button>
                 )}
+                {/* Below sm, the standalone Aa/schedule buttons are hidden to
+                    leave the textarea enough width to not collapse — these
+                    give the same actions back through the attach menu. */}
+                <button
+                  onClick={() => { setAttachMenuOpen(false); setFormattingOpen((v) => !v); }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700 sm:hidden"
+                >
+                  <span className="w-4 text-center font-semibold">Aa</span><span>Formatting</span>
+                </button>
+                {onSchedule && (
+                  <button
+                    onClick={() => { setAttachMenuOpen(false); setSchedulingOpen(true); }}
+                    className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700 sm:hidden"
+                  >
+                    <span className="w-4 text-center">⏰</span><span>Schedule for later</span>
+                  </button>
+                )}
               </div>
             </>
           )}
@@ -527,7 +544,7 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
           aria-label="Formatting"
           title="Formatting"
           aria-pressed={formattingOpen}
-          className={`shrink-0 rounded-full p-2 text-sm font-semibold ${formattingOpen ? 'bg-accent-100 text-accent-700 dark:bg-accent-900/50 dark:text-accent-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+          className={`hidden shrink-0 rounded-full p-2 text-sm font-semibold sm:block ${formattingOpen ? 'bg-accent-100 text-accent-700 dark:bg-accent-900/50 dark:text-accent-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
         >
           Aa
         </button>
@@ -541,7 +558,12 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
           onPaste={onPaste}
           placeholder="Type a message"
           aria-label="Message"
-          className="max-h-40 flex-1 resize-none rounded-2xl bg-slate-100 px-4 py-2.5 text-sm outline-none ring-accent-500/40 placeholder:text-slate-400 focus:ring-2 dark:bg-slate-800 dark:text-slate-100"
+          // min-w-0 overrides flex's default min-width:auto — without it, a
+          // packed row of shrink-0 icon buttons (easily 250px+ at 7 icons)
+          // pushes this flex-1 textarea into negative available space
+          // instead of actually shrinking, and it visually collapses to a
+          // few px wide, wrapping the placeholder one syllable per line.
+          className="min-w-0 max-h-40 flex-1 resize-none rounded-2xl bg-slate-100 px-4 py-2.5 text-sm outline-none ring-accent-500/40 placeholder:text-slate-400 focus:ring-2 dark:bg-slate-800 dark:text-slate-100"
         />
 
         <div className="relative shrink-0">
@@ -567,7 +589,10 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
             onClick={insertMention}
             aria-label="Mention someone"
             title="Mention someone"
-            className="shrink-0 rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+            // Hidden below sm — typing "@" directly in the textarea already
+            // opens the same mention autocomplete (see MENTION_TRIGGER),
+            // so this button is a convenience, not the only way in.
+            className="hidden shrink-0 rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 sm:block"
           >
             @
           </button>
@@ -594,13 +619,17 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
         )}
 
         {onSchedule && (
+          // Not hidden here — its popover (below) is still reachable from
+          // the attach menu's "Schedule for later" item on mobile, so this
+          // wrapper has to stay rendered; only the redundant trigger
+          // button inside it hides below sm.
           <div className="relative shrink-0">
             <button
               onClick={() => setSchedulingOpen((v) => !v)}
               disabled={!text.trim() && !file}
               aria-label="Schedule for later"
               title="Schedule for later"
-              className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-slate-800"
+              className="hidden rounded-full p-2 text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-slate-800 sm:block"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" />
