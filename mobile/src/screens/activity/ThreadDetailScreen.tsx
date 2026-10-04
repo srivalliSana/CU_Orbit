@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, Keyboard, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 

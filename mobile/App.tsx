@@ -1,6 +1,7 @@
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { QueryClient, onlineManager } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
@@ -43,16 +44,26 @@ export default function App() {
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaProvider>
-          <PersistQueryClientProvider
-            client={queryClient}
-            persistOptions={{ persister, maxAge: 1000 * 60 * 60 * 24 * 7 }}
-          >
-            <RootNavigator />
-            <UpdateBanner />
-            <StatusBar style="auto" />
-          </PersistQueryClientProvider>
-        </SafeAreaProvider>
+        {/* react-native's own KeyboardAvoidingView relies on the OS resizing
+            the window when the keyboard opens — Expo's mandatory Android
+            edge-to-edge mode stopped that from happening, so the keyboard
+            was covering whatever was being typed instead of the composer
+            lifting above it. KeyboardProvider + this library's
+            KeyboardAvoidingView (used in ChatScreen) read the keyboard
+            height from native insets directly instead, which still works
+            under edge-to-edge. */}
+        <KeyboardProvider>
+          <SafeAreaProvider>
+            <PersistQueryClientProvider
+              client={queryClient}
+              persistOptions={{ persister, maxAge: 1000 * 60 * 60 * 24 * 7 }}
+            >
+              <RootNavigator />
+              <UpdateBanner />
+              <StatusBar style="auto" />
+            </PersistQueryClientProvider>
+          </SafeAreaProvider>
+        </KeyboardProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>
   );
