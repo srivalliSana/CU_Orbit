@@ -7,14 +7,19 @@ import type { DrawerParamList } from "./types";
  *  single flat route table to type this against precisely. */
 export const navigationRef = createNavigationContainerRef<DrawerParamList>();
 
-export function navigateToChat(containerId: string) {
+export function navigateToChat(containerId: string, messageId?: string) {
   if (!navigationRef.isReady()) return;
   const kind: "channel" | "dm" = containerId.includes("_") ? "dm" : "channel";
   navigationRef.navigate("Tabs", {
     screen: "HomeTab",
     params: {
       screen: "Chat",
-      params: { containerId, title: kind === "dm" ? "Chat" : "Channel", kind },
+      params: {
+        containerId,
+        title: kind === "dm" ? "Chat" : "Channel",
+        kind,
+        scrollToMessageId: messageId,
+      },
     },
   } as never);
 }

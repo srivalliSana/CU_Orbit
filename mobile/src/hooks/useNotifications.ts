@@ -39,8 +39,12 @@ export function useNotifications() {
   // from a notification that was delivered before this mount.
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const containerId = response.notification.request.content.data?.container_id;
-      if (typeof containerId === "string") navigateToChat(containerId);
+      const data = response.notification.request.content.data;
+      const containerId = data?.container_id;
+      const messageId = data?.message_id;
+      if (typeof containerId === "string") {
+        navigateToChat(containerId, typeof messageId === "string" ? messageId : undefined);
+      }
     });
     return () => sub.remove();
   }, []);

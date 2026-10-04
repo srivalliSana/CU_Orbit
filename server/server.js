@@ -871,7 +871,8 @@ async function routeMentionNotification(user, message) {
     sendPushNotification(user, {
         title: `${message.senderName} mentioned you`,
         body: message.body || '',
-        data: { container_id: message.channelId || message.dm_id },
+        data: { container_id: message.channelId || message.dm_id, message_id: message.id },
+        tag: `mention-${message.channelId || message.dm_id}`,
     });
 }
 
@@ -896,16 +897,20 @@ function isUserDnd(user) {
  * Expo endpoint, or a dead/uninstalled-app token must never break message
  * sending — this always resolves, never throws into its caller.
  */
-async function sendPushNotification(user, { title, body, data }) {
+async function sendPushNotification(user, { title, body, data, tag }) {
     if (!user?.push_token) return;
     try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
         try {
+            // `tag` (Android-only) replaces any already-displayed notification
+            // sharing it, so a burst of messages from the same conversation
+            // collapses into one updated notification instead of stacking —
+            // the same thing web does with Notification's own `tag` option.
             const resp = await fetch('https://exp.host/--/api/v2/push/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                body: JSON.stringify([{ to: user.push_token, title, body: (body || '').slice(0, 180), data, sound: 'default', channelId: 'default' }]),
+                body: JSON.stringify([{ to: user.push_token, title, body: (body || '').slice(0, 180), data, sound: 'default', channelId: 'default', tag: tag || undefined }]),
                 signal: controller.signal,
             });
             const result = await resp.json().catch(() => null);
@@ -3174,7 +3179,8 @@ async function createMessage({ senderId, senderName, senderAvatarUrl, body, chan
             sendPushNotification(recipient, {
                 title: isDm ? senderName : `${senderName} in #${channelName || '...'}`,
                 body: body || (mediaUrl ? 'Sent an attachment' : ''),
-                data: { container_id: container },
+                data: { container_id: container, message_id: msg.id },
+                tag: container,
             });
         });
     }
@@ -3485,7 +3491,8 @@ async function sendDueReminders() {
                     await sendPushNotification(user, {
                         title: 'Reminder',
                         body: message?.body || 'You asked to be reminded about this message.',
-                        data: { type: 'reminder', channelId: row.channel_id, messageId: row.message_id },
+                        data: { type: 'reminder', container_id: row.channel_id, message_id: row.message_id },
+                        tag: `reminder-${row.id}`,
                     });
                     realtime.toUser(user.id, 'reminder', {
                         id: row.id, channel_id: row.channel_id, message_id: row.message_id,
