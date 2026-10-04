@@ -55,6 +55,8 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
   const [schedulingOpen, setSchedulingOpen] = useState(false);
   const [scheduleAt, setScheduleAt] = useState('');
   const [recordSeconds, setRecordSeconds] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragDepth = useRef(0);
   const fileInput = useRef(null);
   const cameraInput = useRef(null);
   const lastTyped = useRef(0);
@@ -175,6 +177,32 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
     if (!blob) return;
     const ext = item.type.split('/')[1] || 'png';
     setFile(new File([blob], `pasted-image-${Date.now()}.${ext}`, { type: item.type }));
+  };
+
+  // Dragging a file/image from the desktop over the composer attaches it,
+  // same single-attachment slot a picked file or pasted screenshot uses.
+  // dragDepth counts enter/leave across child elements so the overlay
+  // doesn't flicker as the pointer crosses nested nodes.
+  const onDragEnter = (e) => {
+    e.preventDefault();
+    if (!e.dataTransfer?.types?.includes('Files')) return;
+    dragDepth.current += 1;
+    setIsDragging(true);
+  };
+  const onDragOver = (e) => {
+    e.preventDefault();
+  };
+  const onDragLeave = (e) => {
+    e.preventDefault();
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setIsDragging(false);
+  };
+  const onDrop = (e) => {
+    e.preventDefault();
+    dragDepth.current = 0;
+    setIsDragging(false);
+    const dropped = e.dataTransfer?.files?.[0];
+    if (dropped) { setFile(dropped); box.current?.focus(); }
   };
 
   const onChange = (e) => {
@@ -339,7 +367,18 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
   useEffect(() => () => clearInterval(timerRef.current), []);
 
   return (
-    <div className="relative border-t border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
+    <div
+      className="relative border-t border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900"
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      {isDragging && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center rounded-lg border-2 border-dashed border-accent-500 bg-accent-50/90 dark:bg-accent-950/80">
+          <p className="text-sm font-medium text-accent-600 dark:text-accent-300">📎 Drop to attach</p>
+        </div>
+      )}
       {suggestions.length > 0 && (
         <div className="absolute bottom-full left-3 right-3 z-10 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
           {suggestions.map((m) => (

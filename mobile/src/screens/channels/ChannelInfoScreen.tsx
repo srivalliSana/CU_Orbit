@@ -152,6 +152,30 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
     }
   };
 
+  const leaveChannel = () => {
+    if (!selfId) return;
+    Alert.alert("Leave channel?", `You'll stop receiving messages from ${channel?.name ? `#${channel.name}` : "this channel"}.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Leave",
+        style: "destructive",
+        onPress: async () => {
+          setBusyUserId(selfId);
+          setError(null);
+          try {
+            await removeChannelMember(channelId, selfId);
+            queryClient.invalidateQueries({ queryKey: ["home"] });
+            navigation.goBack();
+          } catch (e) {
+            setError(apiErrorMessage(e, "Could not leave that channel."));
+          } finally {
+            setBusyUserId(null);
+          }
+        },
+      },
+    ]);
+  };
+
   const sendInvite = async () => {
     setInvitingByEmail(true);
     setError(null);
@@ -468,6 +492,14 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
               <Text style={styles.navRowText}>⚡ Workflows</Text>
             </Pressable>
           </View>
+
+          {selfId && channel && !isCreator(selfId) ? (
+            <View style={styles.settingsBlock}>
+              <Pressable style={styles.navRow} onPress={leaveChannel} disabled={busyUserId === selfId}>
+                <Text style={styles.deleteChannelText}>🚪 Leave channel</Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           {isChannelAdmin && channel ? (
             <View style={styles.settingsBlock}>

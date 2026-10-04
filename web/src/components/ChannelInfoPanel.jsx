@@ -180,6 +180,22 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
     }
   };
 
+  const leaveChannel = async () => {
+    if (!currentUser?.id) return;
+    if (!window.confirm(`Leave ${channel?.name ? `#${channel.name}` : 'this channel'}?`)) return;
+    setBusyUserId(currentUser.id);
+    setError(null);
+    try {
+      await removeChannelMember(channelId, currentUser.id);
+      onChanged?.();
+      onClose?.();
+    } catch (e) {
+      setError(e.message || 'Could not leave that channel.');
+    } finally {
+      setBusyUserId(null);
+    }
+  };
+
   const setRole = async (userId, role) => {
     setBusyUserId(userId);
     try {
@@ -622,6 +638,18 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                 ⭐ Starred messages
               </button>
             </div>
+
+            {!isCreator(currentUser?.id) && (
+              <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
+                <button
+                  onClick={leaveChannel}
+                  disabled={busyUserId === currentUser?.id}
+                  className="block w-full rounded-lg px-2 py-2 text-left text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-40 dark:hover:bg-red-950/40"
+                >
+                  🚪 Leave channel
+                </button>
+              </div>
+            )}
 
             {isChannelAdmin && (
               <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">

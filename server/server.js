@@ -6008,6 +6008,13 @@ app.post('/api/channels/:id/members', auth.requireAuth, async (req, res) => {
             // ignores on an existing row.
             member.role = role;
             await member.save();
+            const changed = await User.findByPk(userId, { attributes: ['name'] });
+            const verb = role === 'admin' ? 'made' : 'removed';
+            const body = role === 'admin'
+                ? `${adder.name} made ${changed?.name || 'a member'} an admin`
+                : `${adder.name} removed ${changed?.name || 'a member'} as admin`;
+            await Message.create({ channelId: req.params.id, senderId: adder.id, senderName: adder.name, body, type: 'system', timestamp: Date.now() });
+            await logAudit(req.user, role === 'admin' ? 'channel.member_promoted' : 'channel.member_demoted', 'channel', req.params.id, `${adder.name} ${verb === 'made' ? 'promoted' : 'demoted'} ${changed?.name || userId}`);
         }
         res.json({ success: true });
     } catch (e) { res.status(500).json(e); }
