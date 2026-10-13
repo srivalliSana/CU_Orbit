@@ -224,7 +224,7 @@ export default function MessageBubble({
 
   return (
     <GestureDetector gesture={rowGesture}>
-    <View style={[styles.row, isOwn ? styles.rowOwn : styles.rowOther, !showSenderInfo && styles.rowGrouped]}>
+    <View style={[styles.row, isOwn ? styles.rowOwn : styles.rowOther, !showSenderInfo && styles.rowGrouped, selectionMode && styles.rowSelecting]}>
       {message.is_pinned ? <Text style={styles.pinnedLabel}>📌 Pinned</Text> : null}
       <View style={styles.incomingLayout}>
         {!isOwn ? (
@@ -590,6 +590,18 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   row: {
     marginVertical: 6,
     paddingHorizontal: 16,
+    // The selection checkmark is an absolutely-positioned child of this
+    // row — without a position here it escapes to the nearest *actually*
+    // positioned ancestor (none, upstream of the FlatList), so instead of
+    // sitting next to its own bubble it floated pinned near the top of the
+    // whole scroll area, detached from every message under it.
+    position: "relative",
+  },
+  // Extra side padding while selecting, so the checkmark gets its own
+  // dedicated space instead of overlapping the avatar or sitting half off
+  // the screen edge in the same 16px margin everything else already uses.
+  rowSelecting: {
+    paddingHorizontal: 40,
   },
   // Grouped = a consecutive message from the same sender, same day — sits
   // much closer to the one above it than a new sender/first message does.
@@ -1025,18 +1037,27 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   },
   checkmark: {
     position: "absolute",
-    top: 2,
+    // Centers on the row's full height (avatar+bubble together, whatever
+    // that ends up being for this message) instead of a fixed offset from
+    // the top, which only lined up for the shortest possible bubble.
+    top: "50%",
+    marginTop: -11,
     width: 22,
     height: 22,
     borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
   },
   checkmarkOwn: {
-    right: -2,
+    right: 4,
   },
   checkmarkOther: {
-    left: -2,
+    left: 4,
   },
   checkmarkOn: {
     backgroundColor: colors.primary,

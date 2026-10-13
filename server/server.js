@@ -476,6 +476,22 @@ const MessageRead = sequelize.define('MessageRead', {
     ]
 });
 
+/**
+ * CU AI — the floating-bubble assistant. One flat per-user transcript
+ * (not modeled as a channel/DM) since it's a single always-available
+ * assistant, not a conversation that needs membership, invites, or
+ * multi-party semantics the rest of the messaging system carries.
+ */
+const AiMessage = sequelize.define('AiMessage', {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    user_id: { type: DataTypes.STRING, allowNull: false },
+    role: { type: DataTypes.ENUM('user', 'assistant'), allowNull: false },
+    text: { type: DataTypes.TEXT, allowNull: false },
+    created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+}, {
+    indexes: [{ fields: ['user_id', 'created_at'] }],
+});
+
 const Mention = sequelize.define('Mention', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     message_id: { type: DataTypes.UUID, allowNull: false },
@@ -3447,8 +3463,13 @@ app.post('/api/messages/:id/remind', auth.requireAuth, async (req, res) => {
         } else {
             return res.status(400).json({ error: 'bad_request', message: 'minutesFromNow or remindAt required' });
         }
+        // Message's own field is channelId (camelCase) — reading the
+        // snake_case `message.channel_id` here was always undefined, which
+        // violates Reminder.channel_id's allowNull:false and threw on
+        // every single call; the client's .catch(() => {}) just swallowed
+        // it, so "Remind me" silently did nothing for every message ever.
         const row = await Reminder.create({
-            user_id: req.user.id, message_id: message.id, channel_id: message.channel_id, remind_at: remindAt,
+            user_id: req.user.id, message_id: message.id, channel_id: message.channelId || message.dm_id, remind_at: remindAt,
         });
         res.json(row);
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
