@@ -17,14 +17,18 @@ interface Row {
  * "Forward this message to anyone" — same channel/DM list HomeScreen shows.
  * Picking a target only selects it (checkmark); nothing sends until the
  * Send button is pressed, so a stray tap can't fire off a message.
+ *
+ * `messages` is a plain array so the same modal covers both a single
+ * forward and the chat's multi-select "Forward" action — each selected
+ * message goes to each selected target.
  */
 export default function ForwardModal({
-  message,
+  messages,
   visible,
   onClose,
   onForwarded,
 }: {
-  message: Message | null;
+  messages: Message[];
   visible: boolean;
   onClose: () => void;
   onForwarded: () => void;
@@ -64,20 +68,26 @@ export default function ForwardModal({
   };
 
   const send = async () => {
-    if (!message || !rows) return;
+    if (messages.length === 0 || !rows) return;
     setSending(true);
     try {
-      const media = message.attachments?.[0];
       const targets = rows.filter((r) => selected.has(r.id));
-      await Promise.all(targets.map((target) => sendMessage({
-        containerId: target.id,
-        body: message.text,
-        type: message.type === "text" ? "text" : message.type,
-        mediaUrl: media?.url,
-        mediaName: media?.name,
-        mediaMimeType: media?.mimeType,
-        forwardedFromName: message.sender_name,
-      })));
+      await Promise.all(
+        targets.flatMap((target) =>
+          messages.map((message) => {
+            const media = message.attachments?.[0];
+            return sendMessage({
+              containerId: target.id,
+              body: message.text,
+              type: message.type === "text" ? "text" : message.type,
+              mediaUrl: media?.url,
+              mediaName: media?.name,
+              mediaMimeType: media?.mimeType,
+              forwardedFromName: message.sender_name,
+            });
+          })
+        )
+      );
       onForwarded();
     } finally {
       setSending(false);
@@ -88,7 +98,7 @@ export default function ForwardModal({
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title}>Forward message</Text>
+          <Text style={styles.title}>{messages.length > 1 ? `Forward ${messages.length} messages` : "Forward message"}</Text>
           <Pressable onPress={onClose} hitSlop={8}>
             <Text style={styles.close}>✕</Text>
           </Pressable>

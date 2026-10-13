@@ -1,0 +1,231 @@
+<title>CU Orbit Logo Concepts</title>
+<style>
+  :root {
+    --bg: #071B20;
+    --surface: #12323A;
+    --border: #24444A;
+    --text: #EDF8F5;
+    --text-muted: #A9C3C4;
+    --mint: #3DC496;
+    --mint-deep: #1A8E72;
+    --coral: #FF876F;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 40px 20px 60px;
+  }
+  h1 {
+    text-align: center;
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0 0 4px;
+  }
+  .sub {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13.5px;
+    margin: 0 0 40px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 28px;
+    max-width: 980px;
+    margin: 0 auto;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 24px 20px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .tile {
+    width: 112px;
+    height: 112px;
+    border-radius: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+    box-shadow: 0 10px 26px rgba(0,0,0,.35);
+  }
+  .name {
+    font-weight: 700;
+    font-size: 14.5px;
+    margin-bottom: 3px;
+  }
+  .desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+    line-height: 1.5;
+  }
+  .row-small {
+    display: flex;
+    gap: 10px;
+    margin-top: 18px;
+  }
+  .row-small .mini {
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .row-small .mini svg { width: 20px; height: 20px; }
+  .tag {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    margin-top: 4px;
+  }
+</style>
+
+<h1>Let's Connect — logo concepts</h1>
+<p class="sub">All drawn from the live app palette: mint #3DC496 / #1A8E72, coral #FF876F, dark ground #071B20</p>
+
+<div class="grid">
+
+  <div class="card">
+    <div class="tile" style="background: linear-gradient(155deg, #103A2F, var(--bg));">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+        <ellipse cx="32" cy="32" rx="26" ry="13" stroke="var(--mint)" stroke-width="3" fill="none"/>
+        <ellipse cx="32" cy="32" rx="13" ry="26" stroke="var(--mint-deep)" stroke-width="3" fill="none" opacity="0.55"/>
+        <circle cx="32" cy="32" r="7" fill="var(--mint)"/>
+        <circle cx="54" cy="24" r="4.5" fill="var(--coral)"/>
+      </svg>
+    </div>
+    <div class="name">Orbit Node</div>
+    <div class="desc">Two crossing orbital rings around a mint core, a coral "satellite" dot standing in for a message/notification. Leans fully into the "Orbit" name.</div>
+    <div class="tag">Concept A</div>
+  </div>
+
+  <div class="card">
+    <div class="tile" style="background: linear-gradient(155deg, #103A2F, var(--bg));">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+        <path d="M14 22c0-6 5-11 11-11h14c6 0 11 5 11 11v10c0 6-5 11-11 11H28l-9 7v-7h-1c-6 0-11-5-11-11V22z" fill="var(--mint)"/>
+        <circle cx="25" cy="27" r="7" fill="none" stroke="var(--bg)" stroke-width="2.5"/>
+        <circle cx="25" cy="27" r="2" fill="var(--bg)"/>
+        <path d="M32 27a8 8 0 0 1 14 5.3" stroke="var(--bg)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <circle cx="46" cy="32" r="2" fill="var(--bg)"/>
+      </svg>
+    </div>
+    <div class="name">Connect Bubble</div>
+    <div class="desc">A classic chat bubble, but the tail is replaced by two linked orbit rings — reads as both "chat" and "connect" at a glance.</div>
+    <div class="tag">Concept B</div>
+  </div>
+
+  <div class="card">
+    <div class="tile" style="background: linear-gradient(155deg, #103A2F, var(--bg));">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+        <path d="M44 14A20 20 0 1 0 50 44" stroke="var(--mint)" stroke-width="5" fill="none" stroke-linecap="round"/>
+        <circle cx="44" cy="14" r="5" fill="var(--coral)"/>
+      </svg>
+    </div>
+    <div class="name">Orbit C</div>
+    <div class="desc">An open orbital ring that reads as a "C" — for CU / Connect — broken by a coral node where a satellite crosses it. Works tiny, at launcher size.</div>
+    <div class="tag">Concept C</div>
+  </div>
+
+  <div class="card">
+    <div class="tile" style="background: linear-gradient(155deg, #103A2F, var(--bg));">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+        <circle cx="24" cy="26" r="11" fill="var(--mint)"/>
+        <circle cx="42" cy="40" r="11" fill="var(--mint-deep)"/>
+        <circle cx="42" cy="40" r="11" fill="var(--mint-deep)" opacity="0.001"/>
+        <path d="M30 31l6 4" stroke="var(--coral)" stroke-width="3.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="name">Two Nodes</div>
+    <div class="desc">Two overlapping circles (people) joined by a short coral link — simplest mark, reads as "connection" without leaning on the orbit metaphor.</div>
+    <div class="tag">Concept D</div>
+  </div>
+
+  <div class="card">
+    <div class="tile" style="background: linear-gradient(155deg, #103A2F, var(--bg));">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+        <path d="M12 44V22a6 6 0 0 1 6-6h8l6-6 6 6h8a6 6 0 0 1 6 6v10a6 6 0 0 1-6 6H24l-7 7v-7h-5z" fill="none" stroke="var(--mint)" stroke-width="3.2" stroke-linejoin="round"/>
+        <circle cx="32" cy="10" r="2.6" fill="var(--coral)"/>
+      </svg>
+    </div>
+    <div class="name">Campus Bubble</div>
+    <div class="desc">A chat bubble with a graduation-cap peak instead of a plain curve — ties the mark directly to a university messaging app, not a generic chat icon.</div>
+    <div class="tag">Concept E</div>
+  </div>
+
+  <div class="card">
+    <div class="tile" style="background: linear-gradient(155deg, #103A2F, var(--bg));">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+        <path d="M20 44V20a8 8 0 0 1 8-8h8a8 8 0 0 1 8 8v8a8 8 0 0 1-8 8h-4" stroke="var(--mint)" stroke-width="5.5" fill="none" stroke-linecap="round"/>
+        <path d="M44 20v12a8 8 0 0 1-8 8h-6l-6 6v-6" stroke="var(--coral)" stroke-width="5.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="name">LC Monogram</div>
+    <div class="desc">The letterforms L and C, drawn as two interlocking strokes rather than typeset — mint "L", coral "C" overlapping where a conversation would connect them.</div>
+    <div class="tag">Concept F</div>
+  </div>
+
+  <div class="card">
+    <div class="tile" style="background: linear-gradient(155deg, #103A2F, var(--bg));">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+        <rect x="10" y="16" width="28" height="22" rx="9" fill="var(--mint)"/>
+        <rect x="26" y="26" width="28" height="22" rx="9" fill="var(--coral)" opacity="0.92"/>
+      </svg>
+    </div>
+    <div class="name">Overlap</div>
+    <div class="desc">Two rounded chat bubbles overlapping, mint over coral — the plainest, friendliest "conversation" mark of the set, no metaphor to explain.</div>
+    <div class="tag">Concept G</div>
+  </div>
+
+  <div class="card">
+    <div class="tile" style="background: linear-gradient(155deg, #103A2F, var(--bg));">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+        <rect x="14" y="14" width="16" height="16" rx="5" transform="rotate(-18 22 22)" fill="var(--mint)"/>
+        <rect x="34" y="34" width="16" height="16" rx="5" transform="rotate(-18 42 42)" fill="var(--coral)"/>
+        <path d="M27 27l10 10" stroke="var(--text)" stroke-width="2.5" stroke-linecap="round" opacity="0.65"/>
+      </svg>
+    </div>
+    <div class="name">Link</div>
+    <div class="desc">Two tilted rounded squares (people, or departments) joined by a short diagonal link — reads as "connect" with no chat-app cliché at all.</div>
+    <div class="tag">Concept H</div>
+  </div>
+
+</div>
+
+<h1 style="margin-top:56px; font-size: 17px;">Concept A at real sizes</h1>
+<p class="sub">Launcher (48dp), notification icon (24dp), light mode check</p>
+<div style="display:flex; justify-content:center; gap: 26px; align-items:center; flex-wrap:wrap;">
+  <div class="mini" style="width:96px;height:96px;border-radius:22px;background:linear-gradient(155deg,#103A2F,var(--bg));">
+    <svg width="54" height="54" viewBox="0 0 64 64" fill="none">
+      <ellipse cx="32" cy="32" rx="26" ry="13" stroke="var(--mint)" stroke-width="3" fill="none"/>
+      <ellipse cx="32" cy="32" rx="13" ry="26" stroke="var(--mint-deep)" stroke-width="3" fill="none" opacity="0.55"/>
+      <circle cx="32" cy="32" r="7" fill="var(--mint)"/>
+      <circle cx="54" cy="24" r="4.5" fill="var(--coral)"/>
+    </svg>
+  </div>
+  <div class="mini" style="width:56px;height:56px;border-radius:14px;background:linear-gradient(155deg,#103A2F,var(--bg));">
+    <svg width="32" height="32" viewBox="0 0 64 64" fill="none">
+      <ellipse cx="32" cy="32" rx="26" ry="13" stroke="var(--mint)" stroke-width="4" fill="none"/>
+      <ellipse cx="32" cy="32" rx="13" ry="26" stroke="var(--mint-deep)" stroke-width="4" fill="none" opacity="0.55"/>
+      <circle cx="32" cy="32" r="8" fill="var(--mint)"/>
+      <circle cx="54" cy="24" r="5.5" fill="var(--coral)"/>
+    </svg>
+  </div>
+  <div class="mini" style="width:56px;height:56px;border-radius:14px;background:#F7FBFA;">
+    <svg width="32" height="32" viewBox="0 0 64 64" fill="none">
+      <ellipse cx="32" cy="32" rx="26" ry="13" stroke="var(--mint-deep)" stroke-width="4" fill="none"/>
+      <ellipse cx="32" cy="32" rx="13" ry="26" stroke="var(--mint-deep)" stroke-width="4" fill="none" opacity="0.4"/>
+      <circle cx="32" cy="32" r="8" fill="var(--mint-deep)"/>
+      <circle cx="54" cy="24" r="5.5" fill="#FF795F"/>
+    </svg>
+  </div>
+</div>

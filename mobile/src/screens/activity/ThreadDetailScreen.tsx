@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Keyboard, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Keyboard, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
@@ -8,6 +9,7 @@ import { getThread, markThreadRead } from "../../api/threads";
 import { apiErrorMessage } from "../../api/client";
 import { reactToMessage, sendMessage, sendMessageAction, deleteMessage, hideMessage, editMessage, setMessagePinned, starMessage, unstarMessage } from "../../api/messages";
 import MessageBubble from "../../components/MessageBubble";
+import EditMessageModal from "../../components/EditMessageModal";
 import Composer, { type SendPayload } from "../../components/Composer";
 import { useAuthStore } from "../../state/authStore";
 import { useThemeColors } from "../../state/themeStore";
@@ -27,6 +29,19 @@ export default function ThreadDetailScreen({ route }: Props) {
   const { data, isLoading, error, refetch } = useQuery({ queryKey: ["thread", parentId], queryFn: () => getThread(parentId) });
   const listRef = useRef<FlatList<Message>>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const enterSelection = (id: string) => { setSelectedIds(new Set([id])); setSelectionMode(true); };
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.size === 0) setSelectionMode(false);
+      return next;
+    });
+  };
+  const exitSelection = () => { setSelectionMode(false); setSelectedIds(new Set()); };
+  const [editTarget, setEditTarget] = useState<Message | null>(null);
 
   const jumpToMessage = (id: string) => {
     if (!data) return;
@@ -127,21 +142,44 @@ export default function ThreadDetailScreen({ route }: Props) {
 
   const { root, replies } = data;
   const isChannel = !!root.channel_id;
+  const allMessages = [root, ...replies];
+  const selectedMessages = allMessages.filter((m) => selectedIds.has(m.id));
+  const singleSelected = selectedMessages.length === 1 ? selectedMessages[0] : null;
+  const canEditSingle = !!singleSelected && (singleSelected.sender_id === selfId || isSuperAdmin) && singleSelected.type === "text";
+
+  const batchStar = () => {
+    selectedMessages.forEach((m) => star.mutate({ id: m.id, starred: true }));
+    exitSelection();
+  };
+  const batchDelete = () => {
+    const canDeleteAll = selectedMessages.every((m) => m.sender_id === selfId || isSuperAdmin);
+    const buttons: Parameters<typeof Alert.alert>[2] = [
+      { text: "Delete for me", onPress: () => { selectedMessages.forEach((m) => hide.mutate(m.id)); exitSelection(); } },
+    ];
+    if (canDeleteAll) {
+      buttons.push({ text: "Delete for everyone", style: "destructive", onPress: () => { selectedMessages.forEach((m) => remove.mutate(m.id)); exitSelection(); } });
+    }
+    buttons.push({ text: "Cancel", style: "cancel" });
+    Alert.alert(selectedMessages.length > 1 ? `Delete ${selectedMessages.length} messages?` : "Delete this message?", undefined, buttons);
+  };
+  const singlePin = () => {
+    if (singleSelected) pin.mutate({ id: singleSelected.id, pinned: !singleSelected.is_pinned });
+    exitSelection();
+  };
+
   const rowActions = (message: Message) => ({
     isOwn: message.sender_id === selfId,
     isGroup: isChannel,
-    canModerate: isSuperAdmin,
-    isSuperAdmin,
     currentUserId: selfId,
     onReact: (emoji: string) => react.mutate({ id: message.id, emoji }),
-    onDeleteForMe: () => hide.mutate(message.id),
-    onDeleteForEveryone: () => remove.mutate(message.id),
-    onEdit: (body: string) => edit.mutate({ id: message.id, body }),
-    onPin: (pinned: boolean) => pin.mutate({ id: message.id, pinned }),
-    onStar: (starred: boolean) => star.mutate({ id: message.id, starred }),
     onAction: (actionId: string, value: string | undefined) => action.mutate({ id: message.id, actionId, value }),
     onJumpToMessage: jumpToMessage,
     highlighted: highlightId === message.id,
+    selectionMode,
+    selected: selectedIds.has(message.id),
+    showReactionBar: selectionMode && selectedIds.size === 1 && selectedIds.has(message.id),
+    onEnterSelection: () => enterSelection(message.id),
+    onToggleSelect: () => toggleSelect(message.id),
   });
 
   return (
@@ -171,10 +209,49 @@ export default function ThreadDetailScreen({ route }: Props) {
         }
         renderItem={({ item }) => <MessageBubble message={item} {...rowActions(item)} />}
       />
-      <Composer
-        onSend={(payload) => send.mutate(payload)}
-        channelId={isChannel ? root.channel_id ?? undefined : undefined}
-        kind={isChannel ? "channel" : "dm"}
+      {selectionMode ? (
+        <View style={styles.selectionBar}>
+          <Pressable style={styles.selectionBarAction} onPress={exitSelection}>
+            <Ionicons name="close" size={21} color={colors.text} />
+            <Text style={styles.selectionBarActionText}>Cancel</Text>
+          </Pressable>
+          {singleSelected ? (
+            <Pressable style={styles.selectionBarAction} onPress={singlePin}>
+              <Ionicons name={singleSelected.is_pinned ? "pin" : "pin-outline"} size={21} color={colors.text} />
+              <Text style={styles.selectionBarActionText}>{singleSelected.is_pinned ? "Unpin" : "Pin"}</Text>
+            </Pressable>
+          ) : null}
+          <Pressable style={styles.selectionBarAction} onPress={batchStar}>
+            <Ionicons name="star-outline" size={21} color={colors.text} />
+            <Text style={styles.selectionBarActionText}>Star</Text>
+          </Pressable>
+          {canEditSingle ? (
+            <Pressable
+              style={styles.selectionBarAction}
+              onPress={() => { setEditTarget(singleSelected); exitSelection(); }}
+            >
+              <Ionicons name="pencil-outline" size={21} color={colors.text} />
+              <Text style={styles.selectionBarActionText}>Edit</Text>
+            </Pressable>
+          ) : null}
+          <Pressable style={styles.selectionBarAction} onPress={batchDelete}>
+            <Ionicons name="trash-outline" size={21} color={colors.danger} />
+            <Text style={[styles.selectionBarActionText, { color: colors.danger }]}>Delete</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <Composer
+          onSend={(payload) => send.mutate(payload)}
+          channelId={isChannel ? root.channel_id ?? undefined : undefined}
+          kind={isChannel ? "channel" : "dm"}
+        />
+      )}
+
+      <EditMessageModal
+        visible={!!editTarget}
+        initialText={editTarget?.text ?? ""}
+        onSave={(text) => { if (editTarget) edit.mutate({ id: editTarget.id, body: text }); }}
+        onClose={() => setEditTarget(null)}
       />
     </KeyboardAvoidingView>
   );
@@ -209,5 +286,23 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     fontWeight: "700",
     color: colors.textMuted,
     letterSpacing: 0.3,
+  },
+  selectionBar: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  selectionBarAction: {
+    alignItems: "center",
+    gap: 3,
+  },
+  selectionBarActionText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: colors.text,
   },
 });

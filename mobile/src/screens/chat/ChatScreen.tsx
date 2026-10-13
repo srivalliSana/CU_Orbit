@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Button, FlatList, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Button, FlatList, Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -8,7 +8,7 @@ import { useMessages } from "../../hooks/useMessages";
 import { useChannelSocket } from "../../hooks/useSocket";
 import { on as onSocketEvent } from "../../api/socket";
 import { useTyping } from "../../hooks/useTyping";
-import { markConversationRead } from "../../api/messages";
+import { markConversationRead, remindMessage } from "../../api/messages";
 import { getChannelMembers } from "../../api/channels";
 import { apiErrorMessage } from "../../api/client";
 import { useAuthStore } from "../../state/authStore";
@@ -17,11 +17,16 @@ import Composer from "../../components/Composer";
 import ForwardModal from "../../components/ForwardModal";
 import UserProfileModal from "../../components/UserProfileModal";
 import PollComposerModal from "../../components/PollComposerModal";
+import AddToListSheet from "../../components/lists/AddToListSheet";
+import EditMessageModal from "../../components/EditMessageModal";
 import { createPoll } from "../../api/messages";
 import { cancelScheduledMessage, createScheduledMessage, getScheduledMessages, type ScheduledMessageRow } from "../../api/scheduled";
 import { getConversationPrefs, setConversationPref } from "../../api/conversations";
 import { dayLabel } from "../../lib/format";
 import { wallpaperColor } from "../../lib/wallpapers";
+import { saveFile } from "../../lib/fileActions";
+import { resolveMediaUrl } from "../../constants/config";
+import { reportUser } from "../../api/users";
 import WallpaperPicker from "../../components/WallpaperPicker";
 import { useThemeColors, useIsDarkMode } from "../../state/themeStore";
 import type { HomeStackParamList } from "../../navigation/types";
@@ -48,9 +53,132 @@ export default function ChatScreen({ route, navigation }: Props) {
   const loadScheduled = () => getScheduledMessages(containerId).then(setScheduled).catch(() => {});
   useEffect(() => { loadScheduled(); setScheduledOpen(false); }, [containerId]);
   const cancelScheduled = (id: string) => cancelScheduledMessage(id).catch(() => {}).finally(loadScheduled);
-  const [forwarding, setForwarding] = useState<Message | null>(null);
+  const [forwarding, setForwarding] = useState<Message[]>([]);
   const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const [creatingPoll, setCreatingPoll] = useState(false);
+
+  // Long-pressing a message drops the whole screen into selection mode —
+  // top/bottom bars replace the normal header/composer (see the header
+  // effect and the render below) instead of a per-message popup menu.
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [addToListTarget, setAddToListTarget] = useState<Message | null>(null);
+  const [editTarget, setEditTarget] = useState<Message | null>(null);
+  const [reportTarget, setReportTarget] = useState<Message | null>(null);
+  const [reportReason, setReportReason] = useState("");
+  const [reportSent, setReportSent] = useState(false);
+
+  const enterSelection = (id: string) => {
+    setSelectedIds(new Set([id]));
+    setSelectionMode(true);
+  };
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.size === 0) setSelectionMode(false);
+      return next;
+    });
+  };
+  const exitSelection = () => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const selectedMessages = useMemo(
+    () => (messages ?? []).filter((m) => selectedIds.has(m.id)),
+    [messages, selectedIds]
+  );
+  const singleSelected = selectedMessages.length === 1 ? selectedMessages[0] : null;
+  const selectedHasMedia = selectedMessages.some(
+    (m) => ["image", "video", "file"].includes(m.type) && m.attachments?.[0]?.url
+  );
+
+  const batchForward = () => {
+    setForwarding(selectedMessages);
+    exitSelection();
+  };
+  const batchStar = () => {
+    selectedMessages.forEach((m) => star.mutate({ messageId: m.id, starred: true }));
+    exitSelection();
+  };
+  const batchSave = () => {
+    selectedMessages.forEach((m) => {
+      const att = m.attachments?.[0];
+      const url = resolveMediaUrl(att?.url);
+      if (url) saveFile(url, att?.name || "file", att?.mimeType);
+    });
+    exitSelection();
+  };
+  const batchDelete = () => {
+    const canDeleteAll = selectedMessages.every((m) => m.sender_id === selfId || canModerate);
+    const buttons: Parameters<typeof Alert.alert>[2] = [
+      {
+        text: "Delete for me",
+        onPress: () => {
+          selectedMessages.forEach((m) => hide.mutate(m.id));
+          exitSelection();
+        },
+      },
+    ];
+    if (canDeleteAll) {
+      buttons.push({
+        text: "Delete for everyone",
+        style: "destructive",
+        onPress: () => {
+          selectedMessages.forEach((m) => remove.mutate(m.id));
+          exitSelection();
+        },
+      });
+    }
+    buttons.push({ text: "Cancel", style: "cancel" });
+    Alert.alert(
+      selectedMessages.length > 1 ? `Delete ${selectedMessages.length} messages?` : "Delete this message?",
+      undefined,
+      buttons
+    );
+  };
+  const singleReply = () => {
+    if (singleSelected) setReplyTo(singleSelected);
+    exitSelection();
+  };
+  const singlePin = () => {
+    if (singleSelected) pin.mutate({ messageId: singleSelected.id, pinned: !singleSelected.is_pinned });
+    exitSelection();
+  };
+  const singleAddToList = () => {
+    if (singleSelected) setAddToListTarget(singleSelected);
+    exitSelection();
+  };
+  const singleRemind = () => {
+    const target = singleSelected;
+    if (!target) return;
+    exitSelection();
+    Alert.alert("Remind me", undefined, [
+      { text: "In 1 hour", onPress: () => remindMessage(target.id, 60).catch(() => {}) },
+      { text: "In 3 hours", onPress: () => remindMessage(target.id, 180).catch(() => {}) },
+      { text: "Tomorrow", onPress: () => remindMessage(target.id, 24 * 60).catch(() => {}) },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+  const singleEdit = () => {
+    if (singleSelected) setEditTarget(singleSelected);
+    exitSelection();
+  };
+  const singleReport = () => {
+    if (singleSelected) setReportTarget(singleSelected);
+    exitSelection();
+  };
+  const submitReport = async () => {
+    if (!reportTarget) return;
+    try {
+      await reportUser(reportTarget.sender_id, reportReason.trim(), reportTarget.id);
+      setReportSent(true);
+      setTimeout(() => { setReportTarget(null); setReportSent(false); setReportReason(""); }, 1500);
+    } catch {
+      // best-effort — the report either lands or it doesn't
+    }
+  };
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [ephemeralNotice, setEphemeralNotice] = useState<{ app_name: string; text: string } | null>(null);
   const listRef = useRef<FlatList<Message>>(null);
@@ -129,6 +257,7 @@ export default function ChatScreen({ route, navigation }: Props) {
   useChannelSocket(containerId);
 
   const [memberCount, setMemberCount] = useState<number | null>(null);
+  const [overflowOpen, setOverflowOpen] = useState(false);
 
   // "ADMIN: delete messages in own channels (from anyone)" — a channel's
   // own admin qualifies only for that channel; a workspace admin always does.
@@ -151,9 +280,78 @@ export default function ChatScreen({ route, navigation }: Props) {
   // extra lookup is needed to know who this chat is with.
   const otherUserId = kind === "dm" ? containerId.split("_").find((id) => id !== selfId) : undefined;
 
+  // Single-message-only actions — showing Reply/Pin/Add to list/Remind for
+  // a 2+ message selection wouldn't mean anything, so these (and the "⋮"
+  // overflow) only appear at exactly one selected.
+  const canEditSingle = !!singleSelected && (singleSelected.sender_id === selfId || isSuperAdmin) && singleSelected.type === "text";
+  const canReportSingle = !!singleSelected && singleSelected.sender_id !== selfId;
+
   useEffect(() => {
+    if (selectionMode) {
+      navigation.setOptions({
+        headerTitle: () => (
+          <Text style={styles.headerTitleText}>{selectedIds.size} selected</Text>
+        ),
+        headerLeft: () => (
+          <Pressable onPress={exitSelection} hitSlop={8} style={{ marginRight: 4 }}>
+            <Ionicons name="close" size={24} color={colors.text} />
+          </Pressable>
+        ),
+        headerRight: () => (
+          <View style={styles.headerActions}>
+            {singleSelected ? (
+              <>
+                <Pressable onPress={singleReply} hitSlop={8}>
+                  <Ionicons name="arrow-undo-outline" size={21} color={colors.primary} />
+                </Pressable>
+                <Pressable onPress={singlePin} hitSlop={8}>
+                  <Ionicons name={singleSelected.is_pinned ? "pin" : "pin-outline"} size={20} color={colors.primary} />
+                </Pressable>
+                {singleSelected.channel_id ? (
+                  <Pressable onPress={singleAddToList} hitSlop={8}>
+                    <Ionicons name="list-outline" size={21} color={colors.primary} />
+                  </Pressable>
+                ) : null}
+                <Pressable onPress={singleRemind} hitSlop={8}>
+                  <Ionicons name="alarm-outline" size={21} color={colors.primary} />
+                </Pressable>
+                {canEditSingle || canReportSingle ? (
+                  <View>
+                    <Pressable onPress={() => setOverflowOpen((v) => !v)} hitSlop={8}>
+                      <Ionicons name="ellipsis-vertical" size={20} color={colors.primary} />
+                    </Pressable>
+                    {overflowOpen ? (
+                      <>
+                        <Pressable style={styles.overflowBackdrop} onPress={() => setOverflowOpen(false)} />
+                        <View style={styles.overflowMenu}>
+                          {canEditSingle ? (
+                            <Pressable style={styles.overflowItem} onPress={() => { setOverflowOpen(false); singleEdit(); }}>
+                              <Ionicons name="pencil-outline" size={16} color={colors.text} />
+                              <Text style={styles.overflowItemText}>Edit message</Text>
+                            </Pressable>
+                          ) : null}
+                          {canReportSingle ? (
+                            <Pressable style={styles.overflowItem} onPress={() => { setOverflowOpen(false); singleReport(); }}>
+                              <Ionicons name="flag-outline" size={16} color={colors.danger} />
+                              <Text style={[styles.overflowItemText, { color: colors.danger }]}>Report</Text>
+                            </Pressable>
+                          ) : null}
+                        </View>
+                      </>
+                    ) : null}
+                  </View>
+                ) : null}
+              </>
+            ) : null}
+          </View>
+        ),
+      });
+      return;
+    }
+
     navigation.setOptions({
       title,
+      headerLeft: undefined,
       headerTitle:
         kind === "channel" && memberCount != null
           ? () => (
@@ -189,7 +387,11 @@ export default function ChatScreen({ route, navigation }: Props) {
         </View>
       ),
     });
-  }, [navigation, title, kind, containerId, otherUserId, memberCount]);
+  }, [navigation, title, kind, containerId, otherUserId, memberCount, selectionMode, selectedIds, singleSelected, overflowOpen, canEditSingle, canReportSingle]);
+
+  // Switching chats, or the last selected message getting removed out from
+  // under the selection, should never leave a stale selection bar up.
+  useEffect(() => { exitSelection(); }, [containerId]);
 
   useEffect(() => {
     markConversationRead(containerId);
@@ -292,23 +494,20 @@ export default function ChatScreen({ route, navigation }: Props) {
                 isOwn={item.sender_id === selfId}
                 showSenderInfo={showDivider || prev?.sender_id !== item.sender_id}
                 isGroup={kind === "channel"}
-                canModerate={canModerate}
-                isSuperAdmin={isSuperAdmin}
                 highlighted={highlightId === item.id}
                 onReact={(emoji) => react.mutate({ messageId: item.id, emoji })}
-                onDeleteForMe={() => hide.mutate(item.id)}
-                onDeleteForEveryone={() => remove.mutate(item.id)}
-                onEdit={(text) => edit.mutate({ messageId: item.id, body: text })}
-                onPin={(pinned) => pin.mutate({ messageId: item.id, pinned })}
                 onReply={() => setReplyTo(item)}
-                onForward={() => setForwarding(item)}
-                onStar={(starred) => star.mutate({ messageId: item.id, starred })}
                 onOpenProfile={(userId) => setProfileUserId(userId)}
                 onVote={item.poll ? (optionIndex) => vote.mutate({ pollId: item.poll!.id, optionIndex }) : undefined}
                 onAction={(actionId, value) => action.mutate({ messageId: item.id, actionId, value })}
                 onJumpToMessage={jumpToMessage}
                 currentUserId={selfId}
                 onOpenDm={(chat) => navigation.push("Chat", { containerId: chat.id, title: chat.title, kind: "dm" })}
+                selectionMode={selectionMode}
+                selected={selectedIds.has(item.id)}
+                showReactionBar={selectionMode && selectedIds.size === 1 && selectedIds.has(item.id)}
+                onEnterSelection={() => enterSelection(item.id)}
+                onToggleSelect={() => toggleSelect(item.id)}
               />
             </>
           );
@@ -353,19 +552,42 @@ export default function ChatScreen({ route, navigation }: Props) {
         </View>
       )}
 
-      <Composer
-        onSend={(payload) => send.mutate(payload)}
-        onSchedule={async (payload) => {
-          await createScheduledMessage({ containerId, ...payload });
-          loadScheduled();
-        }}
-        onTyping={notifyTyping}
-        channelId={containerId}
-        kind={kind}
-        replyTo={replyTo}
-        onCancelReply={() => setReplyTo(null)}
-        onCreatePoll={kind === "channel" ? () => setCreatingPoll(true) : undefined}
-      />
+      {selectionMode ? (
+        <View style={styles.selectionBar}>
+          <Pressable style={styles.selectionBarAction} onPress={batchForward}>
+            <Ionicons name="arrow-redo-outline" size={21} color={colors.text} />
+            <Text style={styles.selectionBarActionText}>Forward</Text>
+          </Pressable>
+          <Pressable style={styles.selectionBarAction} onPress={batchStar}>
+            <Ionicons name="star-outline" size={21} color={colors.text} />
+            <Text style={styles.selectionBarActionText}>Star</Text>
+          </Pressable>
+          {selectedHasMedia ? (
+            <Pressable style={styles.selectionBarAction} onPress={batchSave}>
+              <Ionicons name="download-outline" size={21} color={colors.primary} />
+              <Text style={[styles.selectionBarActionText, { color: colors.primary }]}>Save</Text>
+            </Pressable>
+          ) : null}
+          <Pressable style={styles.selectionBarAction} onPress={batchDelete}>
+            <Ionicons name="trash-outline" size={21} color={colors.danger} />
+            <Text style={[styles.selectionBarActionText, { color: colors.danger }]}>Delete</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <Composer
+          onSend={(payload) => send.mutate(payload)}
+          onSchedule={async (payload) => {
+            await createScheduledMessage({ containerId, ...payload });
+            loadScheduled();
+          }}
+          onTyping={notifyTyping}
+          channelId={containerId}
+          kind={kind}
+          replyTo={replyTo}
+          onCancelReply={() => setReplyTo(null)}
+          onCreatePoll={kind === "channel" ? () => setCreatingPoll(true) : undefined}
+        />
+      )}
 
       <PollComposerModal
         visible={creatingPoll}
@@ -378,10 +600,10 @@ export default function ChatScreen({ route, navigation }: Props) {
       />
 
       <ForwardModal
-        message={forwarding}
-        visible={!!forwarding}
-        onClose={() => setForwarding(null)}
-        onForwarded={() => setForwarding(null)}
+        messages={forwarding}
+        visible={forwarding.length > 0}
+        onClose={() => setForwarding([])}
+        onForwarded={() => setForwarding([])}
       />
 
       <UserProfileModal
@@ -400,6 +622,53 @@ export default function ChatScreen({ route, navigation }: Props) {
         onPick={pickWallpaper}
         onClose={() => setWallpaperPickerOpen(false)}
       />
+
+      {addToListTarget?.channel_id ? (
+        <AddToListSheet
+          visible={!!addToListTarget}
+          channelId={addToListTarget.channel_id}
+          messageId={addToListTarget.id}
+          messageText={addToListTarget.text}
+          onClose={() => setAddToListTarget(null)}
+        />
+      ) : null}
+
+      <EditMessageModal
+        visible={!!editTarget}
+        initialText={editTarget?.text ?? ""}
+        onSave={(text) => { if (editTarget) edit.mutate({ messageId: editTarget.id, body: text }); }}
+        onClose={() => setEditTarget(null)}
+      />
+
+      <Modal visible={!!reportTarget} transparent animationType="fade" onRequestClose={() => setReportTarget(null)}>
+        <Pressable style={styles.reportBackdrop} onPress={() => setReportTarget(null)}>
+          <Pressable style={styles.reportCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.reportTitle}>Report {reportTarget?.sender_name}</Text>
+            {reportSent ? (
+              <Text style={styles.reportSentText}>Thanks — an admin will review this.</Text>
+            ) : (
+              <>
+                <TextInput
+                  value={reportReason}
+                  onChangeText={setReportReason}
+                  placeholder="What happened? (optional)"
+                  placeholderTextColor={colors.textMuted}
+                  multiline
+                  style={styles.reportInput}
+                />
+                <View style={styles.reportActions}>
+                  <Pressable onPress={() => setReportTarget(null)} style={styles.reportCancel}>
+                    <Text style={{ color: colors.textMuted, fontSize: 13 }}>Cancel</Text>
+                  </Pressable>
+                  <Pressable onPress={submitReport} style={styles.reportSend}>
+                    <Text style={{ color: "#fff", fontWeight: "700", fontSize: 13 }}>Send report</Text>
+                  </Pressable>
+                </View>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -423,6 +692,110 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     fontSize: 12,
     color: colors.textMuted,
     marginTop: 1,
+  },
+  overflowBackdrop: {
+    position: "absolute",
+    top: -1000, left: -1000, right: -1000, bottom: -1000,
+  },
+  overflowMenu: {
+    position: "absolute",
+    top: 28,
+    right: 0,
+    width: 180,
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    paddingVertical: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+    zIndex: 10,
+  },
+  overflowItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  overflowItemText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  selectionBar: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  selectionBarAction: {
+    alignItems: "center",
+    gap: 3,
+  },
+  selectionBarActionText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  reportBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  reportCard: {
+    width: "100%",
+    maxWidth: 320,
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    padding: 20,
+  },
+  reportTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  reportInput: {
+    minHeight: 70,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    padding: 10,
+    fontSize: 14,
+    color: colors.text,
+    textAlignVertical: "top",
+  },
+  reportSentText: {
+    color: colors.primary,
+    fontSize: 14,
+    marginTop: 12,
+  },
+  reportActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+  },
+  reportCancel: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderRadius: 10,
+  },
+  reportSend: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderRadius: 10,
+    backgroundColor: colors.danger,
   },
   scheduledBanner: {
     borderTopWidth: StyleSheet.hairlineWidth,

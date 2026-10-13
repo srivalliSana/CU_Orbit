@@ -21,7 +21,7 @@
       "package": "ac.in.cutm.cuorbit",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "backgroundColor": "#1E40AF",
+        "backgroundColor": "#071B20",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
@@ -103,7 +103,7 @@
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",
-          "backgroundColor": "#1E40AF",
+          "backgroundColor": "#071B20",
           "imageWidth": 160,
           "resizeMode": "contain"
         }

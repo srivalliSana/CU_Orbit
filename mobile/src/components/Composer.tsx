@@ -159,7 +159,11 @@ export default function Composer({
   };
 
   const startScheduling = () => {
-    if ((!text.trim() && pending.length === 0) || !onSchedule) return;
+    if (!onSchedule) return;
+    if (!text.trim() && pending.length === 0) {
+      Alert.alert("Nothing to schedule", "Type a message or attach something first.");
+      return;
+    }
     setScheduleDate(new Date(Date.now() + 60 * 60000));
     setScheduleStep("date");
   };
@@ -596,6 +600,21 @@ export default function Composer({
                   <Text style={styles.attachMenuIcon}>Aa</Text>
                   <Text style={styles.attachMenuText}>Formatting</Text>
                 </Pressable>
+                {onSchedule ? (
+                  // startScheduling already worked via a long-press on the
+                  // send button (and on the attachment-preview's confirm
+                  // button) — same WhatsApp "hold send" gesture — but that's
+                  // never discoverable, and text-only messages had no way
+                  // to reach it at all beforehand. This is a visible entry
+                  // point to the exact same flow.
+                  <Pressable
+                    style={styles.attachMenuRow}
+                    onPress={() => { setAttachMenuOpen(false); startScheduling(); }}
+                  >
+                    <Text style={styles.attachMenuIcon}>⏰</Text>
+                    <Text style={styles.attachMenuText}>Schedule for later</Text>
+                  </Pressable>
+                ) : null}
               </View>
             </>
           ) : null}

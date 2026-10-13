@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Dimensions, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Dimensions, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { Ionicons } from "@expo/vector-icons";
@@ -13,20 +13,18 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 
-import ReactionPicker from "./ReactionPicker";
 import { useCustomEmojiMap } from "./EmojiPicker";
-import EditMessageModal from "./EditMessageModal";
 import Avatar from "./Avatar";
 import LinkPreviewCard from "./LinkPreviewCard";
-import AddToListSheet from "./lists/AddToListSheet";
 import { renderMarkdown, renderMessageText } from "../lib/markdown";
 import { openFile, saveFile } from "../lib/fileActions";
-import { getReads, remindMessage } from "../api/messages";
-import { reportUser } from "../api/users";
+import { getReads } from "../api/messages";
 import { resolveMediaUrl } from "../constants/config";
 import { clockLabel } from "../lib/format";
 import { useThemeColors } from "../state/themeStore";
 import type { Message } from "../types/api";
+
+const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
 /** File-type icon for the attachment card — cosmetic only. */
 function fileIconFor(name: string, mimeType?: string | null): keyof typeof Ionicons.glyphMap {
@@ -60,16 +58,8 @@ export default function MessageBubble({
   message,
   isOwn,
   isGroup,
-  canModerate,
-  isSuperAdmin,
   onReact,
-  onDeleteForMe,
-  onDeleteForEveryone,
-  onEdit,
-  onPin,
   onReply,
-  onForward,
-  onStar,
   onOpenProfile,
   onVote,
   onAction,
@@ -78,12 +68,15 @@ export default function MessageBubble({
   currentUserId,
   onOpenDm,
   showSenderInfo = true,
+  selectionMode = false,
+  selected = false,
+  showReactionBar = false,
+  onEnterSelection,
+  onToggleSelect,
 }: {
   message: Message;
   isOwn: boolean;
   isGroup?: boolean;
-  canModerate?: boolean;
-  isSuperAdmin?: boolean;
   highlighted?: boolean;
   // Avatar + sender name show once per consecutive run of messages from
   // the same sender (the classic WhatsApp/Telegram grouping), not on
@@ -92,41 +85,30 @@ export default function MessageBubble({
   // that doesn't bother with grouping still gets correct behavior.
   showSenderInfo?: boolean;
   onReact: (emoji: string) => void;
-  onDeleteForMe: () => void;
-  onDeleteForEveryone: () => void;
-  onEdit: (text: string) => void;
-  onPin: (pinned: boolean) => void;
   onReply?: () => void;
-  onForward?: () => void;
-  onStar?: (starred: boolean) => void;
   onOpenProfile?: (userId: string) => void;
   onVote?: (optionIndex: number) => void;
   onAction?: (actionId: string, value: string | undefined) => void;
   onJumpToMessage?: (messageId: string) => void;
   currentUserId?: string;
   onOpenDm?: (chat: { id: string; kind: "dm"; title: string }) => void;
+  // Long-press drops the whole chat into selection mode (ChatScreen owns
+  // the selected-id set and renders the top/bottom action bars) instead of
+  // opening a per-message popup — see ChatScreen for the bars themselves.
+  // showReactionBar is true only while this is the sole selected message,
+  // matching WhatsApp: the quick-react row disappears once a second
+  // message is added to the selection.
+  selectionMode?: boolean;
+  selected?: boolean;
+  showReactionBar?: boolean;
+  onEnterSelection?: () => void;
+  onToggleSelect?: () => void;
 }) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [pickerVisible, setPickerVisible] = useState(false);
-  const [addToListVisible, setAddToListVisible] = useState(false);
-  const [editVisible, setEditVisible] = useState(false);
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [videoViewerVisible, setVideoViewerVisible] = useState(false);
   const [votesVisible, setVotesVisible] = useState(false);
-  const [reportOpen, setReportOpen] = useState(false);
-  const [reportReason, setReportReason] = useState("");
-  const [reportSent, setReportSent] = useState(false);
-
-  const submitReport = async () => {
-    try {
-      await reportUser(message.sender_id, reportReason.trim(), message.id);
-      setReportSent(true);
-      setTimeout(() => { setReportOpen(false); setReportSent(false); setReportReason(""); }, 1500);
-    } catch {
-      // best-effort — the report either lands or it doesn't, no need to
-      // block the reader with a retry flow for this
-    }
-  };
 
   // "Seen by" — group messages only, own messages only, mirrors web's
   // showReads. A DM's status already reads "read"/"delivered"/"sent"
@@ -155,7 +137,7 @@ export default function MessageBubble({
   const swipeGesture = useMemo(
     () =>
       Gesture.Pan()
-        .enabled(!!onReply)
+        .enabled(!!onReply && !selectionMode)
         .activeOffsetX([-1000, 10])
         .failOffsetY([-12, 12])
         .onUpdate((e) => {
@@ -168,7 +150,7 @@ export default function MessageBubble({
           translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
         }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [onReply]
+    [onReply, selectionMode]
   );
   const swipeBubbleStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
@@ -192,8 +174,10 @@ export default function MessageBubble({
     () =>
       Gesture.LongPress()
         .minDuration(350)
-        .onStart(() => runOnJS(setPickerVisible)(true)),
-    []
+        .onStart(() => {
+          if (onEnterSelection) runOnJS(onEnterSelection)();
+        }),
+    [onEnterSelection]
   );
   const rowGesture = useMemo(() => Gesture.Race(swipeGesture, longPressGesture), [swipeGesture, longPressGesture]);
 
@@ -223,19 +207,6 @@ export default function MessageBubble({
   const mimeType = message.attachments?.[0]?.mimeType;
   const looksGenerated = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(rawFileName);
   const fileName = looksGenerated ? `Document${mimeExtension(mimeType) ? `.${mimeExtension(mimeType)}` : ""}` : rawFileName;
-  // "SUPERADMIN: edit any message" / "ADMIN: cannot edit others' messages" —
-  // edit override is admin-only, unlike delete which channel admins share.
-  const canEdit = (isOwn || !!isSuperAdmin) && message.type === "text";
-  const canDelete = isOwn || !!canModerate;
-
-  const confirmDelete = () => {
-    const buttons: Parameters<typeof Alert.alert>[2] = [
-      { text: "Delete for me", onPress: onDeleteForMe },
-    ];
-    if (canDelete) buttons.push({ text: "Delete for everyone", style: "destructive", onPress: onDeleteForEveryone });
-    buttons.push({ text: "Cancel", style: "cancel" });
-    Alert.alert("Delete this message?", undefined, buttons);
-  };
 
   const handleOpen = () => {
     if (!attachmentUrl) return;
@@ -247,12 +218,8 @@ export default function MessageBubble({
     saveFile(attachmentUrl, fileName, mimeType || (message.type === "image" ? "image/jpeg" : message.type === "video" ? "video/mp4" : undefined));
   };
 
-  const onFileLongPress = () => {
-    Alert.alert(fileName, undefined, [
-      { text: "Open", onPress: handleOpen },
-      { text: "Save to device", onPress: handleSave },
-      { text: "Cancel", style: "cancel" },
-    ]);
+  const handleTap = () => {
+    if (selectionMode) onToggleSelect?.();
   };
 
   return (
@@ -281,7 +248,8 @@ export default function MessageBubble({
           </Animated.View>
           <Animated.View style={swipeBubbleStyle}>
       <Pressable
-        style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther, highlighted && styles.bubbleHighlighted]}
+        onPress={handleTap}
+        style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther, highlighted && styles.bubbleHighlighted, selected && styles.bubbleSelected]}
       >
         {message.forwarded_from ? (
           <Text style={styles.forwardedLabel}>➡️ Forwarded from {message.forwarded_from.sender_name}</Text>
@@ -390,17 +358,28 @@ export default function MessageBubble({
         ) : null}
 
         {message.type === "image" && attachmentUrl ? (
-          <Pressable onPress={() => setImageViewerVisible(true)}>
+          <Pressable onPress={() => (selectionMode ? onToggleSelect?.() : setImageViewerVisible(true))}>
             <Image source={{ uri: attachmentUrl }} style={styles.image} resizeMode="cover" />
           </Pressable>
         ) : message.type === "video" && attachmentUrl ? (
-          <Pressable onLongPress={handleSave}>
-            <VideoBubble uri={attachmentUrl} style={styles.image} />
+          // Tapping opens a dedicated fullscreen viewer (below) instead of
+          // relying on the inline player's own fullscreen toggle — that
+          // toggle sits inside this same long-press GestureDetector's touch
+          // area and taps on it were landing on the row's gesture instead
+          // of the native video controls, which is also why "Save" via
+          // long-press never fired here (same gesture, different handler,
+          // the outer one always won). A tap now reliably opens a bigger
+          // player with an explicit Save button, matching the image viewer.
+          <Pressable onPress={() => (selectionMode ? onToggleSelect?.() : setVideoViewerVisible(true))}>
+            <VideoBubble uri={attachmentUrl} style={styles.image} controls={false} />
+            <View style={styles.videoPlayOverlay} pointerEvents="none">
+              <Ionicons name="play-circle" size={44} color="#fff" />
+            </View>
           </Pressable>
         ) : message.type === "voice" && attachmentUrl ? (
           <VoiceBubble uri={attachmentUrl} styles={styles} />
         ) : message.type === "file" && attachmentUrl ? (
-          <Pressable onPress={handleOpen} onLongPress={onFileLongPress} style={styles.fileCard}>
+          <Pressable onPress={() => (selectionMode ? onToggleSelect?.() : handleOpen())} style={styles.fileCard}>
             <View style={styles.fileIconChip}>
               <Ionicons name={fileIconFor(fileName, mimeType)} size={20} color={colors.primary} />
             </View>
@@ -468,83 +447,26 @@ export default function MessageBubble({
           </View>
         ) : null}
       </Pressable>
+
+      {showReactionBar ? (
+        <View style={[styles.reactionBarFloating, isOwn ? styles.reactionBarFloatingOwn : styles.reactionBarFloatingOther]}>
+          {QUICK_EMOJIS.map((emoji) => (
+            <Pressable key={emoji} style={styles.reactionBarButton} onPress={() => onReact(emoji)}>
+              <Text style={styles.reactionBarEmoji}>{emoji}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
           </Animated.View>
         </View>
         </View>
       </View>
 
-      <ReactionPicker
-        visible={pickerVisible}
-        canEdit={canEdit}
-        canDelete={canDelete}
-        isPinned={!!message.is_pinned}
-        isStarred={!!message.is_starred}
-        onSelect={onReact}
-        onEdit={() => setEditVisible(true)}
-        onDelete={confirmDelete}
-        onPin={() => onPin(!message.is_pinned)}
-        onReply={onReply}
-        onForward={onForward}
-        onStar={() => onStar?.(!message.is_starred)}
-        onAddToList={message.channel_id ? () => setAddToListVisible(true) : undefined}
-        onReport={!isOwn ? () => setReportOpen(true) : undefined}
-        onRemind={() => {
-          Alert.alert("Remind me", undefined, [
-            { text: "In 1 hour", onPress: () => remindMessage(message.id, 60).catch(() => {}) },
-            { text: "In 3 hours", onPress: () => remindMessage(message.id, 180).catch(() => {}) },
-            { text: "Tomorrow", onPress: () => remindMessage(message.id, 24 * 60).catch(() => {}) },
-            { text: "Cancel", style: "cancel" },
-          ]);
-        }}
-        onClose={() => setPickerVisible(false)}
-      />
-
-      <Modal visible={reportOpen} transparent animationType="fade" onRequestClose={() => setReportOpen(false)}>
-        <Pressable style={styles.reportBackdrop} onPress={() => setReportOpen(false)}>
-          <Pressable style={styles.reportCard} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.reportTitle}>Report {message.sender_name}</Text>
-            {reportSent ? (
-              <Text style={styles.reportSentText}>Thanks — an admin will review this.</Text>
-            ) : (
-              <>
-                <TextInput
-                  value={reportReason}
-                  onChangeText={setReportReason}
-                  placeholder="What happened? (optional)"
-                  placeholderTextColor={colors.textMuted}
-                  multiline
-                  style={styles.reportInput}
-                />
-                <View style={styles.reportActions}>
-                  <Pressable onPress={() => setReportOpen(false)} style={styles.reportCancel}>
-                    <Text style={{ color: colors.textMuted, fontSize: 13 }}>Cancel</Text>
-                  </Pressable>
-                  <Pressable onPress={submitReport} style={styles.reportSend}>
-                    <Text style={{ color: "#fff", fontWeight: "700", fontSize: 13 }}>Send report</Text>
-                  </Pressable>
-                </View>
-              </>
-            )}
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      {message.channel_id && (
-        <AddToListSheet
-          visible={addToListVisible}
-          channelId={message.channel_id}
-          messageId={message.id}
-          messageText={message.text}
-          onClose={() => setAddToListVisible(false)}
-        />
-      )}
-
-      <EditMessageModal
-        visible={editVisible}
-        initialText={message.text}
-        onSave={onEdit}
-        onClose={() => setEditVisible(false)}
-      />
+      {selectionMode ? (
+        <View style={[styles.checkmark, selected ? styles.checkmarkOn : styles.checkmarkOff, isOwn ? styles.checkmarkOwn : styles.checkmarkOther]}>
+          {selected ? <Ionicons name="checkmark" size={13} color="#06130D" /> : null}
+        </View>
+      ) : null}
 
       {message.type === "image" && attachmentUrl ? (
         <Modal
@@ -561,6 +483,25 @@ export default function MessageBubble({
           </Pressable>
         </Modal>
       ) : null}
+
+      {message.type === "video" && attachmentUrl ? (
+        <Modal
+          visible={videoViewerVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setVideoViewerVisible(false)}
+        >
+          <View style={styles.viewerBackdrop}>
+            <Pressable style={styles.viewerCloseButton} onPress={() => setVideoViewerVisible(false)} hitSlop={10}>
+              <Ionicons name="close" size={26} color="#fff" />
+            </Pressable>
+            <VideoBubble uri={attachmentUrl} style={styles.viewerVideo} />
+            <Pressable style={styles.viewerSaveButton} onPress={handleSave}>
+              <Text style={styles.viewerSaveText}>Save video</Text>
+            </Pressable>
+          </View>
+        </Modal>
+      ) : null}
     </View>
     </GestureDetector>
   );
@@ -569,16 +510,14 @@ export default function MessageBubble({
 // A separate component (not inlined in MessageBubble) so useVideoPlayer —
 // which must run unconditionally, same order every render — only mounts for
 // rows that are actually a video, instead of needing a guard inside a hook.
-function VideoBubble({ uri, style }: { uri: string; style: object }) {
+function VideoBubble({ uri, style, controls = true }: { uri: string; style: object; controls?: boolean }) {
   const player = useVideoPlayer(uri);
   return (
     <VideoView
       player={player}
       style={style}
-      nativeControls
-      // The native controls already include a fullscreen toggle; this just
-      // confirms the platform is allowed to honour it.
-      fullscreenOptions={{ enable: true }}
+      nativeControls={controls}
+      fullscreenOptions={{ enable: controls }}
     />
   );
 }
@@ -777,6 +716,15 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     borderRadius: 12,
     marginBottom: 4,
     backgroundColor: colors.surface,
+  },
+  videoPlayOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 4,
+    alignItems: "center",
+    justifyContent: "center",
   },
   pollBox: {
     minWidth: 220,
@@ -1061,6 +1009,76 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     color: "#fff",
     fontWeight: "600",
   },
+  viewerVideo: {
+    width: "100%",
+    height: "70%",
+  },
+  viewerCloseButton: {
+    position: "absolute",
+    top: 48,
+    right: 20,
+    zIndex: 1,
+  },
+  bubbleSelected: {
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  checkmark: {
+    position: "absolute",
+    top: 2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkmarkOwn: {
+    right: -2,
+  },
+  checkmarkOther: {
+    left: -2,
+  },
+  checkmarkOn: {
+    backgroundColor: colors.primary,
+  },
+  checkmarkOff: {
+    borderWidth: 1.5,
+    borderColor: colors.textMuted,
+    backgroundColor: "rgba(0,0,0,0.15)",
+  },
+  reactionBarFloating: {
+    position: "absolute",
+    bottom: "100%",
+    marginBottom: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    backgroundColor: colors.background,
+    borderRadius: 24,
+    padding: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+    zIndex: 5,
+  },
+  reactionBarFloatingOwn: {
+    right: 0,
+  },
+  reactionBarFloatingOther: {
+    left: 0,
+  },
+  reactionBarButton: {
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 15,
+  },
+  reactionBarEmoji: {
+    fontSize: 17,
+  },
   actionsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1079,58 +1097,5 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   actionButtonText: {
     fontSize: 12,
     fontWeight: "700",
-  },
-  reportBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  reportCard: {
-    width: "100%",
-    maxWidth: 320,
-    backgroundColor: colors.background,
-    borderRadius: 16,
-    padding: 20,
-  },
-  reportTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  reportInput: {
-    minHeight: 70,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    padding: 10,
-    fontSize: 14,
-    color: colors.text,
-    textAlignVertical: "top",
-  },
-  reportSentText: {
-    color: colors.primary,
-    fontSize: 14,
-    marginTop: 12,
-  },
-  reportActions: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 12,
-  },
-  reportCancel: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: "center",
-    borderRadius: 10,
-  },
-  reportSend: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: "center",
-    borderRadius: 10,
-    backgroundColor: colors.danger,
   },
 });

@@ -1,0 +1,8 @@
+<svg width="1024" height="1024" viewBox="0 0 108 108" xmlns="http://www.w3.org/2000/svg">
+  <!-- Mark kept inside the 72x72 safe zone centered in the 108x108 adaptive
+       icon canvas, so it survives circle/squircle/rounded-square masking. -->
+  <g transform="translate(18,18) scale(1.125)">
+    <rect x="10" y="16" width="28" height="22" rx="9" fill="#3DC496"/>
+    <rect x="26" y="26" width="28" height="22" rx="9" fill="#FF876F" opacity="0.92"/>
+  </g>
+</svg>
