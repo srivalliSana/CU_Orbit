@@ -487,9 +487,8 @@ const AiMessage = sequelize.define('AiMessage', {
     user_id: { type: DataTypes.STRING, allowNull: false },
     role: { type: DataTypes.ENUM('user', 'assistant'), allowNull: false },
     text: { type: DataTypes.TEXT, allowNull: false },
-    created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
 }, {
-    indexes: [{ fields: ['user_id', 'created_at'] }],
+    indexes: [{ fields: ['user_id', 'createdAt'] }],
 });
 
 const Mention = sequelize.define('Mention', {
@@ -4463,6 +4462,95 @@ app.get('/api/link-preview', auth.requireAuth, async (req, res) => {
     } catch (e) {
         res.json({});   // a broken/unreachable link is not an error the client needs to see
     }
+});
+
+// --- CU AI (floating-bubble assistant) ---
+//
+// Provider-agnostic: targets the OpenAI-compatible chat-completions shape
+// (POST {base}/chat/completions, Authorization: Bearer <key>), which is
+// what nearly every provider besides Anthropic speaks — OpenAI itself,
+// Groq, Together, DeepSeek, Mistral, OpenRouter, and most others, so no
+// code change is needed when picking one, just these three env vars:
+//   AI_API_KEY      - the provider's API key
+//   AI_BASE_URL     - e.g. https://api.openai.com/v1, https://api.groq.com/openai/v1
+//   AI_MODEL        - the model name that provider expects, e.g. gpt-4o-mini
+// Same "key never reaches the client" reasoning as the Giphy proxy below:
+// the key stays server-side, every request is proxied through here.
+const AI_SYSTEM_PROMPT = "You are CU AI, a helpful assistant built into Let's Connect, a university messaging app. Be friendly, concise, and genuinely useful — help with how to use the app's features (channels, DMs, reminders, scheduling, lists, polls, etc.) as well as general questions. Keep replies short unless the question calls for more detail.";
+const AI_HISTORY_LIMIT = 20;
+
+app.get('/api/ai/messages', auth.requireAuth, async (req, res) => {
+    try {
+        const rows = await AiMessage.findAll({
+            where: { user_id: req.user.id },
+            order: [['createdAt', 'ASC']],
+            limit: 200,
+        });
+        res.json(rows.map((r) => ({ id: r.id, role: r.role, text: r.text, created_at: r.createdAt })));
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.post('/api/ai/messages', auth.requireAuth, async (req, res) => {
+    const key = process.env.AI_API_KEY;
+    const baseUrl = process.env.AI_BASE_URL;
+    const model = process.env.AI_MODEL;
+    if (!key || !baseUrl || !model) {
+        return res.status(503).json({ error: 'not_configured', message: 'AI_API_KEY, AI_BASE_URL and AI_MODEL must all be set.' });
+    }
+
+    const text = (req.body.text || '').trim().slice(0, 4000);
+    if (!text) return res.status(400).json({ error: 'bad_request', message: 'text is required' });
+
+    try {
+        await AiMessage.create({ user_id: req.user.id, role: 'user', text });
+
+        const recent = await AiMessage.findAll({
+            where: { user_id: req.user.id },
+            order: [['createdAt', 'DESC']],
+            limit: AI_HISTORY_LIMIT,
+        });
+        const history = recent.reverse().map((r) => ({ role: r.role, content: r.text }));
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
+        let reply;
+        try {
+            const resp = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${key}`,
+                    'content-type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model,
+                    messages: [{ role: 'system', content: AI_SYSTEM_PROMPT }, ...history],
+                }),
+                signal: controller.signal,
+            });
+            if (!resp.ok) {
+                const detail = await resp.text().catch(() => '');
+                console.error('[cu-ai] AI API error', resp.status, detail.slice(0, 500));
+                return res.status(502).json({ error: 'ai_unavailable', message: 'CU AI could not reply — please try again.' });
+            }
+            const data = await resp.json();
+            reply = data.choices?.[0]?.message?.content?.trim() || "Sorry, I didn't catch that — could you try again?";
+        } finally {
+            clearTimeout(timeout);
+        }
+
+        const assistantRow = await AiMessage.create({ user_id: req.user.id, role: 'assistant', text: reply });
+        res.json({ id: assistantRow.id, role: 'assistant', text: reply, created_at: assistantRow.createdAt });
+    } catch (e) {
+        console.error('[cu-ai]', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
+app.delete('/api/ai/messages', auth.requireAuth, async (req, res) => {
+    try {
+        await AiMessage.destroy({ where: { user_id: req.user.id } });
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
 // --- GIF picker (Giphy proxy) ---

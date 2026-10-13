@@ -26,6 +26,7 @@ import OnboardingScreen from './components/OnboardingScreen';
 import AdminPanel from './components/AdminPanel';
 import OAuthConsentScreen from './components/OAuthConsentScreen';
 import UserProfileModal from './components/UserProfileModal';
+import CuAiBubble from './components/CuAiBubble';
 import { joinChannelByLink } from './api/channels';
 import { notifyMessage, permission, requestPermission, setBadge } from './lib/notify';
 import { connect, disconnect, on } from './api/socket';
@@ -519,6 +520,8 @@ export default function App() {
           }}
         />
       )}
+
+      <CuAiBubble />
     </div>
   );
 }
