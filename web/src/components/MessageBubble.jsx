@@ -80,6 +80,7 @@ function ActionButtons({ message: m, own, onChanged }) {
 export default function MessageBubble({
   message, own, showSender, isGroup, canModerate, isSuperAdmin, onChanged,
   onReply, onForward, onOpenProfile, currentUserId, onOpenDm, onJumpToMessage,
+  selectionMode, selected, onEnterSelection, onToggleSelect,
 }) {
   const m = message;
   const [reads, setReads] = useState(null);   // null = not requested
@@ -106,7 +107,7 @@ export default function MessageBubble({
   // "Seen by" is fetched on demand rather than with every message: a group
   // transcript would otherwise issue one request per bubble on every poll.
   const showReads = async () => {
-    if (!own || !isGroup || m.pending) return;
+    if (!own || !isGroup || m.pending || selectionMode) return;
     if (reads) { setReads(null); return; }
     try {
       setReads(await getReads(m.id));
@@ -198,12 +199,26 @@ export default function MessageBubble({
       {showSender && !own && (
         <Avatar name={m.sender_name} url={m.sender_avatar_url} size={30} />
       )}
-      <div className={`relative max-w-[75%] ${own ? 'order-2' : ''}`}>
+      {selectionMode && (
+        <button
+          onClick={() => onToggleSelect?.()}
+          aria-label={selected ? 'Deselect message' : 'Select message'}
+          className={`flex h-5 w-5 shrink-0 items-center justify-center self-center rounded-full border-2 text-xs text-white ${own ? 'order-2' : ''} ${
+            selected ? 'border-accent-600 bg-accent-600' : 'border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-800'
+          }`}
+        >
+          {selected ? '✓' : ''}
+        </button>
+      )}
+      <div
+        onClick={selectionMode ? () => onToggleSelect?.() : undefined}
+        className={`relative max-w-[75%] ${own ? 'order-2' : ''} ${selectionMode ? 'cursor-pointer' : ''} ${selected ? 'rounded-2xl ring-2 ring-accent-500' : ''}`}
+      >
         {m.is_pinned && (
           <p className="mb-0.5 text-[10px] font-medium text-slate-400">📌 Pinned</p>
         )}
 
-        {!m.pending && (
+        {!m.pending && !selectionMode && (
           <button
             ref={actionsTriggerRef}
             onClick={() => {
@@ -259,6 +274,7 @@ export default function MessageBubble({
             <MenuItem icon="↩️" label="Reply" onClick={() => { setActionsOpen(false); onReply?.(m); }} />
             {m.text && <MenuItem icon="📋" label="Copy" onClick={copyText} />}
             <MenuItem icon="➡️" label="Forward" onClick={() => { setActionsOpen(false); onForward?.(m); }} />
+            <MenuItem icon="☑️" label="Select" onClick={() => { setActionsOpen(false); onEnterSelection?.(); }} />
             <MenuItem icon="📌" label={m.is_pinned ? 'Unpin' : 'Pin'} onClick={togglePin} disabled={busy} />
             <MenuItem icon={starred ? '⭐' : '☆'} label={starred ? 'Unstar' : 'Star'} onClick={toggleStar} />
             {!own && <MenuItem icon="⚠️" label="Report" onClick={reportMessage} />}
@@ -309,7 +325,7 @@ export default function MessageBubble({
 
         <div
           onClick={showReads}
-          onDoubleClick={(e) => { e.stopPropagation(); if (!m.pending) onReply?.(m); }}
+          onDoubleClick={(e) => { e.stopPropagation(); if (!m.pending && !selectionMode) onReply?.(m); }}
           title="Double-click to reply"
           className={`rounded-2xl px-3 py-2 shadow-sm ${own && isGroup && !m.pending ? 'cursor-pointer' : ''} ${
             own

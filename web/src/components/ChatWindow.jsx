@@ -4,12 +4,13 @@ import MessageBubble from './MessageBubble';
 import Composer from './Composer';
 import ForwardModal from './ForwardModal';
 import PollComposerModal from './PollComposerModal';
-import { createPoll, getConversationPrefs, getMessages, markConversationRead, sendMessage, setConversationPref, uploadFile } from '../api/chat';
+import { createPoll, getConversationPrefs, getMessages, markConversationRead, sendMessage, setConversationPref, uploadFile, starMessage, hideMessage, deleteMessage } from '../api/chat';
 import { cancelScheduledMessage, createScheduledMessage, getScheduledMessages } from '../api/scheduled';
 import { getChannelMembers } from '../api/channels';
 import { dayLabel, lastSeenLabel } from '../lib/format';
 import { join, leave, on, sendTyping } from '../api/socket';
 import { WALLPAPERS, wallpaperColor } from '../lib/wallpapers';
+import { saveFile } from '../lib/saveFile';
 
 // The socket delivers messages; this is only a safety net for a dropped
 // connection, so it can be slow.
@@ -23,7 +24,47 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
   const [sendError, setSendError] = useState(null);
   const [canModerate, setCanModerate] = useState(false);
   const [replyTo, setReplyTo] = useState(null);
-  const [forwarding, setForwarding] = useState(null);
+  const [forwarding, setForwarding] = useState([]);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const enterSelection = (id) => { setSelectedIds(new Set([id])); setSelectionMode(true); };
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.size === 0) setSelectionMode(false);
+      return next;
+    });
+  };
+  const exitSelection = () => { setSelectionMode(false); setSelectedIds(new Set()); };
+  const selectedMessages = messages.filter((m) => selectedIds.has(m.id));
+  const selectedHasMedia = selectedMessages.some((m) => m.attachments?.[0]?.url);
+  const batchForward = () => { setForwarding(selectedMessages); exitSelection(); };
+  const batchStar = async () => {
+    await Promise.all(selectedMessages.map((m) => starMessage(m.id).catch(() => {})));
+    exitSelection();
+  };
+  const batchSave = () => {
+    selectedMessages.forEach((m) => {
+      const media = m.attachments?.[0];
+      if (media?.url) saveFile(media.url, media.name || media.url.split('/').pop() || 'file');
+    });
+    exitSelection();
+  };
+  const batchDelete = async () => {
+    const canDeleteAll = selectedMessages.every((m) => m.sender_id === user?.id || canModerate);
+    const label = selectedMessages.length > 1 ? `Delete ${selectedMessages.length} messages?` : 'Delete this message?';
+    const everyone = canDeleteAll && window.confirm(`${label}\n\nOK = Delete for everyone, Cancel = choose "delete for me" instead.`);
+    if (everyone) {
+      await Promise.all(selectedMessages.map((m) => deleteMessage(m.id).catch(() => {})));
+    } else if (window.confirm(`${label}\n\nDelete for me only?`)) {
+      await Promise.all(selectedMessages.map((m) => hideMessage(m.id).catch(() => {})));
+    } else {
+      return;
+    }
+    exitSelection();
+    refreshMessages();
+  };
   const [creatingPoll, setCreatingPoll] = useState(false);
   const [highlightId, setHighlightId] = useState(null);
   const [ephemeralNotice, setEphemeralNotice] = useState(null);
@@ -166,7 +207,7 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
   };
 
   // A different conversation starts with a clean composer, not a stale reply.
-  useEffect(() => { setReplyTo(null); setEphemeralNotice(null); }, [chat.id]);
+  useEffect(() => { setReplyTo(null); setEphemeralNotice(null); exitSelection(); }, [chat.id]);
 
   useEffect(() => {
     setWallpaperPickerOpen(false);
@@ -460,11 +501,15 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
                   isSuperAdmin={user?.role === 'admin'}
                   onChanged={refreshMessages}
                   onReply={setReplyTo}
-                  onForward={setForwarding}
+                  onForward={(msg) => setForwarding([msg])}
                   onJumpToMessage={jumpToMessage}
                   onOpenProfile={onOpenProfile}
                   currentUserId={user?.id}
                   onOpenDm={onOpenDm}
+                  selectionMode={selectionMode}
+                  selected={selectedIds.has(m.id)}
+                  onEnterSelection={() => enterSelection(m.id)}
+                  onToggleSelect={() => toggleSelect(m.id)}
                 />
               </div>
             </React.Fragment>
@@ -515,26 +560,43 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
         </div>
       )}
 
-      <Composer
-        chatId={chat.id}
-        isChannel={chat.kind === 'channel'}
-        onSend={handleSend}
-        onSchedule={handleSchedule}
-        onTyping={() => sendTyping(chat.id, user?.name)}
-        replyTo={replyTo}
-        onCancelReply={() => setReplyTo(null)}
-        onCreatePoll={chat.kind === 'channel' ? () => setCreatingPoll(true) : undefined}
-      />
+      {selectionMode ? (
+        <div className="flex items-center justify-between gap-2 border-t border-slate-200 px-4 py-2.5 dark:border-slate-800">
+          <button onClick={exitSelection} className="flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+            ✕ Cancel
+          </button>
+          <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">{selectedIds.size} selected</span>
+          <div className="flex items-center gap-4 text-sm font-medium">
+            <button onClick={batchForward} className="text-slate-600 hover:text-accent-600 dark:text-slate-300">➡️ Forward</button>
+            <button onClick={batchStar} className="text-slate-600 hover:text-accent-600 dark:text-slate-300">⭐ Star</button>
+            {selectedHasMedia && (
+              <button onClick={batchSave} className="text-accent-600 hover:text-accent-700 dark:text-accent-400">⬇️ Save</button>
+            )}
+            <button onClick={batchDelete} className="text-red-600 hover:text-red-700">🗑️ Delete</button>
+          </div>
+        </div>
+      ) : (
+        <Composer
+          chatId={chat.id}
+          isChannel={chat.kind === 'channel'}
+          onSend={handleSend}
+          onSchedule={handleSchedule}
+          onTyping={() => sendTyping(chat.id, user?.name)}
+          replyTo={replyTo}
+          onCancelReply={() => setReplyTo(null)}
+          onCreatePoll={chat.kind === 'channel' ? () => setCreatingPoll(true) : undefined}
+        />
+      )}
 
       {creatingPoll && (
         <PollComposerModal onCreate={handleCreatePoll} onClose={() => setCreatingPoll(false)} />
       )}
 
-      {forwarding && (
+      {forwarding.length > 0 && (
         <ForwardModal
-          message={forwarding}
-          onClose={() => setForwarding(null)}
-          onForwarded={() => setForwarding(null)}
+          messages={forwarding}
+          onClose={() => setForwarding([])}
+          onForwarded={() => setForwarding([])}
         />
       )}
     </section>

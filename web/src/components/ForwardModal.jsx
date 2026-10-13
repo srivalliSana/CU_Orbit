@@ -3,13 +3,16 @@ import Avatar from './Avatar';
 import { getHome, sendMessage } from '../api/chat';
 
 /**
- * "Forward this message to anyone" — picks one or more channels/DMs from
- * the same list ChatList shows, then a separate Send step actually
- * re-sends the message's text/attachment into each with a "forwarded"
- * label. Selecting a target no longer sends immediately — that was too
- * easy to trigger by accident with no way back.
+ * "Forward this/these message(s) to anyone" — picks one or more channels/
+ * DMs from the same list ChatList shows, then a separate Send step
+ * actually re-sends each message's text/attachment into each target with
+ * a "forwarded" label. Selecting a target no longer sends immediately —
+ * that was too easy to trigger by accident with no way back.
+ *
+ * `messages` is a plain array so the same modal covers both a single
+ * forward and the chat's multi-select "Forward" action.
  */
-export default function ForwardModal({ message, onClose, onForwarded }) {
+export default function ForwardModal({ messages, onClose, onForwarded }) {
   const [rows, setRows] = useState(null);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(() => new Set());
@@ -32,8 +35,6 @@ export default function ForwardModal({ message, onClose, onForwarded }) {
     return q ? rows.filter((r) => r.title.toLowerCase().includes(q)) : rows;
   }, [rows, query]);
 
-  const media = message.attachments && message.attachments[0];
-
   const toggle = (id) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -47,15 +48,22 @@ export default function ForwardModal({ message, onClose, onForwarded }) {
     setError(null);
     try {
       const targets = rows.filter((r) => selected.has(r.id));
-      await Promise.all(targets.map((target) => sendMessage({
-        containerId: target.id,
-        body: message.text,
-        type: message.type === 'text' ? 'text' : message.type,
-        mediaUrl: media?.url,
-        mediaName: media?.name,
-        mediaMimeType: media?.mimeType,
-        forwardedFromName: message.sender_name,
-      })));
+      await Promise.all(
+        targets.flatMap((target) =>
+          messages.map((message) => {
+            const media = message.attachments && message.attachments[0];
+            return sendMessage({
+              containerId: target.id,
+              body: message.text,
+              type: message.type === 'text' ? 'text' : message.type,
+              mediaUrl: media?.url,
+              mediaName: media?.name,
+              mediaMimeType: media?.mimeType,
+              forwardedFromName: message.sender_name,
+            });
+          })
+        )
+      );
       onForwarded?.(targets);
     } catch (e) {
       setError(e.message || 'Could not forward that message.');
@@ -70,7 +78,9 @@ export default function ForwardModal({ message, onClose, onForwarded }) {
         className="flex max-h-[80vh] w-full max-w-sm flex-col rounded-2xl bg-white shadow-xl dark:bg-slate-900"
       >
         <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-          <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Forward message</h2>
+          <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+            {messages.length > 1 ? `Forward ${messages.length} messages` : 'Forward message'}
+          </h2>
           <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-slate-600">✕</button>
         </header>
 
