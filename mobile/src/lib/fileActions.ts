@@ -21,7 +21,12 @@ function cacheKeyFor(url: string) {
 async function ensureCached(url: string): Promise<File> {
   const destination = new File(Paths.cache, cacheKeyFor(url));
   if (destination.exists) return destination;
-  return File.downloadFileAsync(url, destination, { idempotent: true });
+  // Uploaded filenames keep spaces/parens/unicode from the original name
+  // (e.g. "Field report (1).mp4"), stored as-is in the URL. The video/image
+  // players tolerate that raw URL fine, but downloadFileAsync needs a
+  // properly escaped URI and throws — encodeURI is a no-op on anything
+  // already percent-encoded, so this is safe either way.
+  return File.downloadFileAsync(encodeURI(url), destination, { idempotent: true });
 }
 
 // Real "open with the app registered for this file type, or ask which app"
@@ -34,7 +39,7 @@ export async function openFile(url: string, fileName: string, mimeType?: string)
   try {
     file = await ensureCached(url);
   } catch (e) {
-    Alert.alert("Couldn't open file", "This file isn't downloaded yet — connect to the internet once to fetch it, then it'll open offline too.");
+    Alert.alert("Couldn't open file", e instanceof Error ? e.message : "This file isn't downloaded yet — connect to the internet once to fetch it, then it'll open offline too.");
     return;
   }
   if (Platform.OS !== "android") {
@@ -94,7 +99,7 @@ export async function saveFile(url: string, fileName: string, mimeType?: string)
   try {
     file = await ensureCached(url);
   } catch (e) {
-    Alert.alert("Couldn't save file", "This file isn't downloaded yet — connect to the internet once to fetch it, then it'll save offline too.");
+    Alert.alert("Couldn't save file", e instanceof Error ? e.message : "This file isn't downloaded yet — connect to the internet once to fetch it, then it'll save offline too.");
     return;
   }
 

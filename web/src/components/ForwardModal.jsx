@@ -48,7 +48,10 @@ export default function ForwardModal({ messages, onClose, onForwarded }) {
     setError(null);
     try {
       const targets = rows.filter((r) => selected.has(r.id));
-      await Promise.all(
+      // allSettled, not all — a target you're no longer a member of (403)
+      // shouldn't make the whole batch look like it silently did nothing
+      // when it actually reached every other target fine.
+      const results = await Promise.allSettled(
         targets.flatMap((target) =>
           messages.map((message) => {
             const media = message.attachments && message.attachments[0];
@@ -60,11 +63,28 @@ export default function ForwardModal({ messages, onClose, onForwarded }) {
               mediaName: media?.name,
               mediaMimeType: media?.mimeType,
               forwardedFromName: message.sender_name,
-            });
+            }).then(
+              () => ({ ok: true, target }),
+              (e) => ({ ok: false, target, error: e })
+            );
           })
         )
       );
-      onForwarded?.(targets);
+      const failedTargets = [...new Set(
+        results
+          .map((r) => r.value)
+          .filter((r) => r && !r.ok)
+          .map((r) => r.target.title)
+      )];
+      if (failedTargets.length === 0) {
+        onForwarded?.(targets);
+      } else if (failedTargets.length === targets.length) {
+        setError(`Couldn't forward to ${failedTargets.join(', ')} — you may no longer be a member there.`);
+        setSending(false);
+      } else {
+        setError(`Sent, but failed for ${failedTargets.join(', ')} — you may no longer be a member there.`);
+        setTimeout(() => onForwarded?.(targets), 1800);
+      }
     } catch (e) {
       setError(e.message || 'Could not forward that message.');
       setSending(false);

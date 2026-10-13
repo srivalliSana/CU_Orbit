@@ -39,11 +39,13 @@ export default function ForwardModal({
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!visible) return;
     setRows(null);
     setSelected(new Set());
+    setError(null);
     getHome()
       .then((data) => {
         const channels: Row[] = data.channels.map((c) => ({ id: c.id, kind: "channel", title: `# ${c.name}` }));
@@ -70,27 +72,46 @@ export default function ForwardModal({
   const send = async () => {
     if (messages.length === 0 || !rows) return;
     setSending(true);
-    try {
-      const targets = rows.filter((r) => selected.has(r.id));
-      await Promise.all(
-        targets.flatMap((target) =>
-          messages.map((message) => {
-            const media = message.attachments?.[0];
-            return sendMessage({
-              containerId: target.id,
-              body: message.text,
-              type: message.type === "text" ? "text" : message.type,
-              mediaUrl: media?.url,
-              mediaName: media?.name,
-              mediaMimeType: media?.mimeType,
-              forwardedFromName: message.sender_name,
-            });
-          })
-        )
-      );
+    setError(null);
+    // allSettled, not all — a target you're no longer a member of (403)
+    // shouldn't make the whole batch look like it silently did nothing
+    // when it actually reached every other target fine.
+    const targets = rows.filter((r) => selected.has(r.id));
+    const results = await Promise.allSettled(
+      targets.flatMap((target) =>
+        messages.map((message) => {
+          const media = message.attachments?.[0];
+          return sendMessage({
+            containerId: target.id,
+            body: message.text,
+            type: message.type === "text" ? "text" : message.type,
+            mediaUrl: media?.url,
+            mediaName: media?.name,
+            mediaMimeType: media?.mimeType,
+            forwardedFromName: message.sender_name,
+          }).then(
+            () => ({ ok: true as const, target }),
+            () => ({ ok: false as const, target })
+          );
+        })
+      )
+    );
+    const failedTargets = [
+      ...new Set(
+        results
+          .map((r) => (r.status === "fulfilled" ? r.value : null))
+          .filter((r): r is { ok: false; target: Row } => !!r && !r.ok)
+          .map((r) => r.target.title)
+      ),
+    ];
+    setSending(false);
+    if (failedTargets.length === 0) {
       onForwarded();
-    } finally {
-      setSending(false);
+    } else if (failedTargets.length === targets.length) {
+      setError(`Couldn't forward to ${failedTargets.join(", ")} — you may no longer be a member there.`);
+    } else {
+      setError(`Sent, but failed for ${failedTargets.join(", ")} — you may no longer be a member there.`);
+      setTimeout(onForwarded, 1800);
     }
   };
 
@@ -127,6 +148,7 @@ export default function ForwardModal({
           )}
         />
         <View style={styles.footer}>
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
           <Pressable
             disabled={selected.size === 0 || sending}
             onPress={send}
@@ -177,6 +199,7 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   },
   rowText: { flex: 1, fontSize: 15, color: colors.text },
   sending: { fontSize: 12, color: colors.textMuted },
+  errorText: { fontSize: 12, color: colors.danger, marginBottom: 8, textAlign: "center" },
   checkbox: {
     width: 22,
     height: 22,
