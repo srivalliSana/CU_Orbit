@@ -4,14 +4,13 @@ import {
   FlatList,
   Keyboard,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -94,10 +93,7 @@ export default function CuAiBubble() {
       </Pressable>
 
       <Modal visible={open} animationType="slide" onRequestClose={() => setOpen(false)}>
-        <KeyboardAvoidingView
-          style={[styles.screen, { paddingTop: insets.top }]}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-        >
+        <View style={[styles.screen, { paddingTop: insets.top }]}>
           <View style={styles.header}>
             <Pressable onPress={() => setOpen(false)} hitSlop={8}>
               <Ionicons name="chevron-back" size={24} color={colors.text} />
@@ -170,20 +166,22 @@ export default function CuAiBubble() {
             }
           />
 
-          <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
-            <TextInput
-              value={text}
-              onChangeText={setText}
-              placeholder="Ask CU AI anything…"
-              placeholderTextColor={colors.textMuted}
-              style={styles.input}
-              multiline
-            />
-            <Pressable onPress={() => submit()} disabled={!text.trim() || send.isPending} style={styles.sendButton}>
-              <Ionicons name="send" size={17} color="#06130D" />
-            </Pressable>
-          </View>
-        </KeyboardAvoidingView>
+          <KeyboardStickyView>
+            <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
+              <TextInput
+                value={text}
+                onChangeText={setText}
+                placeholder="Ask CU AI anything…"
+                placeholderTextColor={colors.textMuted}
+                style={styles.input}
+                multiline
+              />
+              <Pressable onPress={() => submit()} disabled={!text.trim() || send.isPending} style={styles.sendButton}>
+                <Ionicons name="send" size={17} color="#06130D" />
+              </Pressable>
+            </View>
+          </KeyboardStickyView>
+        </View>
       </Modal>
     </>
   );

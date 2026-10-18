@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Button, FlatList, Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
@@ -441,15 +441,7 @@ export default function ChatScreen({ route, navigation }: Props) {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      // "padding" on iOS; "height" on Android — SDK 57's mandatory
-      // edge-to-edge mode means the OS no longer auto-resizes the window
-      // when the keyboard opens, so Android needs the same explicit
-      // shrink-to-make-room behavior iOS gets from "padding".
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-    >
+    <View style={styles.flex}>
       {pinnedMessage ? (
         <View style={styles.pinnedBar}>
           <Pressable style={styles.pinnedTap} onPress={() => jumpToMessage(pinnedMessage.id)}>
@@ -552,6 +544,7 @@ export default function ChatScreen({ route, navigation }: Props) {
         </View>
       )}
 
+      <KeyboardStickyView>
       {selectionMode ? (
         <View style={styles.selectionBar}>
           <Pressable style={styles.selectionBarAction} onPress={batchForward}>
@@ -588,6 +581,7 @@ export default function ChatScreen({ route, navigation }: Props) {
           onCreatePoll={kind === "channel" ? () => setCreatingPoll(true) : undefined}
         />
       )}
+      </KeyboardStickyView>
 
       <PollComposerModal
         visible={creatingPoll}
@@ -669,7 +663,7 @@ export default function ChatScreen({ route, navigation }: Props) {
           </Pressable>
         </Pressable>
       </Modal>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

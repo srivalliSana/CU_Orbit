@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, FlatList, Keyboard, Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -183,10 +183,7 @@ export default function ThreadDetailScreen({ route }: Props) {
   });
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
+    <View style={styles.container}>
       <FlatList
         ref={listRef}
         data={replies}
@@ -209,6 +206,7 @@ export default function ThreadDetailScreen({ route }: Props) {
         }
         renderItem={({ item }) => <MessageBubble message={item} {...rowActions(item)} />}
       />
+      <KeyboardStickyView>
       {selectionMode ? (
         <View style={styles.selectionBar}>
           <Pressable style={styles.selectionBarAction} onPress={exitSelection}>
@@ -253,7 +251,8 @@ export default function ThreadDetailScreen({ route }: Props) {
         onSave={(text) => { if (editTarget) edit.mutate({ id: editTarget.id, body: text }); }}
         onClose={() => setEditTarget(null)}
       />
-    </KeyboardAvoidingView>
+      </KeyboardStickyView>
+    </View>
   );
 }
 
