@@ -33,12 +33,26 @@ const tableExists = async (table) => {
     return rows.length > 0;
 };
 
+const columnExists = async (table, column) => {
+    const rows = await sequelize.query(
+        `SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = :db AND TABLE_NAME = :table AND COLUMN_NAME = :column`,
+        { replacements: { db: DB, table, column }, type: QueryTypes.SELECT }
+    );
+    return rows.length > 0;
+};
+
 async function main() {
     await sequelize.authenticate();
     console.log(`Connected to ${DB}. Mode: ${DRY_RUN ? 'DRY RUN (no writes)' : 'APPLY'}\n`);
 
     if (await tableExists('AiMessages')) {
         console.log('  skip  AiMessages (already present)');
+        if (await columnExists('AiMessages', 'image_url')) {
+            console.log('  skip  AiMessages.image_url (already present)');
+        } else {
+            console.log('  add   AiMessages.image_url');
+            if (!DRY_RUN) await sequelize.query(`ALTER TABLE AiMessages ADD COLUMN image_url VARCHAR(255) NULL`);
+        }
     } else {
         console.log('  add   table AiMessages');
         if (!DRY_RUN) {
@@ -48,6 +62,7 @@ async function main() {
                     user_id    VARCHAR(255) NOT NULL,
                     role       ENUM('user','assistant') NOT NULL,
                     text       TEXT         NOT NULL,
+                    image_url  VARCHAR(255) NULL,
                     createdAt  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     updatedAt  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                     KEY idx_aimessages_user_created (user_id, createdAt)

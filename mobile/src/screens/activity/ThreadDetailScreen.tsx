@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, FlatList, Keyboard, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { KeyboardStickyView } from "react-native-keyboard-controller";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -22,6 +23,7 @@ export default function ThreadDetailScreen({ route }: Props) {
   const { parentId } = route.params;
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
   const selfId = useAuthStore((s) => s.user?.id);
   const isSuperAdmin = useAuthStore((s) => s.user?.role === "admin");
   const queryClient = useQueryClient();
@@ -206,7 +208,7 @@ export default function ThreadDetailScreen({ route }: Props) {
         }
         renderItem={({ item }) => <MessageBubble message={item} {...rowActions(item)} />}
       />
-      <KeyboardStickyView>
+      <KeyboardStickyView offset={{ opened: -insets.bottom }}>
       {selectionMode ? (
         <View style={styles.selectionBar}>
           <Pressable style={styles.selectionBarAction} onPress={exitSelection}>

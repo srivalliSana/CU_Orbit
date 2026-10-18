@@ -11,7 +11,6 @@ import NetInfo from "@react-native-community/netinfo";
 import RootNavigator from "./src/navigation/RootNavigator";
 import ErrorBoundary from "./src/components/ErrorBoundary";
 import UpdateBanner from "./src/components/UpdateBanner";
-import CuAiBubble from "./src/components/CuAiBubble";
 
 // React Query has no browser navigator.onLine to fall back on in React
 // Native — without this it doesn't reliably know the device is offline, so
@@ -61,7 +60,6 @@ export default function App() {
             >
               <RootNavigator />
               <UpdateBanner />
-              <CuAiBubble />
               <StatusBar style="auto" />
             </PersistQueryClientProvider>
           </SafeAreaProvider>

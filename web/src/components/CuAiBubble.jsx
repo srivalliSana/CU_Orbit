@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { getAiMessages, sendAiMessage } from '../api/ai';
+import { generateAiImage, getAiMessages, sendAiMessage } from '../api/ai';
 
 const SUGGESTIONS = ['How do I pin a message?', 'How do I schedule a message for later?', 'What can you help with?'];
 
@@ -7,15 +7,24 @@ const SUGGESTIONS = ['How do I pin a message?', 'How do I schedule a message for
  * The floating "CU AI" bubble + the chat it opens. Mounted once at the
  * App root (fixed positioning), so it floats over every panel/view
  * instead of living inside any one of them.
+ *
+ * `openSignal` lets something outside this component (the IconRail nav
+ * button) open the same modal instance — bump it (e.g. Date.now()) and
+ * this opens, same as clicking the floating button itself.
  */
-export default function CuAiBubble() {
+export default function CuAiBubble({ openSignal }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [imageMode, setImageMode] = useState(false);
   const [error, setError] = useState(null);
   const scroller = useRef(null);
+
+  useEffect(() => {
+    if (openSignal) setOpen(true);
+  }, [openSignal]);
 
   useEffect(() => {
     if (!open || loaded) return;
@@ -33,13 +42,15 @@ export default function CuAiBubble() {
     if (!body || sending) return;
     setText('');
     setError(null);
-    setMessages((prev) => [...prev, { id: `pending-${Date.now()}`, role: 'user', text: body }]);
+    const wantsImage = imageMode;
+    setImageMode(false);
+    setMessages((prev) => [...prev, { id: `pending-${Date.now()}`, role: 'user', text: wantsImage ? `🎨 ${body}` : body }]);
     setSending(true);
     try {
-      const reply = await sendAiMessage(body);
+      const reply = await (wantsImage ? generateAiImage(body) : sendAiMessage(body));
       setMessages((prev) => [...prev, reply]);
     } catch (e) {
-      setError(e.message || "CU AI couldn't reply — try again.");
+      setError(e.message || (wantsImage ? "CU AI couldn't generate that image — try again." : "CU AI couldn't reply — try again."));
     } finally {
       setSending(false);
     }
@@ -102,6 +113,9 @@ export default function CuAiBubble() {
                     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-600 text-sm">✨</div>
                     <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-bl-md bg-slate-100 px-3 py-2 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                       {m.text}
+                      {m.image_url && (
+                        <img src={m.image_url} alt="Generated" className="mt-2 max-h-60 rounded-lg object-cover" />
+                      )}
                     </div>
                   </div>
                 )
@@ -123,12 +137,30 @@ export default function CuAiBubble() {
               {error && <p className="text-center text-xs text-red-600">{error}</p>}
             </div>
 
+            {imageMode && (
+              <div className="flex items-center gap-1.5 border-t border-slate-200 px-3 pt-2 text-[11px] font-medium text-accent-600 dark:border-slate-800 dark:text-accent-400">
+                <span>🎨 Describe an image to generate</span>
+                <button onClick={() => setImageMode(false)} className="ml-auto text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">✕</button>
+              </div>
+            )}
             <div className="flex items-end gap-2 border-t border-slate-200 p-3 dark:border-slate-800">
+              <button
+                onClick={() => setImageMode((v) => !v)}
+                aria-label="Generate an image instead"
+                title="Generate an image instead"
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition ${
+                  imageMode ? 'bg-accent-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+                }`}
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" />
+                </svg>
+              </button>
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
-                placeholder="Ask CU AI anything…"
+                placeholder={imageMode ? 'Describe an image to generate…' : 'Ask CU AI anything…'}
                 rows={1}
                 className="max-h-24 flex-1 resize-none rounded-2xl bg-slate-100 px-4 py-2.5 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-100"
               />

@@ -53,6 +53,7 @@ export default function App() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [cuAiOpenSignal, setCuAiOpenSignal] = useState(0);
   const [profileUserId, setProfileUserId] = useState(null);   // clicked-on message sender
   const [scrollToMessageId, setScrollToMessageId] = useState(null);   // set from a pinned/starred/media list click
   const [joinBanner, setJoinBanner] = useState(null);   // result of an invite-link join attempt
@@ -315,6 +316,7 @@ export default function App() {
         onOpenAdmin={() => setAdminOpen(true)}
         isAdmin={user?.role === 'admin'}
         onOpenProfile={() => setProfileOpen(true)}
+        onOpenCuAi={() => setCuAiOpenSignal(Date.now())}
       />
       <ChatList
         user={user}
@@ -521,7 +523,7 @@ export default function App() {
         />
       )}
 
-      <CuAiBubble />
+      <CuAiBubble openSignal={cuAiOpenSignal} />
     </div>
   );
 }

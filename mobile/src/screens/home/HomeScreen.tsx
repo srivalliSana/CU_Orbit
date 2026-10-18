@@ -21,6 +21,7 @@ import { useNavGuard } from "../../hooks/useNavGuard";
 import { searchMessages, type SearchResult } from "../../api/search";
 import { setConversationPref } from "../../api/conversations";
 import ChatListRow, { type ChatRowItem } from "../../components/ChatListRow";
+import CuAiBubble from "../../components/CuAiBubble";
 import { channelToRow, dmToRow } from "../../lib/chatRows";
 import { timeLabel } from "../../lib/format";
 import { useAuthStore } from "../../state/authStore";
@@ -396,6 +397,8 @@ export default function HomeScreen({ navigation }: Props) {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <CuAiBubble />
     </View>
   );
 }

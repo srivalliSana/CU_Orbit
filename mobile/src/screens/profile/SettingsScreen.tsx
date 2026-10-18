@@ -5,6 +5,8 @@ import { Ionicons } from "@expo/vector-icons";
 import Avatar from "../../components/Avatar";
 import { useThemeColors, useThemeStore, type ThemeMode } from "../../state/themeStore";
 import { useAuthStore } from "../../state/authStore";
+import { useNotificationStatusStore } from "../../state/notificationStatusStore";
+import { registerForPushNotifications } from "../../hooks/useNotifications";
 import { setDoNotDisturb } from "../../api/conversations";
 import { getBlockedUsers, unblockUser, updateProfile } from "../../api/users";
 import { confirmTwoFactorEnroll, disableTwoFactor, startTwoFactorEnroll } from "../../api/auth";
@@ -32,6 +34,9 @@ export default function SettingsScreen() {
   const [twofaStage, setTwofaStage] = useState<"idle" | "enrolling" | "busy">("idle");
   const [twofaCode, setTwofaCode] = useState("");
   const [twofaError, setTwofaError] = useState<string | null>(null);
+
+  const pushStatus = useNotificationStatusStore((s) => s.status);
+  const pushError = useNotificationStatusStore((s) => s.error);
 
   const [blocked, setBlocked] = useState<User[] | null>(null);
   useEffect(() => { getBlockedUsers().then(setBlocked).catch(() => setBlocked([])); }, []);
@@ -128,6 +133,29 @@ export default function SettingsScreen() {
       <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Notifications</Text>
       <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={styles.row}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.rowText, { color: colors.text }]}>Push notifications</Text>
+            <Text style={[styles.hint, { color: pushStatus === "registered" ? colors.textMuted : colors.danger, padding: 0, marginTop: 2 }]}>
+              {pushStatus === "registered"
+                ? "This device is registered to receive pushes."
+                : pushStatus === "registering"
+                ? "Registering this device…"
+                : pushStatus === "permission_denied"
+                ? "Notification permission is off — enable it in your phone's system settings for this app."
+                : pushStatus === "error"
+                ? `Couldn't register this device${pushError ? `: ${pushError}` : "."}`
+                : "Not yet registered."}
+            </Text>
+          </View>
+          {pushStatus === "registering" ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : pushStatus !== "registered" ? (
+            <Pressable onPress={() => registerForPushNotifications()}>
+              <Text style={[styles.rowText, { color: colors.primary, fontSize: 13 }]}>Retry</Text>
+            </Pressable>
+          ) : null}
+        </View>
+        <View style={[styles.row, { borderTopWidth: 1, borderTopColor: colors.border }]}>
           <View style={{ flex: 1 }}>
             <Text style={[styles.rowText, { color: colors.text }]}>Do not disturb</Text>
             <Text style={[styles.hint, { color: colors.textMuted, padding: 0, marginTop: 2 }]}>

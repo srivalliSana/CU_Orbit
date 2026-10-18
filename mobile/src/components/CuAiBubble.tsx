@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   Keyboard,
   Modal,
   Pressable,
@@ -15,7 +16,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { getAiMessages, sendAiMessage, type AiMessage } from "../api/ai";
+import { generateAiImage, getAiMessages, sendAiMessage, type AiMessage } from "../api/ai";
+import { resolveMediaUrl } from "../constants/config";
 import { apiErrorMessage } from "../api/client";
 import { useAuthStore } from "../state/authStore";
 import { useThemeColors } from "../state/themeStore";
@@ -35,6 +37,7 @@ export default function CuAiBubble() {
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
+  const [imageMode, setImageMode] = useState(false);
   const listRef = useRef<FlatList<AiMessage>>(null);
   const queryClient = useQueryClient();
 
@@ -65,6 +68,26 @@ export default function CuAiBubble() {
     },
   });
 
+  const generateImage = useMutation({
+    mutationFn: generateAiImage,
+    onMutate: async (prompt: string) => {
+      const optimistic: AiMessage = {
+        id: `pending-${Date.now()}`,
+        role: "user",
+        text: `🎨 ${prompt}`,
+        created_at: new Date().toISOString(),
+      };
+      queryClient.setQueryData<AiMessage[]>(["aiMessages"], (prev) => [...(prev ?? []), optimistic]);
+      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    },
+    onSuccess: (reply) => {
+      queryClient.setQueryData<AiMessage[]>(["aiMessages"], (prev) => [...(prev ?? []), reply]);
+      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    },
+  });
+
+  const isBusy = send.isPending || generateImage.isPending;
+
   useEffect(() => {
     if (open) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
   }, [open]);
@@ -73,17 +96,25 @@ export default function CuAiBubble() {
 
   const submit = (value?: string) => {
     const body = (value ?? text).trim();
-    if (!body || send.isPending) return;
+    if (!body || isBusy) return;
     setText("");
     Keyboard.dismiss();
-    send.mutate(body);
+    if (imageMode) {
+      generateImage.mutate(body);
+      setImageMode(false);
+    } else {
+      send.mutate(body);
+    }
   };
 
   return (
     <>
       <Pressable
         onPress={() => setOpen(true)}
-        style={[styles.bubble, { bottom: insets.bottom + 78 }]}
+        // Sits just above the Home screen's own "+" FAB (bottom:20,
+        // height:56 → its top edge is at 76) with a clear gap, instead of
+        // overlapping it or the last visible list row.
+        style={[styles.bubble, { bottom: insets.bottom + 96 }]}
         accessibilityLabel="Open CU AI"
       >
         <View style={styles.badge}>
@@ -146,12 +177,15 @@ export default function CuAiBubble() {
                   </View>
                   <View style={[styles.bubbleMsg, styles.bubbleMsgBot]}>
                     <Text style={styles.bubbleMsgText}>{item.text}</Text>
+                    {item.image_url ? (
+                      <Image source={{ uri: resolveMediaUrl(item.image_url) ?? undefined }} style={styles.generatedImage} resizeMode="cover" />
+                    ) : null}
                   </View>
                 </View>
               )
             }
             ListFooterComponent={
-              send.isPending ? (
+              isBusy ? (
                 <View style={styles.rowBot}>
                   <View style={styles.miniAvatar}>
                     <Text style={styles.headerAvatarIcon}>✨</Text>
@@ -162,21 +196,39 @@ export default function CuAiBubble() {
                 </View>
               ) : send.isError ? (
                 <Text style={styles.errorText}>{apiErrorMessage(send.error, "CU AI couldn't reply — try again.")}</Text>
+              ) : generateImage.isError ? (
+                <Text style={styles.errorText}>{apiErrorMessage(generateImage.error, "CU AI couldn't generate that image — try again.")}</Text>
               ) : null
             }
           />
 
-          <KeyboardStickyView>
+          <KeyboardStickyView offset={{ opened: -insets.bottom }}>
+            {imageMode ? (
+              <View style={styles.imageModeBanner}>
+                <Ionicons name="image" size={13} color={colors.primary} />
+                <Text style={styles.imageModeBannerText}>Describe an image to generate</Text>
+                <Pressable onPress={() => setImageMode(false)} hitSlop={8}>
+                  <Ionicons name="close" size={14} color={colors.textMuted} />
+                </Pressable>
+              </View>
+            ) : null}
             <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
+              <Pressable
+                onPress={() => setImageMode((v) => !v)}
+                style={[styles.imageModeButton, imageMode && styles.imageModeButtonActive]}
+                accessibilityLabel="Generate an image instead"
+              >
+                <Ionicons name="image-outline" size={19} color={imageMode ? "#06130D" : colors.textMuted} />
+              </Pressable>
               <TextInput
                 value={text}
                 onChangeText={setText}
-                placeholder="Ask CU AI anything…"
+                placeholder={imageMode ? "Describe an image to generate…" : "Ask CU AI anything…"}
                 placeholderTextColor={colors.textMuted}
                 style={styles.input}
                 multiline
               />
-              <Pressable onPress={() => submit()} disabled={!text.trim() || send.isPending} style={styles.sendButton}>
+              <Pressable onPress={() => submit()} disabled={!text.trim() || isBusy} style={styles.sendButton}>
                 <Ionicons name="send" size={17} color="#06130D" />
               </Pressable>
             </View>
@@ -308,5 +360,36 @@ const buildStyles = (colors: ReturnType<typeof useThemeColors>) =>
       backgroundColor: colors.primary,
       alignItems: "center",
       justifyContent: "center",
+    },
+    generatedImage: {
+      width: 220,
+      height: 220,
+      borderRadius: 12,
+      marginTop: 8,
+      backgroundColor: colors.background,
+    },
+    imageModeButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.surface,
+    },
+    imageModeButtonActive: {
+      backgroundColor: colors.primary,
+    },
+    imageModeBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 14,
+      paddingTop: 8,
+    },
+    imageModeBannerText: {
+      flex: 1,
+      fontSize: 11,
+      fontWeight: "600",
+      color: colors.primary,
     },
   });

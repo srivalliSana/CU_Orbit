@@ -5,6 +5,7 @@ import Constants from "expo-constants";
 
 import { registerPushToken } from "../api/push";
 import { useAuthStore } from "../state/authStore";
+import { useNotificationStatusStore } from "../state/notificationStatusStore";
 import { navigateToChat } from "../navigation/navigationRef";
 
 // Foreground behavior: show the banner/sound even while the app is open,
@@ -20,6 +21,57 @@ Notifications.setNotificationHandler({
     shouldSetBadge: false,
   }),
 });
+
+/**
+ * The actual registration flow, pulled out of the hook so Settings can
+ * also call it directly as a manual "Retry" — every step now reports
+ * into notificationStatusStore instead of a silent empty catch, since a
+ * release build has no attached console to see a swallowed error in.
+ */
+export async function registerForPushNotifications() {
+  const setStatus = useNotificationStatusStore.getState().set;
+  setStatus("registering");
+  try {
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync("default", {
+        name: "Messages",
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+      });
+    }
+
+    const existing = await Notifications.getPermissionsAsync();
+    let granted = existing.status === "granted";
+    if (!granted && existing.canAskAgain) {
+      const requested = await Notifications.requestPermissionsAsync();
+      granted = requested.status === "granted";
+    }
+    if (!granted) {
+      setStatus("permission_denied");
+      return;
+    }
+
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    if (!projectId) {
+      setStatus("error", "No EAS projectId in this build's config.");
+      return;
+    }
+
+    const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
+    if (!token) {
+      setStatus("error", "Device returned no push token.");
+      return;
+    }
+    await registerPushToken(token);
+    setStatus("registered");
+  } catch (e) {
+    // The classic cause here is FCM not being initialized on this device
+    // build ("Default FCM app is not initialized"), but surfacing the
+    // real message beats guessing — this used to be a bare empty catch,
+    // so every past failure here was completely invisible.
+    setStatus("error", e instanceof Error ? e.message : String(e));
+  }
+}
 
 /**
  * Registers this device for push notifications once signed in: creates the
@@ -51,38 +103,6 @@ export function useNotifications() {
 
   useEffect(() => {
     if (status !== "signedIn") return;
-    let cancelled = false;
-
-    (async () => {
-      if (Platform.OS === "android") {
-        await Notifications.setNotificationChannelAsync("default", {
-          name: "Messages",
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 250, 250, 250],
-        });
-      }
-
-      const existing = await Notifications.getPermissionsAsync();
-      let granted = existing.status === "granted";
-      if (!granted && existing.canAskAgain) {
-        const requested = await Notifications.requestPermissionsAsync();
-        granted = requested.status === "granted";
-      }
-      if (!granted || cancelled) return;
-
-      const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-      if (!projectId) return;
-      try {
-        const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
-        if (!cancelled && token) await registerPushToken(token);
-      } catch {
-        // Best-effort — a device that can't get a push token just won't
-        // receive pushes; it shouldn't block anything else in the app.
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    registerForPushNotifications();
   }, [status]);
 }

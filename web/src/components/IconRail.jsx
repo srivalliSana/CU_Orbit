@@ -10,7 +10,7 @@ import { getThemeMode, setThemeMode } from '../lib/theme';
  * app already uses everywhere, not borrowed from anyone else's palette).
  */
 export default function IconRail({
-  user, filter, onChangeFilter, onOpenMentions, mentionsUnread, onOpenThreads, onOpenSearch, onOpenAdmin, onOpenProfile, isAdmin,
+  user, filter, onChangeFilter, onOpenMentions, mentionsUnread, onOpenThreads, onOpenSearch, onOpenAdmin, onOpenProfile, onOpenCuAi, isAdmin,
 }) {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
 
@@ -91,6 +91,18 @@ export default function IconRail({
           icon={<path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z" />}
         />
       )}
+
+      <RailButton
+        label="CU AI"
+        active={false}
+        onClick={onOpenCuAi}
+        icon={
+          <>
+            <path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8" />
+            <circle cx="12" cy="12" r="2.5" />
+          </>
+        }
+      />
 
       <div className="mt-auto flex flex-col items-center gap-1">
         <button

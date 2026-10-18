@@ -487,6 +487,9 @@ const AiMessage = sequelize.define('AiMessage', {
     user_id: { type: DataTypes.STRING, allowNull: false },
     role: { type: DataTypes.ENUM('user', 'assistant'), allowNull: false },
     text: { type: DataTypes.TEXT, allowNull: false },
+    // Set on an assistant reply to an image-generation request — the
+    // generated image, saved under /uploads like any other attachment.
+    image_url: { type: DataTypes.STRING, allowNull: true },
 }, {
     indexes: [{ fields: ['user_id', 'createdAt'] }],
 });
@@ -4466,18 +4469,25 @@ app.get('/api/link-preview', auth.requireAuth, async (req, res) => {
 
 // --- CU AI (floating-bubble assistant) ---
 //
-// Provider-agnostic: targets the OpenAI-compatible chat-completions shape
-// (POST {base}/chat/completions, Authorization: Bearer <key>), which is
-// what nearly every provider besides Anthropic speaks — OpenAI itself,
-// Groq, Together, DeepSeek, Mistral, OpenRouter, and most others, so no
-// code change is needed when picking one, just these three env vars:
-//   AI_API_KEY      - the provider's API key
-//   AI_BASE_URL     - e.g. https://api.openai.com/v1, https://api.groq.com/openai/v1
-//   AI_MODEL        - the model name that provider expects, e.g. gpt-4o-mini
-// Same "key never reaches the client" reasoning as the Giphy proxy below:
-// the key stays server-side, every request is proxied through here.
+// Self-hosted (CUTM's own Qwen/Ollama server), not a commercial provider —
+// targets Ollama's native /api/generate shape (a single `prompt` string
+// plus an optional `system` override, not an OpenAI-style messages array)
+// and a separate image-generation endpoint. No API key: it's reached over
+// the university's own network, not the public internet.
+//   AI_TEXT_BASE_URL   e.g. https://qwen.cutm.ac.in/api/generate
+//   AI_TEXT_MODEL      e.g. qwen2.5-coder:32b
+//   AI_IMAGE_BASE_URL  e.g. https://qwen.cutm.ac.in/api/image/generate
+//   AI_IMAGE_MODEL     e.g. stable-diffusion-v1.5
+//   AI_API_KEY         optional — sent as "Authorization: Bearer <key>"
+//                       only if set, for if auth gets added later
 const AI_SYSTEM_PROMPT = "You are CU AI, a helpful assistant built into Let's Connect, a university messaging app. Be friendly, concise, and genuinely useful — help with how to use the app's features (channels, DMs, reminders, scheduling, lists, polls, etc.) as well as general questions. Keep replies short unless the question calls for more detail.";
 const AI_HISTORY_LIMIT = 20;
+
+function aiHeaders() {
+    const headers = { 'content-type': 'application/json' };
+    if (process.env.AI_API_KEY) headers['Authorization'] = `Bearer ${process.env.AI_API_KEY}`;
+    return headers;
+}
 
 app.get('/api/ai/messages', auth.requireAuth, async (req, res) => {
     try {
@@ -4486,16 +4496,15 @@ app.get('/api/ai/messages', auth.requireAuth, async (req, res) => {
             order: [['createdAt', 'ASC']],
             limit: 200,
         });
-        res.json(rows.map((r) => ({ id: r.id, role: r.role, text: r.text, created_at: r.createdAt })));
+        res.json(rows.map((r) => ({ id: r.id, role: r.role, text: r.text, image_url: r.image_url, created_at: r.createdAt })));
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
 app.post('/api/ai/messages', auth.requireAuth, async (req, res) => {
-    const key = process.env.AI_API_KEY;
-    const baseUrl = process.env.AI_BASE_URL;
-    const model = process.env.AI_MODEL;
-    if (!key || !baseUrl || !model) {
-        return res.status(503).json({ error: 'not_configured', message: 'AI_API_KEY, AI_BASE_URL and AI_MODEL must all be set.' });
+    const baseUrl = process.env.AI_TEXT_BASE_URL;
+    const model = process.env.AI_TEXT_MODEL;
+    if (!baseUrl || !model) {
+        return res.status(503).json({ error: 'not_configured', message: 'AI_TEXT_BASE_URL and AI_TEXT_MODEL must be set.' });
     }
 
     const text = (req.body.text || '').trim().slice(0, 4000);
@@ -4504,42 +4513,107 @@ app.post('/api/ai/messages', auth.requireAuth, async (req, res) => {
     try {
         await AiMessage.create({ user_id: req.user.id, role: 'user', text });
 
+        // Ollama's /api/generate takes one prompt string, not a messages
+        // array — recent turns are flattened into a plain transcript so
+        // the model still has conversational context.
         const recent = await AiMessage.findAll({
             where: { user_id: req.user.id },
             order: [['createdAt', 'DESC']],
             limit: AI_HISTORY_LIMIT,
         });
-        const history = recent.reverse().map((r) => ({ role: r.role, content: r.text }));
+        const transcript = recent.reverse()
+            .map((r) => `${r.role === 'user' ? 'User' : 'Assistant'}: ${r.text}`)
+            .join('\n');
 
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30000);
+        const timeout = setTimeout(() => controller.abort(), 60000);
         let reply;
         try {
-            const resp = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+            const resp = await fetch(baseUrl, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${key}`,
-                    'content-type': 'application/json',
-                },
+                headers: aiHeaders(),
                 body: JSON.stringify({
                     model,
-                    messages: [{ role: 'system', content: AI_SYSTEM_PROMPT }, ...history],
+                    prompt: transcript,
+                    system: AI_SYSTEM_PROMPT,
+                    stream: false,
                 }),
                 signal: controller.signal,
             });
             if (!resp.ok) {
                 const detail = await resp.text().catch(() => '');
-                console.error('[cu-ai] AI API error', resp.status, detail.slice(0, 500));
+                console.error('[cu-ai] text API error', resp.status, detail.slice(0, 500));
                 return res.status(502).json({ error: 'ai_unavailable', message: 'CU AI could not reply — please try again.' });
             }
             const data = await resp.json();
-            reply = data.choices?.[0]?.message?.content?.trim() || "Sorry, I didn't catch that — could you try again?";
+            reply = (data.response || '').trim() || "Sorry, I didn't catch that — could you try again?";
         } finally {
             clearTimeout(timeout);
         }
 
         const assistantRow = await AiMessage.create({ user_id: req.user.id, role: 'assistant', text: reply });
         res.json({ id: assistantRow.id, role: 'assistant', text: reply, created_at: assistantRow.createdAt });
+    } catch (e) {
+        console.error('[cu-ai]', e.message);
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
+/** "Generate an image" — a separate action from plain chat, since it hits
+ *  a different model/endpoint entirely. The response shape of this
+ *  particular internal wrapper isn't documented anywhere we have access
+ *  to, so this tries every field name a Stable-Diffusion-style wrapper
+ *  commonly uses (base64 image, a hosted URL, or an images[] array) and
+ *  logs the raw keys if none match, so a real failure is debuggable
+ *  instead of silently saving nothing. */
+app.post('/api/ai/image', auth.requireAuth, async (req, res) => {
+    const baseUrl = process.env.AI_IMAGE_BASE_URL;
+    const model = process.env.AI_IMAGE_MODEL;
+    if (!baseUrl || !model) {
+        return res.status(503).json({ error: 'not_configured', message: 'AI_IMAGE_BASE_URL and AI_IMAGE_MODEL must be set.' });
+    }
+
+    const prompt = (req.body.prompt || '').trim().slice(0, 1000);
+    if (!prompt) return res.status(400).json({ error: 'bad_request', message: 'prompt is required' });
+
+    try {
+        await AiMessage.create({ user_id: req.user.id, role: 'user', text: `🎨 ${prompt}` });
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 90000);
+        let imageUrl;
+        try {
+            const resp = await fetch(baseUrl, {
+                method: 'POST',
+                headers: aiHeaders(),
+                body: JSON.stringify({ model, prompt }),
+                signal: controller.signal,
+            });
+            if (!resp.ok) {
+                const detail = await resp.text().catch(() => '');
+                console.error('[cu-ai] image API error', resp.status, detail.slice(0, 500));
+                return res.status(502).json({ error: 'ai_unavailable', message: 'CU AI could not generate that image — please try again.' });
+            }
+            const data = await resp.json();
+            const base64 = data.image || data.images?.[0] || data.b64_json || data.data?.[0]?.b64_json;
+            const hostedUrl = data.url || data.image_url || data.data?.[0]?.url;
+            if (base64) {
+                const buf = Buffer.from(base64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+                const filename = `${Date.now()}-cuai-${crypto.randomBytes(6).toString('hex')}.png`;
+                await fs.promises.writeFile(path.join(uploadDir, filename), buf);
+                imageUrl = `/uploads/${filename}`;
+            } else if (hostedUrl) {
+                imageUrl = hostedUrl;
+            } else {
+                console.error('[cu-ai] image response had no recognizable image field. Keys:', Object.keys(data));
+                return res.status(502).json({ error: 'ai_unavailable', message: "CU AI's image response wasn't in a format I recognize." });
+            }
+        } finally {
+            clearTimeout(timeout);
+        }
+
+        const assistantRow = await AiMessage.create({ user_id: req.user.id, role: 'assistant', text: 'Here you go:', image_url: imageUrl });
+        res.json({ id: assistantRow.id, role: 'assistant', text: assistantRow.text, image_url: imageUrl, created_at: assistantRow.createdAt });
     } catch (e) {
         console.error('[cu-ai]', e.message);
         res.status(500).json({ error: 'server_error' });

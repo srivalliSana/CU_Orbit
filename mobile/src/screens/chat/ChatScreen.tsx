@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Button, FlatList, Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { KeyboardStickyView } from "react-native-keyboard-controller";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
@@ -38,6 +39,7 @@ export default function ChatScreen({ route, navigation }: Props) {
   const colors = useThemeColors();
   const isDark = useIsDarkMode();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
   const { containerId, title, kind, scrollToMessageId } = route.params;
   const [wallpaper, setWallpaper] = useState<string | null>(null);
   const [wallpaperPickerOpen, setWallpaperPickerOpen] = useState(false);
@@ -544,7 +546,13 @@ export default function ChatScreen({ route, navigation }: Props) {
         </View>
       )}
 
-      <KeyboardStickyView>
+      {/* Android edge-to-edge: the bottom gesture-nav inset isn't part of
+          the keyboard's own reported height, so the composer landed
+          visibly above the keyboard with a gap the size of that inset
+          while open. Pulling it down by insets.bottom only while the
+          keyboard is open closes that gap without affecting the
+          closed-keyboard resting position. */}
+      <KeyboardStickyView offset={{ opened: -insets.bottom }}>
       {selectionMode ? (
         <View style={styles.selectionBar}>
           <Pressable style={styles.selectionBarAction} onPress={batchForward}>
