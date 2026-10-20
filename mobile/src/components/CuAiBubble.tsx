@@ -5,13 +5,13 @@ import {
   Image,
   Keyboard,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -38,6 +38,7 @@ export default function CuAiBubble() {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [imageMode, setImageMode] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const listRef = useRef<FlatList<AiMessage>>(null);
   const queryClient = useQueryClient();
 
@@ -91,6 +92,20 @@ export default function CuAiBubble() {
   useEffect(() => {
     if (open) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
   }, [open]);
+
+  // See ChatScreen for why this reads the OS's own keyboard height
+  // directly instead of relying on KeyboardStickyView's translation,
+  // which left a visible gap under Android edge-to-edge.
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, (e) => setKeyboardHeight(e.endCoordinates.height));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   if (status !== "signedIn") return null;
 
@@ -202,7 +217,7 @@ export default function CuAiBubble() {
             }
           />
 
-          <KeyboardStickyView offset={{ opened: -insets.bottom }}>
+          <View style={{ marginBottom: keyboardHeight }}>
             {imageMode ? (
               <View style={styles.imageModeBanner}>
                 <Ionicons name="image" size={13} color={colors.primary} />
@@ -212,7 +227,10 @@ export default function CuAiBubble() {
                 </Pressable>
               </View>
             ) : null}
-            <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
+            {/* The keyboard already covers the gesture-nav safe area once
+                open, so the extra inset padding below only applies at rest
+                — otherwise it'd double up with marginBottom above. */}
+            <View style={[styles.composer, { paddingBottom: keyboardHeight > 0 ? 10 : insets.bottom + 10 }]}>
               <Pressable
                 onPress={() => setImageMode((v) => !v)}
                 style={[styles.imageModeButton, imageMode && styles.imageModeButtonActive]}
@@ -232,7 +250,7 @@ export default function CuAiBubble() {
                 <Ionicons name="send" size={17} color="#06130D" />
               </Pressable>
             </View>
-          </KeyboardStickyView>
+          </View>
         </View>
       </Modal>
     </>

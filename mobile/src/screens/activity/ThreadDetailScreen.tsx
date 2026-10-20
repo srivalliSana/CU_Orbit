@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, FlatList, Keyboard, Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { KeyboardStickyView } from "react-native-keyboard-controller";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -23,7 +21,6 @@ export default function ThreadDetailScreen({ route }: Props) {
   const { parentId } = route.params;
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
   const selfId = useAuthStore((s) => s.user?.id);
   const isSuperAdmin = useAuthStore((s) => s.user?.role === "admin");
   const queryClient = useQueryClient();
@@ -65,15 +62,18 @@ export default function ThreadDetailScreen({ route }: Props) {
   // the main ChatScreen — see there for why both events are needed.
   const keyboardVisible = useRef(false);
   const lastReplyId = useRef<string | undefined>(undefined);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const showSub = Keyboard.addListener(showEvent, () => {
+    const showSub = Keyboard.addListener(showEvent, (e) => {
       keyboardVisible.current = true;
+      setKeyboardHeight(e.endCoordinates.height);
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     });
     const hideSub = Keyboard.addListener(hideEvent, () => {
       keyboardVisible.current = false;
+      setKeyboardHeight(0);
     });
     return () => {
       showSub.remove();
@@ -208,7 +208,7 @@ export default function ThreadDetailScreen({ route }: Props) {
         }
         renderItem={({ item }) => <MessageBubble message={item} {...rowActions(item)} />}
       />
-      <KeyboardStickyView offset={{ opened: -insets.bottom }}>
+      <View style={{ marginBottom: keyboardHeight }}>
       {selectionMode ? (
         <View style={styles.selectionBar}>
           <Pressable style={styles.selectionBarAction} onPress={exitSelection}>
@@ -253,7 +253,7 @@ export default function ThreadDetailScreen({ route }: Props) {
         onSave={(text) => { if (editTarget) edit.mutate({ id: editTarget.id, body: text }); }}
         onClose={() => setEditTarget(null)}
       />
-      </KeyboardStickyView>
+      </View>
     </View>
   );
 }

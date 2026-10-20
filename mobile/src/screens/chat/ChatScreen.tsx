@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Button, FlatList, Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { KeyboardStickyView } from "react-native-keyboard-controller";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
@@ -39,7 +37,6 @@ export default function ChatScreen({ route, navigation }: Props) {
   const colors = useThemeColors();
   const isDark = useIsDarkMode();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
   const { containerId, title, kind, scrollToMessageId } = route.params;
   const [wallpaper, setWallpaper] = useState<string | null>(null);
   const [wallpaperPickerOpen, setWallpaperPickerOpen] = useState(false);
@@ -196,15 +193,26 @@ export default function ChatScreen({ route, navigation }: Props) {
   // incoming message.
   const keyboardVisible = useRef(false);
   const lastMessageId = useRef<string | undefined>(undefined);
+  // KeyboardStickyView's native-insets translation left a visible gap
+  // under Android edge-to-edge (its reported keyboard height didn't line
+  // up with where the keyboard actually starts, by roughly a nav-bar's
+  // worth) — no offset tweak closed it reliably. This instead reads the
+  // OS's own authoritative keyboard height from the plain Keyboard module
+  // (already used here for scroll-to-end) and applies it as marginBottom
+  // on the composer directly: the same number Android itself reports,
+  // zero translation math to get wrong.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const showSub = Keyboard.addListener(showEvent, () => {
+    const showSub = Keyboard.addListener(showEvent, (e) => {
       keyboardVisible.current = true;
+      setKeyboardHeight(e.endCoordinates.height);
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     });
     const hideSub = Keyboard.addListener(hideEvent, () => {
       keyboardVisible.current = false;
+      setKeyboardHeight(0);
     });
     return () => {
       showSub.remove();
@@ -546,13 +554,7 @@ export default function ChatScreen({ route, navigation }: Props) {
         </View>
       )}
 
-      {/* Android edge-to-edge: the bottom gesture-nav inset isn't part of
-          the keyboard's own reported height, so the composer landed
-          visibly above the keyboard with a gap the size of that inset
-          while open. Pulling it down by insets.bottom only while the
-          keyboard is open closes that gap without affecting the
-          closed-keyboard resting position. */}
-      <KeyboardStickyView offset={{ opened: -insets.bottom }}>
+      <View style={{ marginBottom: keyboardHeight }}>
       {selectionMode ? (
         <View style={styles.selectionBar}>
           <Pressable style={styles.selectionBarAction} onPress={batchForward}>
@@ -589,7 +591,7 @@ export default function ChatScreen({ route, navigation }: Props) {
           onCreatePoll={kind === "channel" ? () => setCreatingPoll(true) : undefined}
         />
       )}
-      </KeyboardStickyView>
+      </View>
 
       <PollComposerModal
         visible={creatingPoll}
