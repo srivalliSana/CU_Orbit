@@ -4554,7 +4554,11 @@ app.post('/api/ai/messages', auth.requireAuth, async (req, res) => {
         const assistantRow = await AiMessage.create({ user_id: req.user.id, role: 'assistant', text: reply });
         res.json({ id: assistantRow.id, role: 'assistant', text: reply, created_at: assistantRow.createdAt });
     } catch (e) {
-        console.error('[cu-ai]', e.message);
+        // fetch() wraps the real DNS/connection/TLS error in a generic
+        // "fetch failed" — e.cause carries the actual underlying error
+        // (ENOTFOUND, ECONNREFUSED, certificate, etc.), which e.message
+        // alone was hiding.
+        console.error('[cu-ai]', e.message, e.cause || '');
         res.status(500).json({ error: 'server_error' });
     }
 });
@@ -4615,7 +4619,7 @@ app.post('/api/ai/image', auth.requireAuth, async (req, res) => {
         const assistantRow = await AiMessage.create({ user_id: req.user.id, role: 'assistant', text: 'Here you go:', image_url: imageUrl });
         res.json({ id: assistantRow.id, role: 'assistant', text: assistantRow.text, image_url: imageUrl, created_at: assistantRow.createdAt });
     } catch (e) {
-        console.error('[cu-ai]', e.message);
+        console.error('[cu-ai]', e.message, e.cause || '');
         res.status(500).json({ error: 'server_error' });
     }
 });
