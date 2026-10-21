@@ -58,29 +58,24 @@ export default function CuAiBubble({ openSignal }) {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        aria-label="Open CU AI"
-        className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-accent-600 text-2xl shadow-lg shadow-accent-600/40 ring-4 ring-accent-500/10 transition hover:scale-105 hover:bg-accent-700"
-      >
-        <span className="absolute -left-1 -top-1 rounded-md bg-orange-400 px-1.5 py-0.5 text-[9px] font-extrabold text-slate-900">AI</span>
-        ✨
-      </button>
-
+      {/* No floating trigger here anymore — it overlapped the composer's
+          own send button. IconRail's nav icon (onOpenCuAi → openSignal)
+          is the only entry point now. */}
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end justify-end bg-black/30 p-0 sm:items-center sm:p-6" onClick={() => setOpen(false)}>
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="flex h-full w-full flex-col overflow-hidden bg-white dark:bg-slate-900 sm:h-[640px] sm:max-h-[85vh] sm:w-[400px] sm:rounded-2xl sm:shadow-2xl"
-          >
-            <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-600 text-base">✨</div>
-              <div className="flex-1">
-                <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">CU AI</h2>
-                <p className="text-[11px] font-medium text-accent-600 dark:text-accent-400">Always here to help</p>
-              </div>
-              <button onClick={() => setOpen(false)} aria-label="Close" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">✕</button>
-            </header>
+        // Full screen always, opened from the nav icon — no longer a small
+        // floating card over the chat (that was the old floating-bubble
+        // layout, kept only at phone width before; now it's the same at
+        // every size, matching the other nav destinations like Admin).
+        <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-slate-900">
+          <header className="mx-auto flex w-full max-w-3xl items-center gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-600 text-base">✨</div>
+            <div className="flex-1">
+              <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">CU AI</h2>
+              <p className="text-[11px] font-medium text-accent-600 dark:text-accent-400">Always here to help</p>
+            </div>
+            <button onClick={() => setOpen(false)} aria-label="Close" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">✕</button>
+          </header>
+          <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col overflow-hidden">
 
             <div ref={scroller} className="flex-1 overflow-y-auto px-4 py-4">
               {messages.length === 0 && loaded && (
