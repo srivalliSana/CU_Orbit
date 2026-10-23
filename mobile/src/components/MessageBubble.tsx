@@ -475,12 +475,15 @@ export default function MessageBubble({
           animationType="fade"
           onRequestClose={() => setImageViewerVisible(false)}
         >
-          <Pressable style={styles.viewerBackdrop} onPress={() => setImageViewerVisible(false)}>
-            <Image source={{ uri: attachmentUrl }} style={styles.viewerImage} resizeMode="contain" />
+          <View style={styles.viewerBackdrop}>
+            <Pressable style={styles.viewerCloseButton} onPress={() => setImageViewerVisible(false)} hitSlop={10}>
+              <Ionicons name="close" size={26} color="#fff" />
+            </Pressable>
+            <ZoomableImage uri={attachmentUrl} style={styles.viewerImage} />
             <Pressable style={styles.viewerSaveButton} onPress={handleSave}>
               <Text style={styles.viewerSaveText}>Save image</Text>
             </Pressable>
-          </Pressable>
+          </View>
         </Modal>
       ) : null}
 
@@ -503,6 +506,77 @@ export default function MessageBubble({
         </Modal>
       ) : null}
     </View>
+    </GestureDetector>
+  );
+}
+
+/** Pinch-to-zoom + pan for the fullscreen image viewer. Pinch and pan run
+ *  simultaneously (zoom while dragging), double-tap resets — the usual
+ *  photo-viewer gesture set, built on the same Gesture/Animated primitives
+ *  already used for swipe-to-reply above rather than a new dependency. */
+function ZoomableImage({ uri, style }: { uri: string; style: object }) {
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+
+  const reset = () => {
+    "worklet";
+    scale.value = withSpring(1);
+    translateX.value = withSpring(0);
+    translateY.value = withSpring(0);
+    savedScale.value = 1;
+    savedTranslateX.value = 0;
+    savedTranslateY.value = 0;
+  };
+
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((e) => {
+      scale.value = Math.max(1, savedScale.value * e.scale);
+    })
+    .onEnd(() => {
+      savedScale.value = scale.value;
+      if (scale.value <= 1) reset();
+    });
+
+  const panGesture = Gesture.Pan()
+    .averageTouches(true)
+    .onUpdate((e) => {
+      if (savedScale.value <= 1) return;
+      translateX.value = savedTranslateX.value + e.translationX;
+      translateY.value = savedTranslateY.value + e.translationY;
+    })
+    .onEnd(() => {
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    });
+
+  const doubleTapGesture = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd(() => {
+      if (savedScale.value > 1) {
+        reset();
+      } else {
+        scale.value = withSpring(2.5);
+        savedScale.value = 2.5;
+      }
+    });
+
+  const composed = Gesture.Simultaneous(Gesture.Race(doubleTapGesture, panGesture), pinchGesture);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
+
+  return (
+    <GestureDetector gesture={composed}>
+      <Animated.Image source={{ uri }} style={[style, animatedStyle]} resizeMode="contain" />
     </GestureDetector>
   );
 }

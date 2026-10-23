@@ -65,16 +65,27 @@ export async function openFile(url: string, fileName: string, mimeType?: string)
 
 /** Photos/videos save straight to the device's photo library — a real,
  *  guaranteed save (shows up in Google Photos, syncs to Drive if the user
- *  has Photos backup on, no share-sheet gamble). */
-async function saveMediaToLibrary(file: File, fileName: string) {
-  const permission = await MediaLibrary.requestPermissionsAsync();
-  if (!permission.granted) {
-    Alert.alert("Photo access needed", "Enable photo library access in settings to save images and videos.");
-    return false;
+ *  has Photos backup on, no share-sheet gamble).
+ *
+ *  Three outcomes, not two — "denied" has to be distinct from "error":
+ *  the caller previously only checked for a truthy return, so a denied
+ *  permission (which already shows its own "Photo access needed" alert)
+ *  silently fell through to the share sheet right after, making a save
+ *  look like it mysteriously turned into a share every time. */
+async function saveMediaToLibrary(file: File, fileName: string): Promise<"saved" | "denied" | "error"> {
+  try {
+    const permission = await MediaLibrary.requestPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Photo access needed", "Enable photo library access in settings to save images and videos.");
+      return "denied";
+    }
+    await MediaLibrary.saveToLibraryAsync(file.uri);
+    Alert.alert("Saved", `${fileName} saved to your photo library.`);
+    return "saved";
+  } catch (e) {
+    console.error("[saveMediaToLibrary]", e instanceof Error ? e.message : e);
+    return "error";
   }
-  await MediaLibrary.saveToLibraryAsync(file.uri);
-  Alert.alert("Saved", `${fileName} saved to your photo library.`);
-  return true;
 }
 
 /** Documents save through Android's Storage Access Framework — the user
@@ -103,15 +114,20 @@ export async function saveFile(url: string, fileName: string, mimeType?: string)
     return;
   }
 
-  try {
-    if (mimeType?.startsWith("image/") || mimeType?.startsWith("video/")) {
-      if (await saveMediaToLibrary(file, fileName)) return;
-    } else if (Platform.OS === "android") {
+  if (mimeType?.startsWith("image/") || mimeType?.startsWith("video/")) {
+    const result = await saveMediaToLibrary(file, fileName);
+    if (result === "saved") return;
+    // "denied" already showed its own alert explaining why — opening the
+    // share sheet right after that would look like the save silently
+    // turned into something else. Only an unexpected "error" falls
+    // through to share as a last resort.
+    if (result === "denied") return;
+  } else if (Platform.OS === "android") {
+    try {
       if (await saveDocumentViaSAF(file, fileName, mimeType)) return;
+    } catch (e) {
+      console.error("[saveDocumentViaSAF]", e instanceof Error ? e.message : e);
     }
-  } catch (e) {
-    // Any failure in the direct-save paths above falls through to the
-    // share-sheet — never leave the user with no way to save at all.
   }
 
   try {
