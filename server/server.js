@@ -4469,24 +4469,29 @@ app.get('/api/link-preview', auth.requireAuth, async (req, res) => {
 
 // --- CU AI (floating-bubble assistant) ---
 //
-// Self-hosted (CUTM's own Qwen/Ollama server), not a commercial provider —
-// targets Ollama's native /api/generate shape (a single `prompt` string
-// plus an optional `system` override, not an OpenAI-style messages array)
-// and a separate image-generation endpoint. No API key: it's reached over
-// the university's own network, not the public internet.
-//   AI_TEXT_BASE_URL   e.g. https://qwen.cutm.ac.in/api/generate
-//   AI_TEXT_MODEL      e.g. qwen2.5-coder:32b
-//   AI_IMAGE_BASE_URL  e.g. https://qwen.cutm.ac.in/api/image/generate
-//   AI_IMAGE_MODEL     e.g. stable-diffusion-v1.5
-//   AI_API_KEY         optional — sent as "Authorization: Bearer <key>"
-//                       only if set, for if auth gets added later
+// Self-hosted (CUTM's own Qwen server), exposed through an OpenAI-compatible
+// /v1 surface — /v1/chat/completions for text, /v1/images/generations for
+// images — not Ollama's native /api/generate shape.
+//   AI_TEXT_BASE_URL    e.g. https://qwen.cutm.ac.in/v1  (no trailing path)
+//   AI_TEXT_MODEL       e.g. qwen2.5-coder:32b
+//   AI_TEXT_API_KEY     sent as "Authorization: Bearer <key>"
+//   AI_IMAGE_BASE_URL   e.g. https://qwen.cutm.ac.in/v1
+//   AI_IMAGE_MODEL      e.g. flux
+//   AI_IMAGE_API_KEY    sent as "Authorization: Bearer <key>"
 const AI_SYSTEM_PROMPT = "You are CU AI, a helpful assistant built into Let's Connect, a university messaging app. Be friendly, concise, and genuinely useful — help with how to use the app's features (channels, DMs, reminders, scheduling, lists, polls, etc.) as well as general questions. Keep replies short unless the question calls for more detail.";
 const AI_HISTORY_LIMIT = 20;
 
-function aiHeaders() {
+function aiHeaders(apiKey) {
     const headers = { 'content-type': 'application/json' };
-    if (process.env.AI_API_KEY) headers['Authorization'] = `Bearer ${process.env.AI_API_KEY}`;
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
     return headers;
+}
+
+// Base URLs may or may not already end in /v1 or a trailing slash —
+// normalize so `${aiEndpoint(base, 'chat/completions')}` never ends up
+// with a doubled or missing slash.
+function aiEndpoint(baseUrl, suffix) {
+    return `${baseUrl.replace(/\/+$/, '')}/${suffix}`;
 }
 
 app.get('/api/ai/messages', auth.requireAuth, async (req, res) => {
@@ -4513,29 +4518,28 @@ app.post('/api/ai/messages', auth.requireAuth, async (req, res) => {
     try {
         await AiMessage.create({ user_id: req.user.id, role: 'user', text });
 
-        // Ollama's /api/generate takes one prompt string, not a messages
-        // array — recent turns are flattened into a plain transcript so
-        // the model still has conversational context.
+        // OpenAI-compatible chat/completions wants a real messages array,
+        // not a flattened transcript.
         const recent = await AiMessage.findAll({
             where: { user_id: req.user.id },
             order: [['createdAt', 'DESC']],
             limit: AI_HISTORY_LIMIT,
         });
-        const transcript = recent.reverse()
-            .map((r) => `${r.role === 'user' ? 'User' : 'Assistant'}: ${r.text}`)
-            .join('\n');
+        const history = recent.reverse().map((r) => ({
+            role: r.role === 'user' ? 'user' : 'assistant',
+            content: r.text,
+        }));
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 60000);
         let reply;
         try {
-            const resp = await fetch(baseUrl, {
+            const resp = await fetch(aiEndpoint(baseUrl, 'chat/completions'), {
                 method: 'POST',
-                headers: aiHeaders(),
+                headers: aiHeaders(process.env.AI_TEXT_API_KEY),
                 body: JSON.stringify({
                     model,
-                    prompt: transcript,
-                    system: AI_SYSTEM_PROMPT,
+                    messages: [{ role: 'system', content: AI_SYSTEM_PROMPT }, ...history],
                     stream: false,
                 }),
                 signal: controller.signal,
@@ -4546,7 +4550,7 @@ app.post('/api/ai/messages', auth.requireAuth, async (req, res) => {
                 return res.status(502).json({ error: 'ai_unavailable', message: 'CU AI could not reply — please try again.' });
             }
             const data = await resp.json();
-            reply = (data.response || '').trim() || "Sorry, I didn't catch that — could you try again?";
+            reply = (data.choices?.[0]?.message?.content || data.response || '').trim() || "Sorry, I didn't catch that — could you try again?";
         } finally {
             clearTimeout(timeout);
         }
@@ -4587,10 +4591,10 @@ app.post('/api/ai/image', auth.requireAuth, async (req, res) => {
         const timeout = setTimeout(() => controller.abort(), 90000);
         let imageUrl;
         try {
-            const resp = await fetch(baseUrl, {
+            const resp = await fetch(aiEndpoint(baseUrl, 'images/generations'), {
                 method: 'POST',
-                headers: aiHeaders(),
-                body: JSON.stringify({ model, prompt }),
+                headers: aiHeaders(process.env.AI_IMAGE_API_KEY),
+                body: JSON.stringify({ model, prompt, n: 1 }),
                 signal: controller.signal,
             });
             if (!resp.ok) {
