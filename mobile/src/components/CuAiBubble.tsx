@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import * as Clipboard from "expo-clipboard";
 
 import { editAiImage, generateAiImage, getAiMessages, sendAiMessage, type AiMessage } from "../api/ai";
 import { resolveMediaUrl } from "../constants/config";
@@ -293,6 +294,12 @@ export default function CuAiBubble() {
             <Ionicons name="close" size={26} color="#fff" />
           </Pressable>
           <Pressable
+            style={styles.viewerCopyButton}
+            onPress={() => viewerImage && Clipboard.setStringAsync(resolveMediaUrl(viewerImage) ?? viewerImage)}
+          >
+            <Ionicons name="link-outline" size={18} color="#fff" />
+          </Pressable>
+          <Pressable
             style={styles.viewerSaveButton}
             onPress={() => viewerImage && saveFile(resolveMediaUrl(viewerImage) ?? viewerImage, `cu-ai-${Date.now()}.png`, "image/png")}
           >
@@ -510,6 +517,18 @@ const buildStyles = (colors: ReturnType<typeof useThemeColors>) =>
       position: "absolute",
       top: 48,
       right: 68,
+      zIndex: 1,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: "rgba(255,255,255,0.15)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    viewerCopyButton: {
+      position: "absolute",
+      top: 48,
+      right: 112,
       zIndex: 1,
       width: 36,
       height: 36,

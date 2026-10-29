@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Dimensions, FlatList, Image, Linking, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 
 import { getPinnedMessages, getSharedMedia, getStarredMessages, type StarredMessage } from "../../api/messages";
 import { openFile, saveFile } from "../../lib/fileActions";
@@ -141,6 +142,14 @@ export default function MessageListScreen({ route, navigation }: Props) {
                     ...(url ? [
                       { text: "Open", onPress: () => openFile(url, fileName, attachment?.mimeType) },
                       { text: "Save to device", onPress: () => saveFile(url, fileName, attachment?.mimeType) },
+                      { text: "Copy link", onPress: () => Clipboard.setStringAsync(url) },
+                      {
+                        text: "View details",
+                        onPress: () => Alert.alert(
+                          fileName,
+                          `Type: ${item.type}\nShared by: ${item.sender_name}\nDate: ${new Date(item.sent_at).toLocaleString()}`
+                        ),
+                      },
                     ] : []),
                     { text: "Cancel", style: "cancel" as const },
                   ]);
@@ -178,6 +187,20 @@ export default function MessageListScreen({ route, navigation }: Props) {
             hitSlop={10}
           >
             <Ionicons name="return-up-back" size={22} color="#fff" />
+          </Pressable>
+          <Pressable
+            style={styles.viewerCopyButton}
+            onPress={() => viewer && Clipboard.setStringAsync(viewer.url)}
+            hitSlop={10}
+          >
+            <Ionicons name="link-outline" size={21} color="#fff" />
+          </Pressable>
+          <Pressable
+            style={styles.viewerDetailsButton}
+            onPress={() => viewer && Alert.alert(viewer.name, `Type: ${viewer.kind}`)}
+            hitSlop={10}
+          >
+            <Ionicons name="information-circle-outline" size={22} color="#fff" />
           </Pressable>
 
           {viewer?.kind === "video" ? (
@@ -269,6 +292,8 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   },
   viewerMedia: { width: "100%", height: "75%" },
   viewerCloseButton: { position: "absolute", top: 48, right: 20, zIndex: 1 },
+  viewerCopyButton: { position: "absolute", top: 48, right: 64, zIndex: 1 },
+  viewerDetailsButton: { position: "absolute", top: 48, right: 108, zIndex: 1 },
   viewerJumpButton: { position: "absolute", top: 48, left: 20, zIndex: 1 },
   viewerSaveButton: {
     position: "absolute",

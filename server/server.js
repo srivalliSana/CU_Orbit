@@ -4000,8 +4000,13 @@ app.get('/api/containers/:id/media', auth.requireAuth, async (req, res) => {
         const where = { [Op.or]: [{ channelId: containerId }, { dm_id: containerId }], deleted_at: null };
         if (category === 'link') {
             where.body = { [Op.like]: '%http%' };
+        } else if (category === 'document') {
+            // "Files" covers every non-media attachment — plain files and
+            // voice notes alike, matching the Files tab in the shared-media
+            // gallery (voice notes had no way to show up here at all before).
+            where.type = { [Op.in]: ['file', 'voice'] };
         } else {
-            const typeMap = { image: 'image', video: 'video', document: 'file' };
+            const typeMap = { image: 'image', video: 'video' };
             where.type = typeMap[category] || 'image';
         }
         const messages = await Message.findAll({ where, order: [['timestamp', 'DESC']], limit: 200 });

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Dimensions, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { Ionicons } from "@expo/vector-icons";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -480,6 +481,9 @@ export default function MessageBubble({
             <Pressable style={styles.viewerCloseButton} onPress={() => setImageViewerVisible(false)} hitSlop={10}>
               <Ionicons name="close" size={26} color="#fff" />
             </Pressable>
+            <Pressable style={styles.viewerCopyButton} onPress={() => Clipboard.setStringAsync(attachmentUrl)} hitSlop={10}>
+              <Ionicons name="link-outline" size={22} color="#fff" />
+            </Pressable>
             <ZoomableImage uri={attachmentUrl} style={styles.viewerImage} />
             <Pressable style={styles.viewerSaveButton} onPress={handleSave}>
               <Text style={styles.viewerSaveText}>Save image</Text>
@@ -498,6 +502,9 @@ export default function MessageBubble({
           <View style={styles.viewerBackdrop}>
             <Pressable style={styles.viewerCloseButton} onPress={() => setVideoViewerVisible(false)} hitSlop={10}>
               <Ionicons name="close" size={26} color="#fff" />
+            </Pressable>
+            <Pressable style={styles.viewerCopyButton} onPress={() => Clipboard.setStringAsync(attachmentUrl)} hitSlop={10}>
+              <Ionicons name="link-outline" size={22} color="#fff" />
             </Pressable>
             <VideoBubble uri={attachmentUrl} style={styles.viewerVideo} />
             <Pressable style={styles.viewerSaveButton} onPress={handleSave}>
@@ -1018,6 +1025,12 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     position: "absolute",
     top: 48,
     right: 20,
+    zIndex: 1,
+  },
+  viewerCopyButton: {
+    position: "absolute",
+    top: 48,
+    right: 64,
     zIndex: 1,
   },
   bubbleSelected: {

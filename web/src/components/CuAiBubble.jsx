@@ -11,6 +11,7 @@ function AiImageViewer({ image, onClose, onEdited }) {
   const [editing, setEditing] = useState(false);
   const [editPrompt, setEditPrompt] = useState('');
   const [editError, setEditError] = useState(null);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const toggleZoom = () => setScale((s) => (s > 1 ? 1 : 2.2));
   const onWheel = (e) => {
@@ -50,6 +51,20 @@ function AiImageViewer({ image, onClose, onEdited }) {
           draggable={false}
         />
 
+        <button
+          onClick={() => navigator.clipboard?.writeText(image.url).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1500); })}
+          aria-label="Copy link"
+          title={linkCopied ? 'Copied!' : 'Copy link'}
+          className="absolute right-28 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition hover:bg-white/20"
+        >
+          {linkCopied ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+          ) : (
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
+          )}
+        </button>
         <button
           onClick={() => saveFile(image.url, `cu-ai-${Date.now()}.png`)}
           aria-label="Save image"
