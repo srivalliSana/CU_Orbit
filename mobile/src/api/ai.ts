@@ -16,4 +16,7 @@ export const sendAiMessage = (text: string) =>
 export const generateAiImage = (prompt: string) =>
   client.post<AiMessage>("/ai/image", { prompt }).then((res) => res.data);
 
+export const editAiImage = (prompt: string, sourceImageUrl: string) =>
+  client.post<AiMessage>("/ai/image/edit", { prompt, source_image_url: sourceImageUrl }).then((res) => res.data);
+
 export const clearAiMessages = () => client.delete("/ai/messages").then((res) => res.data);

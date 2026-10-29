@@ -1,7 +1,102 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { generateAiImage, getAiMessages, sendAiMessage } from '../api/ai';
+import { editAiImage, generateAiImage, getAiMessages, sendAiMessage } from '../api/ai';
+import { saveFile } from '../lib/saveFile';
 
 const SUGGESTIONS = ['How do I pin a message?', 'How do I schedule a message for later?', 'What can you help with?'];
+
+/** Fullscreen viewer for a CU AI generated image — zoom (wheel/double-click),
+ *  save, and "edit this image" (image-to-image via a follow-up prompt). */
+function AiImageViewer({ image, onClose, onEdited }) {
+  const [scale, setScale] = useState(1);
+  const [editing, setEditing] = useState(false);
+  const [editPrompt, setEditPrompt] = useState('');
+  const [editError, setEditError] = useState(null);
+
+  const toggleZoom = () => setScale((s) => (s > 1 ? 1 : 2.2));
+  const onWheel = (e) => {
+    e.preventDefault();
+    setScale((s) => Math.min(4, Math.max(1, s - e.deltaY * 0.0015)));
+  };
+
+  const applyEdit = async () => {
+    const prompt = editPrompt.trim();
+    if (!prompt || editing) return;
+    setEditing(true);
+    setEditError(null);
+    try {
+      const reply = await editAiImage(prompt, image.url);
+      setEditPrompt('');
+      setScale(1);
+      onEdited(reply);
+    } catch (e) {
+      setEditError(e.message || "CU AI couldn't edit that image — try again.");
+    } finally {
+      setEditing(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex flex-col bg-black/95">
+      <div
+        className="relative flex flex-1 items-center justify-center overflow-hidden"
+        onWheel={onWheel}
+      >
+        <img
+          src={image.url}
+          alt="Generated"
+          onDoubleClick={toggleZoom}
+          className="max-h-full max-w-full cursor-zoom-in select-none object-contain transition-transform duration-150"
+          style={{ transform: `scale(${scale})` }}
+          draggable={false}
+        />
+
+        <button
+          onClick={() => saveFile(image.url, `cu-ai-${Date.now()}.png`)}
+          aria-label="Save image"
+          title="Save image"
+          className="absolute right-16 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition hover:bg-white/20"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+        </button>
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition hover:bg-white/20"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+
+      <div className="mx-auto w-full max-w-xl px-4 pb-6">
+        {editError && <p className="mb-2 text-center text-xs text-red-400">{editError}</p>}
+        <div className="flex items-center gap-2 rounded-2xl bg-white/10 p-1.5 pl-4 backdrop-blur-sm">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-white/60" aria-hidden="true">
+            <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
+          <input
+            value={editPrompt}
+            onChange={(e) => setEditPrompt(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyEdit(); } }}
+            placeholder="Describe a change to make to this image…"
+            disabled={editing}
+            className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/40"
+          />
+          <button
+            onClick={applyEdit}
+            disabled={!editPrompt.trim() || editing}
+            className="flex h-9 shrink-0 items-center justify-center rounded-xl bg-accent-600 px-4 text-sm font-medium text-white transition hover:bg-accent-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {editing ? 'Editing…' : 'Edit'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * The floating "CU AI" bubble + the chat it opens. Mounted once at the
@@ -20,6 +115,7 @@ export default function CuAiBubble({ openSignal }) {
   const [sending, setSending] = useState(false);
   const [imageMode, setImageMode] = useState(false);
   const [error, setError] = useState(null);
+  const [viewerImage, setViewerImage] = useState(null);
   const scroller = useRef(null);
 
   useEffect(() => {
@@ -109,7 +205,12 @@ export default function CuAiBubble({ openSignal }) {
                     <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-bl-md bg-slate-100 px-3 py-2 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                       {m.text}
                       {m.image_url && (
-                        <img src={m.image_url} alt="Generated" className="mt-2 max-h-60 rounded-lg object-cover" />
+                        <img
+                          src={m.image_url}
+                          alt="Generated"
+                          onClick={() => setViewerImage({ url: m.image_url })}
+                          className="mt-2 max-h-60 w-full cursor-zoom-in rounded-lg object-cover"
+                        />
                       )}
                     </div>
                   </div>
@@ -171,6 +272,17 @@ export default function CuAiBubble({ openSignal }) {
             </div>
           </div>
         </div>
+      )}
+
+      {viewerImage && (
+        <AiImageViewer
+          image={viewerImage}
+          onClose={() => setViewerImage(null)}
+          onEdited={(reply) => {
+            setMessages((prev) => [...prev, reply]);
+            setViewerImage({ url: reply.image_url });
+          }}
+        />
       )}
     </>
   );

@@ -4567,13 +4567,27 @@ app.post('/api/ai/messages', auth.requireAuth, async (req, res) => {
     }
 });
 
+// The response shape of this particular internal wrapper isn't documented
+// anywhere we have access to, so this tries every field name a Stable-
+// Diffusion-style wrapper commonly uses (base64 image, a hosted URL, or an
+// images[] array), saving a base64 reply into our own /uploads the same
+// way any other attachment is stored.
+async function saveAiImageResponse(data) {
+    const base64 = data.image || data.images?.[0] || data.b64_json || data.data?.[0]?.b64_json;
+    const hostedUrl = data.url || data.image_url || data.data?.[0]?.url;
+    if (base64) {
+        const buf = Buffer.from(base64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+        const filename = `${Date.now()}-cuai-${crypto.randomBytes(6).toString('hex')}.png`;
+        await fs.promises.writeFile(path.join(uploadDir, filename), buf);
+        return `/uploads/${filename}`;
+    }
+    if (hostedUrl) return hostedUrl;
+    console.error('[cu-ai] image response had no recognizable image field. Keys:', Object.keys(data));
+    return null;
+}
+
 /** "Generate an image" — a separate action from plain chat, since it hits
- *  a different model/endpoint entirely. The response shape of this
- *  particular internal wrapper isn't documented anywhere we have access
- *  to, so this tries every field name a Stable-Diffusion-style wrapper
- *  commonly uses (base64 image, a hosted URL, or an images[] array) and
- *  logs the raw keys if none match, so a real failure is debuggable
- *  instead of silently saving nothing. */
+ *  a different model/endpoint entirely. */
 app.post('/api/ai/image', auth.requireAuth, async (req, res) => {
     const baseUrl = process.env.AI_IMAGE_BASE_URL;
     const model = process.env.AI_IMAGE_MODEL;
@@ -4603,17 +4617,8 @@ app.post('/api/ai/image', auth.requireAuth, async (req, res) => {
                 return res.status(502).json({ error: 'ai_unavailable', message: 'CU AI could not generate that image — please try again.' });
             }
             const data = await resp.json();
-            const base64 = data.image || data.images?.[0] || data.b64_json || data.data?.[0]?.b64_json;
-            const hostedUrl = data.url || data.image_url || data.data?.[0]?.url;
-            if (base64) {
-                const buf = Buffer.from(base64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
-                const filename = `${Date.now()}-cuai-${crypto.randomBytes(6).toString('hex')}.png`;
-                await fs.promises.writeFile(path.join(uploadDir, filename), buf);
-                imageUrl = `/uploads/${filename}`;
-            } else if (hostedUrl) {
-                imageUrl = hostedUrl;
-            } else {
-                console.error('[cu-ai] image response had no recognizable image field. Keys:', Object.keys(data));
+            imageUrl = await saveAiImageResponse(data);
+            if (!imageUrl) {
                 return res.status(502).json({ error: 'ai_unavailable', message: "CU AI's image response wasn't in a format I recognize." });
             }
         } finally {
@@ -4621,6 +4626,72 @@ app.post('/api/ai/image', auth.requireAuth, async (req, res) => {
         }
 
         const assistantRow = await AiMessage.create({ user_id: req.user.id, role: 'assistant', text: 'Here you go:', image_url: imageUrl });
+        res.json({ id: assistantRow.id, role: 'assistant', text: assistantRow.text, image_url: imageUrl, created_at: assistantRow.createdAt });
+    } catch (e) {
+        console.error('[cu-ai]', e.message, e.cause || '');
+        res.status(500).json({ error: 'server_error' });
+    }
+});
+
+/** "Edit this image" — image-to-image, via the OpenAI-compatible
+ *  /v1/images/edits endpoint (multipart: the source image file + a prompt
+ *  describing the change). The source has to be one of our own /uploads
+ *  files (either a previous CU AI generation or something the user sent
+ *  CU AI), never an arbitrary URL. */
+app.post('/api/ai/image/edit', auth.requireAuth, async (req, res) => {
+    const baseUrl = process.env.AI_IMAGE_BASE_URL;
+    const model = process.env.AI_IMAGE_MODEL;
+    if (!baseUrl || !model) {
+        return res.status(503).json({ error: 'not_configured', message: 'AI_IMAGE_BASE_URL and AI_IMAGE_MODEL must be set.' });
+    }
+
+    const prompt = (req.body.prompt || '').trim().slice(0, 1000);
+    const sourceUrl = (req.body.source_image_url || '').trim();
+    if (!prompt) return res.status(400).json({ error: 'bad_request', message: 'prompt is required' });
+    if (!sourceUrl.startsWith('/uploads/')) {
+        return res.status(400).json({ error: 'bad_request', message: 'source_image_url must point at an uploaded image' });
+    }
+    const sourcePath = path.join(uploadDir, path.basename(sourceUrl));
+    if (!fs.existsSync(sourcePath)) {
+        return res.status(404).json({ error: 'not_found', message: 'That image is no longer available to edit.' });
+    }
+
+    try {
+        await AiMessage.create({ user_id: req.user.id, role: 'user', text: `✏️ ${prompt}` });
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 90000);
+        let imageUrl;
+        try {
+            const buf = await fs.promises.readFile(sourcePath);
+            const form = new FormData();
+            form.append('model', model);
+            form.append('prompt', prompt);
+            form.append('image', new Blob([buf], { type: 'image/png' }), 'source.png');
+            const headers = {};
+            const apiKey = process.env.AI_IMAGE_API_KEY;
+            if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+            const resp = await fetch(aiEndpoint(baseUrl, 'images/edits'), {
+                method: 'POST',
+                headers,
+                body: form,
+                signal: controller.signal,
+            });
+            if (!resp.ok) {
+                const detail = await resp.text().catch(() => '');
+                console.error('[cu-ai] image edit API error', resp.status, detail.slice(0, 500));
+                return res.status(502).json({ error: 'ai_unavailable', message: "CU AI couldn't edit that image — please try again." });
+            }
+            const data = await resp.json();
+            imageUrl = await saveAiImageResponse(data);
+            if (!imageUrl) {
+                return res.status(502).json({ error: 'ai_unavailable', message: "CU AI's image response wasn't in a format I recognize." });
+            }
+        } finally {
+            clearTimeout(timeout);
+        }
+
+        const assistantRow = await AiMessage.create({ user_id: req.user.id, role: 'assistant', text: 'Here’s the edit:', image_url: imageUrl });
         res.json({ id: assistantRow.id, role: 'assistant', text: assistantRow.text, image_url: imageUrl, created_at: assistantRow.createdAt });
     } catch (e) {
         console.error('[cu-ai]', e.message, e.cause || '');

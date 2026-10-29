@@ -16,11 +16,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { generateAiImage, getAiMessages, sendAiMessage, type AiMessage } from "../api/ai";
+import { editAiImage, generateAiImage, getAiMessages, sendAiMessage, type AiMessage } from "../api/ai";
 import { resolveMediaUrl } from "../constants/config";
 import { apiErrorMessage } from "../api/client";
+import { saveFile } from "../lib/fileActions";
 import { useAuthStore } from "../state/authStore";
 import { useThemeColors } from "../state/themeStore";
+import ZoomableImage from "./ZoomableImage";
 
 const SUGGESTIONS = ["How do I pin a message?", "How do I schedule a message for later?", "What can you help with?"];
 
@@ -39,6 +41,8 @@ export default function CuAiBubble() {
   const [text, setText] = useState("");
   const [imageMode, setImageMode] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [viewerImage, setViewerImage] = useState<string | null>(null);
+  const [editPrompt, setEditPrompt] = useState("");
   const listRef = useRef<FlatList<AiMessage>>(null);
   const queryClient = useQueryClient();
 
@@ -84,6 +88,24 @@ export default function CuAiBubble() {
     onSuccess: (reply) => {
       queryClient.setQueryData<AiMessage[]>(["aiMessages"], (prev) => [...(prev ?? []), reply]);
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    },
+  });
+
+  const editImage = useMutation({
+    mutationFn: ({ prompt, sourceUrl }: { prompt: string; sourceUrl: string }) => editAiImage(prompt, sourceUrl),
+    onMutate: async ({ prompt }) => {
+      const optimistic: AiMessage = {
+        id: `pending-${Date.now()}`,
+        role: "user",
+        text: `✏️ ${prompt}`,
+        created_at: new Date().toISOString(),
+      };
+      queryClient.setQueryData<AiMessage[]>(["aiMessages"], (prev) => [...(prev ?? []), optimistic]);
+    },
+    onSuccess: (reply) => {
+      queryClient.setQueryData<AiMessage[]>(["aiMessages"], (prev) => [...(prev ?? []), reply]);
+      setEditPrompt("");
+      if (reply.image_url) setViewerImage(reply.image_url);
     },
   });
 
@@ -193,7 +215,9 @@ export default function CuAiBubble() {
                   <View style={[styles.bubbleMsg, styles.bubbleMsgBot]}>
                     <Text style={styles.bubbleMsgText}>{item.text}</Text>
                     {item.image_url ? (
-                      <Image source={{ uri: resolveMediaUrl(item.image_url) ?? undefined }} style={styles.generatedImage} resizeMode="cover" />
+                      <Pressable onPress={() => setViewerImage(item.image_url ?? null)}>
+                        <Image source={{ uri: resolveMediaUrl(item.image_url) ?? undefined }} style={styles.generatedImage} resizeMode="cover" />
+                      </Pressable>
                     ) : null}
                   </View>
                 </View>
@@ -248,6 +272,62 @@ export default function CuAiBubble() {
               />
               <Pressable onPress={() => submit()} disabled={!text.trim() || isBusy} style={styles.sendButton}>
                 <Ionicons name="send" size={17} color="#06130D" />
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={!!viewerImage}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewerImage(null)}
+      >
+        <View style={styles.viewerBackdrop}>
+          <Pressable
+            style={styles.viewerCloseButton}
+            onPress={() => setViewerImage(null)}
+            hitSlop={10}
+          >
+            <Ionicons name="close" size={26} color="#fff" />
+          </Pressable>
+          <Pressable
+            style={styles.viewerSaveButton}
+            onPress={() => viewerImage && saveFile(resolveMediaUrl(viewerImage) ?? viewerImage, `cu-ai-${Date.now()}.png`, "image/png")}
+          >
+            <Ionicons name="download-outline" size={20} color="#fff" />
+          </Pressable>
+          {viewerImage ? (
+            <ZoomableImage uri={resolveMediaUrl(viewerImage) ?? viewerImage} style={styles.viewerImage} />
+          ) : null}
+
+          <View style={[styles.editBar, { marginBottom: keyboardHeight }]}>
+            {editImage.isError ? (
+              <Text style={styles.editErrorText}>
+                {apiErrorMessage(editImage.error, "CU AI couldn't edit that image — try again.")}
+              </Text>
+            ) : null}
+            <View style={styles.editInputRow}>
+              <Ionicons name="create-outline" size={16} color="rgba(255,255,255,0.6)" />
+              <TextInput
+                value={editPrompt}
+                onChangeText={setEditPrompt}
+                placeholder="Describe a change to make to this image…"
+                placeholderTextColor="rgba(255,255,255,0.45)"
+                style={styles.editInput}
+                editable={!editImage.isPending}
+              />
+              <Pressable
+                onPress={() => viewerImage && editPrompt.trim() && editImage.mutate({ prompt: editPrompt.trim(), sourceUrl: viewerImage })}
+                disabled={!editPrompt.trim() || editImage.isPending}
+                style={[styles.editButton, (!editPrompt.trim() || editImage.isPending) && styles.editButtonDisabled]}
+              >
+                {editImage.isPending ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.editButtonText}>Edit</Text>
+                )}
               </Pressable>
             </View>
           </View>
@@ -409,5 +489,79 @@ const buildStyles = (colors: ReturnType<typeof useThemeColors>) =>
       fontSize: 11,
       fontWeight: "600",
       color: colors.primary,
+    },
+    viewerBackdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.95)",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    viewerImage: {
+      width: "100%",
+      height: "70%",
+    },
+    viewerCloseButton: {
+      position: "absolute",
+      top: 48,
+      right: 20,
+      zIndex: 1,
+    },
+    viewerSaveButton: {
+      position: "absolute",
+      top: 48,
+      right: 68,
+      zIndex: 1,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: "rgba(255,255,255,0.15)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    editBar: {
+      position: "absolute",
+      bottom: 0,
+      left: 0,
+      right: 0,
+      paddingHorizontal: 16,
+      paddingBottom: 24,
+      paddingTop: 10,
+    },
+    editErrorText: {
+      fontSize: 12,
+      color: "#ff8080",
+      textAlign: "center",
+      marginBottom: 6,
+    },
+    editInputRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      backgroundColor: "rgba(255,255,255,0.12)",
+      borderRadius: 22,
+      paddingLeft: 14,
+      paddingRight: 6,
+      paddingVertical: 6,
+    },
+    editInput: {
+      flex: 1,
+      fontSize: 14,
+      color: "#fff",
+    },
+    editButton: {
+      backgroundColor: colors.primary,
+      borderRadius: 16,
+      paddingHorizontal: 16,
+      height: 36,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    editButtonDisabled: {
+      opacity: 0.4,
+    },
+    editButtonText: {
+      color: "#06130D",
+      fontWeight: "700",
+      fontSize: 13,
     },
   });
