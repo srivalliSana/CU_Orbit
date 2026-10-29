@@ -2774,9 +2774,18 @@ app.get('/api/home/:userId/:workspaceId', auth.requireAuth, async (req, res) => 
                 }
             };
         }));
+        // Pinned conversations float to the top, but within each group (pinned
+        // or not) the one with the most recent message comes first — previously
+        // this only sorted by is_pinned, so a channel with a brand-new message
+        // never actually moved up the list.
+        const byRecency = (a, b) => {
+            const pinDiff = b.is_pinned - a.is_pinned;
+            if (pinDiff !== 0) return pinDiff;
+            return (b.last_message_preview?.sent_at || 0) - (a.last_message_preview?.sent_at || 0);
+        };
         res.json({
-            channels: channelsData.filter(c => c !== null).sort((a,b) => (b.is_pinned - a.is_pinned)),
-            dms: dms.filter(d => d !== null).sort((a,b) => (b.is_pinned - a.is_pinned))
+            channels: channelsData.filter(c => c !== null).sort(byRecency),
+            dms: dms.filter(d => d !== null).sort(byRecency)
         });
     } catch (e) {
         console.error('[HOME-FEED-ERROR]', e);

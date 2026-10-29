@@ -12,8 +12,18 @@ const INLINE_PATTERNS: { type: string; regex: RegExp }[] = [
   { type: "strike", regex: /~~([^~\n]+)~~/ },
   { type: "italic", regex: /_([^_\n]+)_/ },
   { type: "link", regex: /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/ },
-  { type: "url", regex: /(https?:\/\/[^\s]+)/ },
+  // Bare URLs — not just an explicit https:// scheme. A message like
+  // "check www.cutm.ac.in" or "visit cutm.ac.in/portal" has no scheme at
+  // all, and previously wasn't recognized as a link; this also matches a
+  // bare domain, as long as it looks like one (a dot, then a 2+ letter TLD).
+  { type: "url", regex: /((?:https?:\/\/|www\.)[^\s]+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?:\/[^\s]*)?)/i },
 ];
+
+/** A matched "url" token may be missing its scheme (www.example.com,
+ *  cutm.ac.in/portal) — Linking.openURL needs a real one. */
+function hrefFor(raw: string): string {
+  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+}
 
 function parseInline(text: string, linkStyle: object, keyBase: string): (string | ReactElement)[] {
   if (!text) return [];
@@ -39,7 +49,7 @@ function parseInline(text: string, linkStyle: object, keyBase: string): (string 
     } else if (type === "link") {
       node = <Text key={key} style={linkStyle} onPress={() => Linking.openURL(match[2])}>{match[1]}</Text>;
     } else {
-      node = <Text key={key} style={linkStyle} onPress={() => Linking.openURL(match[1])}>{match[1]}</Text>;
+      node = <Text key={key} style={linkStyle} onPress={() => Linking.openURL(hrefFor(match[1]))}>{match[1]}</Text>;
     }
     return [...beforeNodes, node, ...afterNodes];
   }

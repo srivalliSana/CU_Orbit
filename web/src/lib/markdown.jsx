@@ -10,8 +10,18 @@ const INLINE_PATTERNS = [
   { type: 'strike', regex: /~~([^~\n]+)~~/ },
   { type: 'italic', regex: /_([^_\n]+)_/ },
   { type: 'link', regex: /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/ },
-  { type: 'url', regex: /(https?:\/\/[^\s<]+)/ },
+  // Bare URLs too, not just an explicit https:// scheme — "check
+  // www.cutm.ac.in" or "visit cutm.ac.in/portal" has no scheme at all and
+  // previously wasn't recognized as a link.
+  { type: 'url', regex: /((?:https?:\/\/|www\.)[^\s<]+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?:\/[^\s<]*)?)/i },
 ];
+
+/** A matched "url" token may be missing its scheme (www.example.com,
+ *  cutm.ac.in/portal) — an <a href> needs a real one to not be treated as
+ *  a relative link on this site. */
+function hrefFor(raw) {
+  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+}
 
 function parseInline(text, linkClassName, keyBase) {
   if (!text) return [];
@@ -42,7 +52,7 @@ function parseInline(text, linkClassName, keyBase) {
       );
     } else {
       node = (
-        <a key={key} href={match[1]} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className={linkClassName}>
+        <a key={key} href={hrefFor(match[1])} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className={linkClassName}>
           {match[1]}
         </a>
       );
