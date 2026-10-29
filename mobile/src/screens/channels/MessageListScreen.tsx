@@ -3,6 +3,7 @@ import { ActivityIndicator, Alert, Dimensions, FlatList, Image, Linking, Modal, 
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { getPinnedMessages, getSharedMedia, getStarredMessages, type StarredMessage } from "../../api/messages";
 import { openFile, saveFile } from "../../lib/fileActions";
@@ -10,6 +11,7 @@ import { resolveMediaUrl } from "../../constants/config";
 import { useThemeColors } from "../../state/themeStore";
 import ZoomableImage from "../../components/ZoomableImage";
 import VideoBubble from "../../components/VideoBubble";
+import ActionSheet, { type ActionSheetAction } from "../../components/ActionSheet";
 import type { HomeStackParamList } from "../../navigation/types";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "MessageList">;
@@ -39,6 +41,7 @@ export default function MessageListScreen({ route, navigation }: Props) {
   const [items, setItems] = useState<MediaItem[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [viewer, setViewer] = useState<ViewerState | null>(null);
+  const [fileSheet, setFileSheet] = useState<{ name: string; sender: string; actions: ActionSheetAction[] } | null>(null);
 
   useEffect(() => {
     navigation.setOptions({ title });
@@ -137,22 +140,24 @@ export default function MessageListScreen({ route, navigation }: Props) {
               ? () => {
                   const url = attachment ? resolveMediaUrl(attachment.url) : null;
                   const fileName = attachment?.name || "file";
-                  Alert.alert(fileName, undefined, [
-                    { text: "Locate in chat", onPress: () => jumpToChat(item.id) },
-                    ...(url ? [
-                      { text: "Open", onPress: () => openFile(url, fileName, attachment?.mimeType) },
-                      { text: "Save to device", onPress: () => saveFile(url, fileName, attachment?.mimeType) },
-                      { text: "Copy link", onPress: () => Clipboard.setStringAsync(url) },
+                  const actions: ActionSheetAction[] = [
+                    { key: "locate", label: "Locate in chat", icon: "chatbubble-outline", onPress: () => jumpToChat(item.id) },
+                    ...(url ? ([
+                      { key: "open", label: "Open", icon: "open-outline", onPress: () => openFile(url, fileName, attachment?.mimeType) },
+                      { key: "save", label: "Save to device", icon: "download-outline", onPress: () => saveFile(url, fileName, attachment?.mimeType) },
+                      { key: "copy", label: "Copy link", icon: "link-outline", onPress: () => Clipboard.setStringAsync(url) },
                       {
-                        text: "View details",
+                        key: "details",
+                        label: "View details",
+                        icon: "information-circle-outline",
                         onPress: () => Alert.alert(
                           fileName,
                           `Type: ${item.type}\nShared by: ${item.sender_name}\nDate: ${new Date(item.sent_at).toLocaleString()}`
                         ),
                       },
-                    ] : []),
-                    { text: "Cancel", style: "cancel" as const },
-                  ]);
+                    ] as ActionSheetAction[]) : []),
+                  ];
+                  setFileSheet({ name: fileName, sender: item.sender_name, actions });
                 }
               : () => jumpToChat(item.id);
 
@@ -177,7 +182,10 @@ export default function MessageListScreen({ route, navigation }: Props) {
       )}
 
       <Modal visible={!!viewer} transparent animationType="fade" onRequestClose={() => setViewer(null)}>
-        <View style={styles.viewerBackdrop}>
+        {/* A Modal is its own native window on Android — RNGH's app-level
+            root doesn't reach it, so ZoomableImage's pinch/pan needs its
+            own nested root here or it silently does nothing. */}
+        <GestureHandlerRootView style={styles.viewerBackdrop}>
           <Pressable style={styles.viewerCloseButton} onPress={() => setViewer(null)} hitSlop={10}>
             <Ionicons name="close" size={26} color="#fff" />
           </Pressable>
@@ -215,8 +223,16 @@ export default function MessageListScreen({ route, navigation }: Props) {
           >
             <Text style={styles.viewerSaveText}>{viewer?.kind === "video" ? "Save video" : "Save image"}</Text>
           </Pressable>
-        </View>
+        </GestureHandlerRootView>
       </Modal>
+
+      <ActionSheet
+        visible={!!fileSheet}
+        title={fileSheet?.name ?? ""}
+        subtitle={fileSheet ? `Shared by ${fileSheet.sender}` : undefined}
+        actions={fileSheet?.actions ?? []}
+        onClose={() => setFileSheet(null)}
+      />
     </View>
   );
 }

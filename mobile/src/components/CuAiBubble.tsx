@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { editAiImage, generateAiImage, getAiMessages, sendAiMessage, type AiMessage } from "../api/ai";
 import { resolveMediaUrl } from "../constants/config";
@@ -285,7 +286,10 @@ export default function CuAiBubble() {
         animationType="fade"
         onRequestClose={() => setViewerImage(null)}
       >
-        <View style={styles.viewerBackdrop}>
+        {/* Nested GestureHandlerRootView — a Modal is its own native window
+            on Android, which RNGH's app-level root doesn't reach, so
+            ZoomableImage's pinch/pan below would otherwise do nothing. */}
+        <GestureHandlerRootView style={styles.viewerBackdrop}>
           <Pressable
             style={styles.viewerCloseButton}
             onPress={() => setViewerImage(null)}
@@ -338,7 +342,7 @@ export default function CuAiBubble() {
               </Pressable>
             </View>
           </View>
-        </View>
+        </GestureHandlerRootView>
       </Modal>
     </>
   );

@@ -3993,7 +3993,11 @@ app.get('/api/containers/:id/pinned', auth.requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json([]); }
 });
 
-const LINK_REGEX = /https?:\/\/\S+/i;
+// Matches the client's own link-detection (web/src/lib/markdown.jsx,
+// mobile/src/lib/markdown.tsx) — bare domains too, not just an explicit
+// http(s):// scheme, so a message the client renders as a link also shows
+// up in the Shared Media "Links" tab.
+const LINK_REGEX = /(?:https?:\/\/|www\.)\S+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?:\/\S*)?/i;
 
 /**
  * "Shared media" browser for a channel/DM's info panel — Photos / Videos /
@@ -4008,7 +4012,12 @@ app.get('/api/containers/:id/media', auth.requireAuth, async (req, res) => {
         const category = String(req.query.type || 'image');
         const where = { [Op.or]: [{ channelId: containerId }, { dm_id: containerId }], deleted_at: null };
         if (category === 'link') {
-            where.body = { [Op.like]: '%http%' };
+            // No SQL pre-filter here — a bare-domain link ("cutm.ac.in", no
+            // "http") wouldn't match a LIKE '%http%' filter at all, so that
+            // link would never reach the in-memory LINK_REGEX test below no
+            // matter how broad it got. Filtering purely in memory (over the
+            // same 200-row recency cap every other category uses) is simpler
+            // and catches every link shape the client itself recognizes.
         } else if (category === 'document') {
             // "Files" covers every non-media attachment — plain files and
             // voice notes alike, matching the Files tab in the shared-media

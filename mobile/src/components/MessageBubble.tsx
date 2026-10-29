@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Dimensions, Image, Modal, Pressable, ScrollVi
 import * as Clipboard from "expo-clipboard";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { Ionicons } from "@expo/vector-icons";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, {
   Extrapolation,
   interpolate,
@@ -477,7 +477,11 @@ export default function MessageBubble({
           animationType="fade"
           onRequestClose={() => setImageViewerVisible(false)}
         >
-          <View style={styles.viewerBackdrop}>
+          {/* A Modal renders into its own native window on Android, which
+              react-native-gesture-handler's root negotiation doesn't reach
+              from the app-level GestureHandlerRootView — pinch/pan here
+              silently did nothing without this nested one. */}
+          <GestureHandlerRootView style={styles.viewerBackdrop}>
             <Pressable style={styles.viewerCloseButton} onPress={() => setImageViewerVisible(false)} hitSlop={10}>
               <Ionicons name="close" size={26} color="#fff" />
             </Pressable>
@@ -488,7 +492,7 @@ export default function MessageBubble({
             <Pressable style={styles.viewerSaveButton} onPress={handleSave}>
               <Text style={styles.viewerSaveText}>Save image</Text>
             </Pressable>
-          </View>
+          </GestureHandlerRootView>
         </Modal>
       ) : null}
 

@@ -85,7 +85,11 @@ async function saveMediaToLibrary(file: File, fileName: string): Promise<"saved"
       Alert.alert("Photo access needed", "Enable photo library access in settings to save images and videos.");
       return "denied";
     }
-    await MediaLibrary.saveToLibraryAsync(file.uri);
+    // saveToLibraryAsync is a removed legacy method as of SDK 57's rewritten
+    // (class-based) expo-media-library — it throws unconditionally now. The
+    // real API is MediaLibrary.Asset.create(uri), which is what actually
+    // writes the file into the device's media store.
+    await MediaLibrary.Asset.create(file.uri);
     Alert.alert("Saved", `${fileName} saved to your photo library.`);
     return "saved";
   } catch (e) {
