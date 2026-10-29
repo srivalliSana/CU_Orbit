@@ -4492,15 +4492,20 @@ app.get('/api/link-preview', auth.requireAuth, async (req, res) => {
 
 // --- CU AI (floating-bubble assistant) ---
 //
-// Self-hosted (CUTM's own Qwen server), exposed through an OpenAI-compatible
-// /v1 surface — /v1/chat/completions for text, /v1/images/generations for
-// images — not Ollama's native /api/generate shape.
-//   AI_TEXT_BASE_URL    e.g. https://qwen.cutm.ac.in/v1  (no trailing path)
-//   AI_TEXT_MODEL       e.g. qwen2.5-coder:32b
-//   AI_TEXT_API_KEY     sent as "Authorization: Bearer <key>"
-//   AI_IMAGE_BASE_URL   e.g. https://qwen.cutm.ac.in/v1
-//   AI_IMAGE_MODEL      e.g. flux
-//   AI_IMAGE_API_KEY    sent as "Authorization: Bearer <key>"
+// Self-hosted (CUTM's own Qwen/Ollama server). The gateway's own developer
+// only ever demonstrated ONE working shape — Ollama's native /api/generate
+// (single prompt, not a messages array) — and our own logs confirm
+// /v1/chat/completions 404s on their box, so an OpenAI-compatible /v1
+// surface either isn't actually exposed there or lives at a different path
+// than documented. Rather than hardcode a guess that's already been wrong
+// twice, this detects which shape to speak from the base URL itself:
+//   ends in /generate                        -> Ollama-native
+//   anything else (bare host, /v1, etc.)      -> OpenAI-compatible /v1
+//   AI_TEXT_BASE_URL    e.g. http://192.168.5.200/api/generate (native)
+//                        or  http://192.168.5.200/v1            (OpenAI-style)
+//   AI_TEXT_MODEL       e.g. mistral:7b
+//   AI_TEXT_API_KEY     sent as "Authorization: Bearer <key>", if set
+//   AI_IMAGE_BASE_URL / AI_IMAGE_MODEL / AI_IMAGE_API_KEY — same idea
 const AI_SYSTEM_PROMPT = "You are CU AI, a helpful assistant built into Let's Connect, a university messaging app. Be friendly, concise, and genuinely useful — help with how to use the app's features (channels, DMs, reminders, scheduling, lists, polls, etc.) as well as general questions. Keep replies short unless the question calls for more detail.";
 const AI_HISTORY_LIMIT = 20;
 
@@ -4508,6 +4513,10 @@ function aiHeaders(apiKey) {
     const headers = { 'content-type': 'application/json' };
     if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
     return headers;
+}
+
+function isOllamaNative(baseUrl) {
+    return /\/(generate|api\/generate)\/?$/i.test(baseUrl);
 }
 
 // Base URLs may or may not already end in /v1 or a trailing slash —
@@ -4541,30 +4550,38 @@ app.post('/api/ai/messages', auth.requireAuth, async (req, res) => {
     try {
         await AiMessage.create({ user_id: req.user.id, role: 'user', text });
 
-        // OpenAI-compatible chat/completions wants a real messages array,
-        // not a flattened transcript.
         const recent = await AiMessage.findAll({
             where: { user_id: req.user.id },
             order: [['createdAt', 'DESC']],
             limit: AI_HISTORY_LIMIT,
         });
-        const history = recent.reverse().map((r) => ({
-            role: r.role === 'user' ? 'user' : 'assistant',
-            content: r.text,
-        }));
+        const ordered = recent.reverse();
+        const native = isOllamaNative(baseUrl);
+
+        let endpoint, body;
+        if (native) {
+            // Ollama's /api/generate takes one prompt string, not a
+            // messages array — recent turns flattened into a transcript.
+            const transcript = ordered.map((r) => `${r.role === 'user' ? 'User' : 'Assistant'}: ${r.text}`).join('\n');
+            endpoint = baseUrl;
+            body = { model, prompt: transcript, system: AI_SYSTEM_PROMPT, stream: false };
+        } else {
+            endpoint = aiEndpoint(baseUrl, 'chat/completions');
+            body = {
+                model,
+                messages: [{ role: 'system', content: AI_SYSTEM_PROMPT }, ...ordered.map((r) => ({ role: r.role === 'user' ? 'user' : 'assistant', content: r.text }))],
+                stream: false,
+            };
+        }
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 60000);
         let reply;
         try {
-            const resp = await fetch(aiEndpoint(baseUrl, 'chat/completions'), {
+            const resp = await fetch(endpoint, {
                 method: 'POST',
                 headers: aiHeaders(process.env.AI_TEXT_API_KEY),
-                body: JSON.stringify({
-                    model,
-                    messages: [{ role: 'system', content: AI_SYSTEM_PROMPT }, ...history],
-                    stream: false,
-                }),
+                body: JSON.stringify(body),
                 signal: controller.signal,
             });
             if (!resp.ok) {
@@ -4573,7 +4590,7 @@ app.post('/api/ai/messages', auth.requireAuth, async (req, res) => {
                 return res.status(502).json({ error: 'ai_unavailable', message: 'CU AI could not reply — please try again.' });
             }
             const data = await resp.json();
-            reply = (data.choices?.[0]?.message?.content || data.response || '').trim() || "Sorry, I didn't catch that — could you try again?";
+            reply = (data.response || data.choices?.[0]?.message?.content || '').trim() || "Sorry, I didn't catch that — could you try again?";
         } finally {
             clearTimeout(timeout);
         }
@@ -4624,14 +4641,18 @@ app.post('/api/ai/image', auth.requireAuth, async (req, res) => {
     try {
         await AiMessage.create({ user_id: req.user.id, role: 'user', text: `🎨 ${prompt}` });
 
+        const native = isOllamaNative(baseUrl);
+        const endpoint = native ? baseUrl : aiEndpoint(baseUrl, 'images/generations');
+        const body = native ? { model, prompt, stream: false } : { model, prompt, n: 1 };
+
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 90000);
         let imageUrl;
         try {
-            const resp = await fetch(aiEndpoint(baseUrl, 'images/generations'), {
+            const resp = await fetch(endpoint, {
                 method: 'POST',
                 headers: aiHeaders(process.env.AI_IMAGE_API_KEY),
-                body: JSON.stringify({ model, prompt, n: 1 }),
+                body: JSON.stringify(body),
                 signal: controller.signal,
             });
             if (!resp.ok) {
@@ -4678,6 +4699,13 @@ app.post('/api/ai/image/edit', auth.requireAuth, async (req, res) => {
     if (!fs.existsSync(sourcePath)) {
         return res.status(404).json({ error: 'not_found', message: 'That image is no longer available to edit.' });
     }
+    // Ollama-native has no standard image-editing endpoint — only the
+    // OpenAI-compatible /v1/images/edits shape is attempted here, and even
+    // that one has never been confirmed to exist on this particular
+    // gateway (unlike /api/generate, which the CU AI team proved works).
+    if (isOllamaNative(baseUrl)) {
+        return res.status(501).json({ error: 'not_supported', message: "CU AI's image editing isn't available on this server yet — ask the CU AI team whether their gateway supports image-to-image editing." });
+    }
 
     try {
         await AiMessage.create({ user_id: req.user.id, role: 'user', text: `✏️ ${prompt}` });
@@ -4703,7 +4731,7 @@ app.post('/api/ai/image/edit', auth.requireAuth, async (req, res) => {
             if (!resp.ok) {
                 const detail = await resp.text().catch(() => '');
                 console.error('[cu-ai] image edit API error', resp.status, detail.slice(0, 500));
-                return res.status(502).json({ error: 'ai_unavailable', message: "CU AI couldn't edit that image — please try again." });
+                return res.status(502).json({ error: 'ai_unavailable', message: resp.status === 404 ? "CU AI's gateway doesn't support image editing — ask the CU AI team to add an /images/edits endpoint." : "CU AI couldn't edit that image — please try again." });
             }
             const data = await resp.json();
             imageUrl = await saveAiImageResponse(data);
