@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Dimensions, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { VideoView, useVideoPlayer } from "expo-video";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { Ionicons } from "@expo/vector-icons";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -16,6 +15,7 @@ import Animated, {
 import { useCustomEmojiMap } from "./EmojiPicker";
 import Avatar from "./Avatar";
 import ZoomableImage from "./ZoomableImage";
+import VideoBubble from "./VideoBubble";
 import LinkPreviewCard from "./LinkPreviewCard";
 import { renderMarkdown, renderMessageText } from "../lib/markdown";
 import { openFile, saveFile } from "../lib/fileActions";
@@ -508,21 +508,6 @@ export default function MessageBubble({
       ) : null}
     </View>
     </GestureDetector>
-  );
-}
-
-// A separate component (not inlined in MessageBubble) so useVideoPlayer —
-// which must run unconditionally, same order every render — only mounts for
-// rows that are actually a video, instead of needing a guard inside a hook.
-function VideoBubble({ uri, style, controls = true }: { uri: string; style: object; controls?: boolean }) {
-  const player = useVideoPlayer(uri);
-  return (
-    <VideoView
-      player={player}
-      style={style}
-      nativeControls={controls}
-      fullscreenOptions={{ enable: controls }}
-    />
   );
 }
 

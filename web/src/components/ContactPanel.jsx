@@ -1,16 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import Avatar from './Avatar';
-import { getPerson, getPinnedMessages, getSharedMedia, getStarredMessages, startDm } from '../api/chat';
+import SharedMediaPanel from './SharedMediaPanel';
+import { getPerson, getPinnedMessages, getStarredMessages, startDm } from '../api/chat';
 import { blockUser, reportUser, unblockUser } from '../api/users';
 import { lastSeenLabel } from '../lib/format';
-import { saveFile } from '../lib/saveFile';
-
-const MEDIA_CATEGORIES = [
-  { key: 'image', label: 'Photos' },
-  { key: 'video', label: 'Videos' },
-  { key: 'document', label: 'Documents' },
-  { key: 'link', label: 'Links' },
-];
 
 /**
  * Contact details, shown when a person is picked from search or a chat header.
@@ -27,7 +20,6 @@ export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMess
   const [error, setError] = useState(null);
   const [opening, setOpening] = useState(false);
   const [view, setView] = useState('main');   // main | media | pinned | starred
-  const [mediaCategory, setMediaCategory] = useState('image');
   const [listItems, setListItems] = useState(null);
   const [blockBusy, setBlockBusy] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -49,14 +41,11 @@ export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMess
   }, [target?.containerId]);
 
   useEffect(() => {
-    if (view === 'main' || !target?.containerId) return;
+    if (view === 'main' || view === 'media' || !target?.containerId) return;
     setListItems(null);
-    const fetcher =
-      view === 'pinned' ? getPinnedMessages(target.containerId)
-      : view === 'starred' ? getStarredMessages(target.containerId)
-      : getSharedMedia(target.containerId, mediaCategory);
+    const fetcher = view === 'pinned' ? getPinnedMessages(target.containerId) : getStarredMessages(target.containerId);
     fetcher.then(setListItems).catch(() => setListItems([]));
-  }, [view, mediaCategory, target?.containerId]);
+  }, [view, target?.containerId]);
 
   const openChat = async () => {
     if (!person?.email || opening) return;
@@ -110,25 +99,16 @@ export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMess
         <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-slate-600">✕</button>
       </header>
 
-      {view !== 'main' && (
+      {view === 'media' && target?.containerId && (
         <div className="flex-1 overflow-y-auto p-5">
-          {view === 'media' && (
-            <div className="mb-4 flex gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
-              {MEDIA_CATEGORIES.map((c) => (
-                <button
-                  key={c.key}
-                  onClick={() => setMediaCategory(c.key)}
-                  className={`flex-1 rounded-md py-1.5 text-xs font-medium ${
-                    mediaCategory === c.key ? 'bg-white text-accent-600 shadow dark:bg-slate-700' : 'text-slate-500'
-                  }`}
-                >
-                  {c.label}
-                </button>
-              ))}
-            </div>
-          )}
+          <SharedMediaPanel containerId={target.containerId} onJumpToMessage={onJumpToMessage} />
+        </div>
+      )}
+
+      {(view === 'pinned' || view === 'starred') && (
+        <div className="flex-1 overflow-y-auto p-5">
           <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            {view === 'pinned' ? 'Pinned messages' : view === 'starred' ? 'Starred messages' : 'Shared media'}
+            {view === 'pinned' ? 'Pinned messages' : 'Starred messages'}
           </h4>
           {listItems === null && <p className="text-sm text-slate-400">Loading…</p>}
           {listItems && listItems.length === 0 && <p className="text-sm text-slate-400">Nothing here yet.</p>}
@@ -140,42 +120,7 @@ export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMess
                 className="cursor-pointer rounded-lg bg-slate-50 p-2.5 text-sm hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700"
               >
                 <p className="text-xs font-semibold text-slate-500">{it.sender_name}</p>
-                {view === 'media' && mediaCategory === 'link' ? (
-                  (it.links || []).map((url, i) => (
-                    <a key={i} href={url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="block truncate text-accent-600 underline underline-offset-2 dark:text-accent-400">
-                      {url}
-                    </a>
-                  ))
-                ) : view === 'media' && it.attachments?.[0] ? (
-                  mediaCategory === 'image' ? (
-                    <img src={it.attachments[0].url} alt="" className="mt-1 max-h-32 rounded object-cover" />
-                  ) : (
-                    // Tapping the row itself locates the message in chat — Open/Save
-                    // are explicit actions, not what a plain click does.
-                    <div className="mt-1 flex items-center justify-between gap-2">
-                      <span className="truncate text-slate-700 dark:text-slate-200">{it.attachments[0].name || 'Attachment'}</span>
-                      <span className="flex shrink-0 gap-2 text-xs">
-                        <a
-                          href={it.attachments[0].url}
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-accent-600 underline underline-offset-2 dark:text-accent-400"
-                        >
-                          Open
-                        </a>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); saveFile(it.attachments[0].url, it.attachments[0].name); }}
-                          className="text-accent-600 underline underline-offset-2 dark:text-accent-400"
-                        >
-                          Save
-                        </button>
-                      </span>
-                    </div>
-                  )
-                ) : (
-                  <p className="truncate text-slate-700 dark:text-slate-200">{it.text || 'Attachment'}</p>
-                )}
+                <p className="truncate text-slate-700 dark:text-slate-200">{it.text || 'Attachment'}</p>
               </li>
             ))}
           </ul>

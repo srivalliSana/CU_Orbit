@@ -74,7 +74,13 @@ export async function openFile(url: string, fileName: string, mimeType?: string)
  *  look like it mysteriously turned into a share every time. */
 async function saveMediaToLibrary(file: File, fileName: string): Promise<"saved" | "denied" | "error"> {
   try {
-    const permission = await MediaLibrary.requestPermissionsAsync();
+    // write-only: saving a new file doesn't need read access to the
+    // existing library. Without this, Android 13+'s "select photos you
+    // allow" limited-access picker kicks in — if the user doesn't pick
+    // anything there (irrelevant for a fresh save), `granted` comes back
+    // false and this falls through to the share sheet below instead of
+    // actually saving.
+    const permission = await MediaLibrary.requestPermissionsAsync(true);
     if (!permission.granted) {
       Alert.alert("Photo access needed", "Enable photo library access in settings to save images and videos.");
       return "denied";
