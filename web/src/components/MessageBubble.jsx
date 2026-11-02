@@ -9,6 +9,7 @@ import LinkPreviewCard from './LinkPreviewCard';
 import AddToListModal from './AddToListModal';
 import { saveFile } from '../lib/saveFile';
 import { reportUser } from '../api/users';
+import { burstConfetti } from '../lib/confetti';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -158,9 +159,18 @@ export default function MessageBubble({
     try { await deleteMessage(m.id); onChanged?.(); } finally { setBusy(false); }
   };
 
+  const pollRef = useRef(null);
+
   const vote = async (optionIndex) => {
+    // A quiz is answer-once: no toggling off or switching after you've
+    // committed, unlike an ordinary poll.
+    if (m.poll?.quiz_mode && (m.poll.my_votes || []).length > 0) return;
     setBusy(true);
-    try { await votePoll(m.poll.id, optionIndex); onChanged?.(); } finally { setBusy(false); }
+    try {
+      const result = await votePoll(m.poll.id, optionIndex);
+      if (result?.quiz_mode && result.my_correct) burstConfetti(pollRef.current);
+      onChanged?.();
+    } finally { setBusy(false); }
   };
 
   const saveEdit = async () => {
@@ -363,9 +373,9 @@ export default function MessageBubble({
           )}
 
           {m.type === 'poll' && m.poll && (
-            <div className="mb-1 min-w-[220px]" onClick={(e) => e.stopPropagation()}>
+            <div ref={pollRef} className="mb-1 min-w-[220px]" onClick={(e) => e.stopPropagation()}>
               <p className={`mb-2 text-sm font-semibold ${own ? 'text-white' : 'text-slate-800 dark:text-slate-100'}`}>
-                📊 {m.poll.question}
+                {m.poll.quiz_mode ? '🎯' : '📊'} {m.poll.question}
               </p>
               <div className="flex flex-col gap-1.5">
                 {m.poll.options.map((opt, i) => {
@@ -375,37 +385,57 @@ export default function MessageBubble({
                   const optionVoters = m.poll.voters?.[i] || [];
                   const shown = optionVoters.slice(0, 3);
                   const extra = optionVoters.length - shown.length;
+                  const hasAnswered = m.poll.quiz_mode && (m.poll.my_votes || []).length > 0;
+                  const revealed = m.poll.correct_option_index != null;
+                  const isCorrectOption = revealed && i === m.poll.correct_option_index;
+                  const isMyWrongPick = revealed && mine && !isCorrectOption;
+                  const optionImage = m.poll.option_images?.[i];
                   return (
                     <button
                       key={i}
-                      disabled={busy || m.poll.closed}
+                      disabled={busy || m.poll.closed || hasAnswered}
                       onClick={() => vote(i)}
-                      className={`relative overflow-hidden rounded-lg px-2.5 py-1.5 text-left text-xs disabled:opacity-70 ${
-                        own ? 'bg-accent-500/40' : 'bg-slate-100 dark:bg-slate-700'
+                      className={`relative overflow-hidden rounded-lg px-2.5 py-1.5 text-left text-xs disabled:opacity-100 ${
+                        isCorrectOption
+                          ? 'bg-emerald-500/25 ring-1 ring-emerald-500'
+                          : isMyWrongPick
+                          ? 'bg-red-500/15 ring-1 ring-red-400'
+                          : own
+                          ? 'bg-accent-500/40'
+                          : 'bg-slate-100 dark:bg-slate-700'
                       }`}
                     >
-                      <span
-                        className={`absolute inset-y-0 left-0 ${own ? 'bg-accent-400/50' : 'bg-accent-500/20'}`}
-                        style={{ width: `${pct}%` }}
-                      />
-                      <span className="relative flex items-center justify-between gap-2">
-                        <span className={`truncate ${mine ? 'font-semibold' : ''}`}>{mine ? '✓ ' : ''}{opt}</span>
-                        <span className="flex shrink-0 items-center gap-1.5">
-                          {shown.length > 0 && (
-                            <span className="flex items-center">
-                              {shown.map((v, vi) => (
-                                <span key={v.id} className={vi > 0 ? '-ml-2' : ''} title={v.name}>
-                                  <Avatar name={v.name} url={v.avatarUrl} size={18} />
-                                </span>
-                              ))}
-                              {extra > 0 && (
-                                <span className="-ml-2 flex h-[18px] w-[18px] items-center justify-center rounded-full bg-slate-400 text-[9px] font-semibold text-white ring-2 ring-white dark:ring-slate-700">
-                                  +{extra}
-                                </span>
-                              )}
-                            </span>
-                          )}
-                          <span className="opacity-70">{count}</span>
+                      {!m.poll.quiz_mode && (
+                        <span
+                          className={`absolute inset-y-0 left-0 ${own ? 'bg-accent-400/50' : 'bg-accent-500/20'}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      )}
+                      <span className="relative flex items-center gap-2">
+                        {optionImage && (
+                          <img src={optionImage} alt="" className="h-8 w-8 shrink-0 rounded object-cover" />
+                        )}
+                        <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                          <span className={`truncate ${mine ? 'font-semibold' : ''}`}>
+                            {isCorrectOption ? '✅ ' : isMyWrongPick ? '❌ ' : mine ? '✓ ' : ''}{opt}
+                          </span>
+                          <span className="flex shrink-0 items-center gap-1.5">
+                            {!m.poll.quiz_mode && shown.length > 0 && (
+                              <span className="flex items-center">
+                                {shown.map((v, vi) => (
+                                  <span key={v.id} className={vi > 0 ? '-ml-2' : ''} title={v.name}>
+                                    <Avatar name={v.name} url={v.avatarUrl} size={18} />
+                                  </span>
+                                ))}
+                                {extra > 0 && (
+                                  <span className="-ml-2 flex h-[18px] w-[18px] items-center justify-center rounded-full bg-slate-400 text-[9px] font-semibold text-white ring-2 ring-white dark:ring-slate-700">
+                                    +{extra}
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                            {(!m.poll.quiz_mode || revealed) && <span className="opacity-70">{count}</span>}
+                          </span>
                         </span>
                       </span>
                     </button>
@@ -413,15 +443,21 @@ export default function MessageBubble({
                 })}
               </div>
               <p className={`mt-1.5 text-[11px] ${own ? 'text-accent-100' : 'text-slate-400'}`}>
-                {m.poll.total_votes} vote{m.poll.total_votes === 1 ? '' : 's'}
-                {m.poll.multiple_choice ? ' · Select one or more' : ' · Select one'}
+                {m.poll.quiz_mode ? (
+                  m.poll.my_correct === true ? '🎉 Correct!' : m.poll.my_correct === false ? 'Not quite — correct answer highlighted' : 'Pick an answer to see if you’re right'
+                ) : (
+                  <>
+                    {m.poll.total_votes} vote{m.poll.total_votes === 1 ? '' : 's'}
+                    {m.poll.multiple_choice ? ' · Select one or more' : ' · Select one'}
+                  </>
+                )}
               </p>
               {m.poll.total_votes > 0 && (
                 <button
                   onClick={() => setViewingVotes(true)}
                   className={`mt-1 block w-full text-center text-[11px] font-semibold ${own ? 'text-accent-100 hover:text-white' : 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400'}`}
                 >
-                  View votes
+                  {m.poll.quiz_mode ? 'View results' : 'View votes'}
                 </button>
               )}
             </div>

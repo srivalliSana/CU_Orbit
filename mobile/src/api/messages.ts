@@ -98,6 +98,12 @@ export const getSharedMedia = (containerId: string, type: string) =>
     )
     .then((res) => res.data);
 
+export interface PollVoter {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+}
+
 export interface PollSummary {
   id: string;
   channel_id: string;
@@ -107,18 +113,37 @@ export interface PollSummary {
   closed: boolean;
   total_votes: number;
   counts: number[];
+  voters?: PollVoter[][];
   my_votes: number[];
+  voted_members?: number;
+  total_members?: number;
+  // Channel Quiz fields — all null/false for an ordinary poll.
+  quiz_mode: boolean;
+  option_images: (string | null)[] | null;
+  correct_option_index: number | null;   // withheld until my_votes is non-empty, or for the creator/an admin
+  my_correct: boolean | null;
+  correct_count: number | null;          // admin-only engagement metric
 }
 
 export const createPoll = (
   channelId: string,
-  params: { question: string; options: string[]; multipleChoice?: boolean }
+  params: {
+    question: string;
+    options: string[];
+    multipleChoice?: boolean;
+    quizMode?: boolean;
+    correctOptionIndex?: number;
+    optionImages?: (string | null)[];
+  }
 ) =>
   client
     .post<{ message: Message; poll: PollSummary }>(`/channels/${channelId}/polls`, {
       question: params.question,
       options: params.options,
       multipleChoice: params.multipleChoice,
+      quizMode: params.quizMode,
+      correctOptionIndex: params.correctOptionIndex,
+      optionImages: params.optionImages,
     })
     .then((res) => res.data);
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Dimensions, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
@@ -17,6 +17,7 @@ import { useCustomEmojiMap } from "./EmojiPicker";
 import Avatar from "./Avatar";
 import ZoomableImage from "./ZoomableImage";
 import VideoBubble from "./VideoBubble";
+import ConfettiBurst from "./ConfettiBurst";
 import LinkPreviewCard from "./LinkPreviewCard";
 import { renderMarkdown, renderMessageText } from "../lib/markdown";
 import { openFile, saveFile } from "../lib/fileActions";
@@ -111,6 +112,14 @@ export default function MessageBubble({
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [videoViewerVisible, setVideoViewerVisible] = useState(false);
   const [votesVisible, setVotesVisible] = useState(false);
+  const [celebrating, setCelebrating] = useState(false);
+  const sawCorrectRef = useRef(false);
+  useEffect(() => {
+    if (message.poll?.quiz_mode && message.poll.my_correct && !sawCorrectRef.current) {
+      sawCorrectRef.current = true;
+      setCelebrating(true);
+    }
+  }, [message.poll?.my_correct, message.poll?.quiz_mode]);
 
   // "Seen by" — group messages only, own messages only, mirrors web's
   // showReads. A DM's status already reads "read"/"delivered"/"sent"
@@ -271,7 +280,7 @@ export default function MessageBubble({
 
         {message.type === "poll" && message.poll ? (
           <View style={styles.pollBox}>
-            <Text style={styles.pollQuestion}>📊 {message.poll.question}</Text>
+            <Text style={styles.pollQuestion}>{message.poll.quiz_mode ? "🎯" : "📊"} {message.poll.question}</Text>
             {message.poll.options.map((opt, i) => {
               const count = message.poll!.counts[i] ?? 0;
               const pct = message.poll!.total_votes ? Math.round((count / message.poll!.total_votes) * 100) : 0;
@@ -279,19 +288,29 @@ export default function MessageBubble({
               const optionVoters = message.poll!.voters?.[i] ?? [];
               const shown = optionVoters.slice(0, 3);
               const extra = optionVoters.length - shown.length;
+              const hasAnswered = message.poll!.quiz_mode && (message.poll!.my_votes ?? []).length > 0;
+              const revealed = message.poll!.correct_option_index != null;
+              const isCorrectOption = revealed && i === message.poll!.correct_option_index;
+              const isMyWrongPick = revealed && mine && !isCorrectOption;
+              const optionImage = message.poll!.option_images?.[i];
               return (
                 <Pressable
                   key={i}
-                  disabled={message.poll!.closed}
+                  disabled={message.poll!.closed || hasAnswered}
                   onPress={() => onVote?.(i)}
-                  style={styles.pollOption}
+                  style={[
+                    styles.pollOption,
+                    isCorrectOption && styles.pollOptionCorrect,
+                    isMyWrongPick && styles.pollOptionWrong,
+                  ]}
                 >
-                  <View style={[styles.pollOptionFill, { width: `${pct}%` }]} />
+                  {!message.poll!.quiz_mode ? <View style={[styles.pollOptionFill, { width: `${pct}%` }]} /> : null}
+                  {optionImage ? <Image source={{ uri: optionImage }} style={styles.pollOptionImage} /> : null}
                   <Text style={[styles.pollOptionText, mine && styles.pollOptionTextMine]} numberOfLines={1}>
-                    {mine ? "✓ " : ""}{opt}
+                    {isCorrectOption ? "✅ " : isMyWrongPick ? "❌ " : mine ? "✓ " : ""}{opt}
                   </Text>
                   <View style={styles.pollOptionRight}>
-                    {shown.length > 0 ? (
+                    {!message.poll!.quiz_mode && shown.length > 0 ? (
                       <View style={styles.voterStack}>
                         {shown.map((v, vi) => (
                           <View key={v.id} style={[styles.voterStackAvatar, vi > 0 && styles.voterStackAvatarOverlap]}>
@@ -305,20 +324,28 @@ export default function MessageBubble({
                         ) : null}
                       </View>
                     ) : null}
-                    <Text style={styles.pollOptionPct}>{count}</Text>
+                    {(!message.poll!.quiz_mode || revealed) ? <Text style={styles.pollOptionPct}>{count}</Text> : null}
                   </View>
                 </Pressable>
               );
             })}
             <Text style={styles.pollMeta}>
-              {message.poll.total_votes} vote{message.poll.total_votes === 1 ? "" : "s"}
-              {message.poll.multiple_choice ? " · Select one or more" : " · Select one"}
+              {message.poll.quiz_mode ? (
+                message.poll.my_correct === true
+                  ? "🎉 Correct!"
+                  : message.poll.my_correct === false
+                  ? "Not quite — correct answer highlighted"
+                  : "Pick an answer to see if you’re right"
+              ) : (
+                `${message.poll.total_votes} vote${message.poll.total_votes === 1 ? "" : "s"}${message.poll.multiple_choice ? " · Select one or more" : " · Select one"}`
+              )}
             </Text>
             {message.poll.total_votes > 0 ? (
               <Pressable onPress={() => setVotesVisible(true)}>
-                <Text style={styles.pollViewVotes}>View votes</Text>
+                <Text style={styles.pollViewVotes}>{message.poll.quiz_mode ? "View results" : "View votes"}</Text>
               </Pressable>
             ) : null}
+            {celebrating ? <ConfettiBurst onDone={() => setCelebrating(false)} /> : null}
           </View>
         ) : null}
 
@@ -330,14 +357,24 @@ export default function MessageBubble({
                 <Text style={styles.votesSubtitle}>
                   {message.poll.voted_members} of {message.poll.total_members} member{message.poll.total_members === 1 ? "" : "s"} voted
                 </Text>
+                {message.poll.quiz_mode && message.poll.correct_option_index != null ? (
+                  <Text style={styles.quizAccuracy}>
+                    {message.poll.correct_count ?? 0} of {message.poll.total_votes} answered correctly
+                    {message.poll.total_votes ? ` (${Math.round(((message.poll.correct_count ?? 0) / message.poll.total_votes) * 100)}%)` : ""}
+                  </Text>
+                ) : null}
                 <ScrollView style={styles.votesScroll}>
                   {message.poll.options.map((opt, i) => {
                     const count = message.poll!.counts[i] ?? 0;
                     const optionVoters = message.poll!.voters?.[i] ?? [];
+                    const isCorrect = message.poll!.quiz_mode && message.poll!.correct_option_index === i;
                     return (
-                      <View key={i} style={styles.votesGroup}>
+                      <View key={i} style={[styles.votesGroup, isCorrect && styles.votesGroupCorrect]}>
+                        {message.poll!.option_images?.[i] ? (
+                          <Image source={{ uri: message.poll!.option_images![i]! }} style={styles.votesOptionImage} />
+                        ) : null}
                         <View style={styles.votesGroupHeader}>
-                          <Text style={styles.votesOptionText} numberOfLines={1}>{opt}</Text>
+                          <Text style={styles.votesOptionText} numberOfLines={1}>{isCorrect ? "✅ " : ""}{opt}</Text>
                           <Text style={styles.votesCount}>{count} vote{count === 1 ? "" : "s"}</Text>
                         </View>
                         {optionVoters.length > 0 ? (
@@ -767,6 +804,39 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     bottom: 0,
     backgroundColor: colors.primary,
     opacity: 0.15,
+  },
+  pollOptionCorrect: {
+    backgroundColor: "rgba(16,185,129,0.18)",
+    borderWidth: 1,
+    borderColor: colors.success,
+  },
+  pollOptionWrong: {
+    backgroundColor: "rgba(239,68,68,0.12)",
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  pollOptionImage: {
+    width: 30,
+    height: 30,
+    borderRadius: 6,
+    marginRight: 8,
+    backgroundColor: colors.background,
+  },
+  quizAccuracy: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.success,
+    marginBottom: 10,
+  },
+  votesGroupCorrect: {
+    borderWidth: 1,
+    borderColor: colors.success,
+  },
+  votesOptionImage: {
+    width: "100%",
+    height: 70,
+    borderRadius: 8,
+    marginBottom: 6,
   },
   pollOptionText: {
     fontSize: 13,

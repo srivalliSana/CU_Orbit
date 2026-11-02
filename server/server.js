@@ -377,6 +377,14 @@ const Poll = sequelize.define('Poll', {
     multiple_choice: { type: DataTypes.BOOLEAN, defaultValue: false },
     created_by: { type: DataTypes.STRING, allowNull: false },
     closed: { type: DataTypes.BOOLEAN, defaultValue: false },
+    // Channel Quiz (WhatsApp Channels-style): a poll with one designated
+    // right answer, revealed to each voter only after they answer — never
+    // sent to the client beforehand, so reading the network response can't
+    // spoil it. quiz_mode implies multiple_choice stays false regardless of
+    // what the creator passed (a quiz has exactly one correct option).
+    quiz_mode: { type: DataTypes.BOOLEAN, defaultValue: false },
+    correct_option_index: { type: DataTypes.INTEGER, allowNull: true },
+    option_images: { type: DataTypes.JSON, allowNull: true },   // (string|null)[], parallel to options
 });
 
 const PollVote = sequelize.define('PollVote', {
@@ -4055,6 +4063,13 @@ async function pollSummary(poll, userId) {
                 return { id: v.user_id, name: u?.name || 'Unknown', avatarUrl: u?.avatarUrl || null };
             })
     );
+    const myVotes = votes.filter((v) => v.user_id === userId).map((v) => v.option_index);
+    const isAdmin = poll.created_by === userId || await canModerateContainer({ id: userId }, poll.channel_id);
+    // The correct answer is withheld from anyone who hasn't voted yet — a
+    // network inspector shouldn't be able to read it off the wire before
+    // answering. The creator and any channel admin always see it, same as
+    // they can already see every voter's pick.
+    const revealAnswer = poll.quiz_mode && (myVotes.length > 0 || isAdmin);
     return {
         id: poll.id,
         channel_id: poll.channel_id,
@@ -4065,11 +4080,18 @@ async function pollSummary(poll, userId) {
         total_votes: votes.length,
         counts,
         voters,
-        my_votes: votes.filter((v) => v.user_id === userId).map((v) => v.option_index),
+        my_votes: myVotes,
         // A member can pick several options in a multiple-choice poll, so
         // "voted" is counted by distinct person, not by ballot.
         voted_members: voterIds.length,
         total_members: totalMembers,
+        quiz_mode: !!poll.quiz_mode,
+        option_images: poll.option_images || null,
+        correct_option_index: revealAnswer ? poll.correct_option_index : null,
+        my_correct: poll.quiz_mode && myVotes.length > 0 ? myVotes.includes(poll.correct_option_index) : null,
+        // Admin-only engagement metric — how many of this quiz's voters got
+        // it right. Meaningless (and withheld) for an ordinary poll.
+        correct_count: poll.quiz_mode && revealAnswer ? counts[poll.correct_option_index] || 0 : null,
     };
 }
 
@@ -4077,9 +4099,12 @@ async function pollSummary(poll, userId) {
 app.post('/api/channels/:id/polls', auth.requireAuth, async (req, res) => {
     try {
         const channelId = req.params.id;
-        const { question, options, multipleChoice } = req.body;
+        const { question, options, multipleChoice, quizMode, correctOptionIndex, optionImages } = req.body;
         if (!question || !Array.isArray(options) || options.length < 2) {
             return res.status(400).json({ error: 'bad_request', message: 'A poll needs a question and at least 2 options' });
+        }
+        if (quizMode && (!Number.isInteger(correctOptionIndex) || correctOptionIndex < 0 || correctOptionIndex >= options.length)) {
+            return res.status(400).json({ error: 'bad_request', message: 'A quiz needs a correct answer selected' });
         }
         const member = await ChannelMember.findOne({ where: { channelId, userId: req.user.id } });
         if (!member && !isGroupAdmin(req.user)) {
@@ -4088,7 +4113,13 @@ app.post('/api/channels/:id/polls', auth.requireAuth, async (req, res) => {
         const sender = await User.findByPk(req.user.id);
         const poll = await Poll.create({
             channel_id: channelId, question, options: options.map(String),
-            multiple_choice: !!multipleChoice, created_by: req.user.id,
+            // A quiz has exactly one right answer, so it's always
+            // single-choice regardless of what multipleChoice says.
+            multiple_choice: quizMode ? false : !!multipleChoice,
+            created_by: req.user.id,
+            quiz_mode: !!quizMode,
+            correct_option_index: quizMode ? correctOptionIndex : null,
+            option_images: Array.isArray(optionImages) ? options.map((_, i) => optionImages[i] || null) : null,
         });
         const msg = await Message.create({
             senderId: sender.id, senderName: sender.name, senderAvatarUrl: sender.avatarUrl,

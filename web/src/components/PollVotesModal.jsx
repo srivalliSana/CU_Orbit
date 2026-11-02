@@ -13,18 +13,28 @@ export default function PollVotesModal({ poll, onClose }) {
           <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{poll.question}</h2>
           <button onClick={onClose} aria-label="Close" className="shrink-0 text-slate-400 hover:text-slate-600">✕</button>
         </div>
-        <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+        <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">
           {poll.voted_members} of {poll.total_members} member{poll.total_members === 1 ? '' : 's'} voted
         </p>
+        {poll.quiz_mode && poll.correct_option_index != null && (
+          <p className="mb-3 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            {poll.correct_count || 0} of {poll.total_votes} answered correctly
+            {poll.total_votes ? ` (${Math.round(((poll.correct_count || 0) / poll.total_votes) * 100)}%)` : ''}
+          </p>
+        )}
 
         <div className="max-h-80 space-y-3 overflow-y-auto">
           {poll.options.map((opt, i) => {
             const count = poll.counts[i] || 0;
             const optionVoters = poll.voters?.[i] || [];
+            const isCorrect = poll.quiz_mode && poll.correct_option_index === i;
             return (
-              <div key={i} className="rounded-lg bg-slate-50 p-2.5 dark:bg-slate-800">
+              <div key={i} className={`rounded-lg p-2.5 ${isCorrect ? 'bg-emerald-50 ring-1 ring-emerald-400 dark:bg-emerald-900/20' : 'bg-slate-50 dark:bg-slate-800'}`}>
+                {poll.option_images?.[i] && (
+                  <img src={poll.option_images[i]} alt="" className="mb-2 h-20 w-full rounded object-cover" />
+                )}
                 <div className="mb-1.5 flex items-center justify-between gap-2">
-                  <span className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">{opt}</span>
+                  <span className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">{isCorrect ? '✅ ' : ''}{opt}</span>
                   <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
                     {count} vote{count === 1 ? '' : 's'}
                   </span>

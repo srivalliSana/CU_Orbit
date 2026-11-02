@@ -595,8 +595,8 @@ export default function ChatScreen({ route, navigation }: Props) {
 
       <PollComposerModal
         visible={creatingPoll}
-        onCreate={async ({ question, options, multipleChoice }) => {
-          await createPoll(containerId, { question, options, multipleChoice });
+        onCreate={async ({ question, options, multipleChoice, quizMode, correctOptionIndex, optionImages }) => {
+          await createPoll(containerId, { question, options, multipleChoice, quizMode, correctOptionIndex, optionImages });
           setCreatingPoll(false);
           refetch();
         }}

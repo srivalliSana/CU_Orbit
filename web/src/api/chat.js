@@ -22,10 +22,10 @@ export const getStarredMessages = (containerId) =>
 export const getPinnedMessages = (containerId) =>
   api(`/api/containers/${encodeURIComponent(containerId)}/pinned`);
 
-export const createPoll = (channelId, { question, options, multipleChoice }) =>
+export const createPoll = (channelId, { question, options, multipleChoice, quizMode, correctOptionIndex, optionImages }) =>
   api(`/api/channels/${encodeURIComponent(channelId)}/polls`, {
     method: 'POST',
-    body: JSON.stringify({ question, options, multipleChoice }),
+    body: JSON.stringify({ question, options, multipleChoice, quizMode, correctOptionIndex, optionImages }),
   });
 
 export const votePoll = (pollId, optionIndex) =>

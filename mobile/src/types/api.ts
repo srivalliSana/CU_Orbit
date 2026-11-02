@@ -111,6 +111,12 @@ export interface Message {
     my_votes: number[];
     voted_members: number;
     total_members: number;
+    // Channel Quiz fields — all null/false for an ordinary poll.
+    quiz_mode: boolean;
+    option_images: (string | null)[] | null;
+    correct_option_index: number | null;
+    my_correct: boolean | null;
+    correct_count: number | null;
   } | null;
   enriched_mentions: EnrichedMention[];
 }

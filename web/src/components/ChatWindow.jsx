@@ -319,8 +319,8 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
     }
   };
 
-  const handleCreatePoll = async ({ question, options, multipleChoice }) => {
-    await createPoll(chat.id, { question, options, multipleChoice });
+  const handleCreatePoll = async ({ question, options, multipleChoice, quizMode, correctOptionIndex, optionImages }) => {
+    await createPoll(chat.id, { question, options, multipleChoice, quizMode, correctOptionIndex, optionImages });
     setCreatingPoll(false);
     onSent?.();
   };
