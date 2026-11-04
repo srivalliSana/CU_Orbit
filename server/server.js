@@ -2317,6 +2317,61 @@ async function verifyGoogleAccessToken(accessToken) {
 }
 
 /**
+ * Exchanges the mobile app's OAuth authorization code for an ID token —
+ * run here instead of on the phone. The app used to call Google's token
+ * endpoint (oauth2.googleapis.com/token) directly from the device, which
+ * is a raw HTTPS POST over whatever network the phone happens to be on;
+ * some phones/campus wifi/carriers could reach our own server fine but
+ * not that specific Google endpoint, surfacing as an intermittent, very
+ * device-dependent "network error" right at the last step of sign-in.
+ * Our server's outbound connectivity to Google is far more consistent, so
+ * only the browser-based authorization step (opening Google's own sign-in
+ * page) still happens on-device; this one HTTPS call moves here.
+ *
+ * The Android OAuth client is a public client (PKCE, no client secret),
+ * so this needs nothing beyond what the phone already generated.
+ */
+app.post('/api/auth/google/exchange', async (req, res) => {
+    try {
+        const { code, codeVerifier, redirectUri } = req.body;
+        if (!code || !codeVerifier || !redirectUri) {
+            return res.status(400).json({ error: 'bad_request', message: 'code, codeVerifier, and redirectUri are required' });
+        }
+        if (!GOOGLE_ANDROID_CLIENT_ID) {
+            return res.status(503).json({ error: 'not_configured', message: 'GOOGLE_ANDROID_CLIENT_ID is not set' });
+        }
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        let resp;
+        try {
+            resp = await fetch('https://oauth2.googleapis.com/token', {
+                method: 'POST',
+                headers: { 'content-type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    client_id: GOOGLE_ANDROID_CLIENT_ID,
+                    code,
+                    code_verifier: codeVerifier,
+                    redirect_uri: redirectUri,
+                    grant_type: 'authorization_code',
+                }),
+                signal: controller.signal,
+            });
+        } finally {
+            clearTimeout(timeout);
+        }
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.id_token) {
+            console.error('[google-exchange] failed', resp.status, data.error || data);
+            return res.status(502).json({ error: 'exchange_failed', message: data.error_description || 'Google rejected the sign-in code.' });
+        }
+        res.json({ idToken: data.id_token });
+    } catch (e) {
+        console.error('[google-exchange]', e.message, e.cause || '');
+        res.status(500).json({ error: 'server_error', message: 'Could not reach Google — please try again.' });
+    }
+});
+
+/**
  * Sign in with Google. Mobile still hands us a signed ID token (native
  * AuthSession flow, verified locally against Google's cached public keys —
  * see verifyIdToken below). Web hands us an OAuth2 access token instead

@@ -3,6 +3,7 @@ import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 
 import {
+  exchangeGoogleCode,
   me,
   requestOtp as apiRequestOtp,
   resendTwoFactor,
@@ -104,16 +105,10 @@ export function useAuthSession() {
         return;
       }
 
-      const tokenResult = await AuthSession.exchangeCodeAsync(
-        {
-          clientId: GOOGLE_ANDROID_CLIENT_ID,
-          code: result.params.code,
-          redirectUri: REDIRECT_URI,
-          extraParams: { code_verifier: request.codeVerifier ?? "" },
-        },
-        GOOGLE_DISCOVERY
-      );
-      const idToken = tokenResult.idToken;
+      // The exchange itself runs on our server, not here — see
+      // exchangeGoogleCode's comment for why a raw device-to-Google HTTPS
+      // call was the actual source of the "network error" some phones hit.
+      const idToken = await exchangeGoogleCode(result.params.code, request.codeVerifier ?? "", REDIRECT_URI);
       if (!idToken) {
         setError("Google did not return an ID token.");
         return;

@@ -23,6 +23,13 @@ export const me = () =>
 export const signInWithGoogle = (idToken: string) =>
   client.post<SignInResponse | TwoFactorRequired>("/auth/google", { idToken }).then((res) => res.data);
 
+// Exchanges the OAuth code for an ID token on the server instead of
+// directly from the phone — see server.js's /api/auth/google/exchange for
+// why (an intermittent, device-dependent "network error" right at this
+// step, depending on the phone's own route to Google's token endpoint).
+export const exchangeGoogleCode = (code: string, codeVerifier: string, redirectUri: string) =>
+  client.post<{ idToken: string }>("/auth/google/exchange", { code, codeVerifier, redirectUri }).then((res) => res.data.idToken);
+
 export const requestOtp = (email: string) =>
   client.post<{ success: boolean }>("/auth/otp/request", { email }).then((res) => res.data);
 
