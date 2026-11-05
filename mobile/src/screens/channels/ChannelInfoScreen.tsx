@@ -14,10 +14,13 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
+import { File } from "expo-file-system";
 
 import {
   addChannelMember,
   approveJoinRequest,
+  bulkAddChannelMembers,
   getChannel,
   getChannelMembers,
   getJoinRequests,
@@ -30,6 +33,7 @@ import { listUsers } from "../../api/users";
 import { setChannelActive } from "../../api/admin";
 import { uploadFile } from "../../api/upload";
 import { apiErrorMessage } from "../../api/client";
+import { parseCsv } from "../../lib/csv";
 import { useAuthStore } from "../../state/authStore";
 import Avatar from "../../components/Avatar";
 import { useThemeColors } from "../../state/themeStore";
@@ -64,6 +68,7 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [memberSearch, setMemberSearch] = useState("");
   const [candidateSearch, setCandidateSearch] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const channelQuery = useQuery({ queryKey: ["channel", channelId], queryFn: () => getChannel(channelId) });
   const membersQuery = useQuery({
@@ -121,6 +126,42 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
       setError(apiErrorMessage(e, "Could not add that person."));
     } finally {
       setBusyUserId(null);
+    }
+  };
+
+  // Mirrors web's bulkAddCsv: parsed on-device with the same parseCsv the
+  // app's list-import feature already uses, server only ever sees a plain
+  // email list (first column of each row; a header row or a 2nd column,
+  // like a names export, is ignored the same way).
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const bulkAddCsv = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ["text/csv", "text/comma-separated-values", "*/*"],
+      copyToCacheDirectory: true,
+    });
+    if (result.canceled || !result.assets?.length) return;
+    setError(null);
+    setBulkBusy(true);
+    try {
+      const text = await new File(result.assets[0].uri).text();
+      const emails = parseCsv(text)
+        .map((row) => row[0]?.trim().toLowerCase() || "")
+        .filter((email) => email && EMAIL_RE.test(email) && email !== "email");
+      if (!emails.length) {
+        setError("No email addresses found in that file.");
+        return;
+      }
+      const res = await bulkAddChannelMembers(channelId, emails);
+      reload();
+      Alert.alert(
+        "Bulk add",
+        `${res.added.length} added, ${res.skipped.length} skipped` +
+          (res.skipped.length ? ` (not a staff/faculty campus email, or already a member)` : "")
+      );
+    } catch (e) {
+      setError(apiErrorMessage(e, "Could not bulk-add from that file."));
+    } finally {
+      setBulkBusy(false);
     }
   };
 
@@ -540,9 +581,14 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
           <View style={styles.membersHeaderRow}>
             <Text style={styles.sectionLabel}>MEMBERS</Text>
             {isChannelAdmin || isSuperAdmin ? (
-              <Pressable onPress={() => { setAdding((v) => !v); setCandidateSearch(""); }}>
-                <Text style={styles.addLink}>{adding ? "Cancel" : "+ Add"}</Text>
-              </Pressable>
+              <View style={{ flexDirection: "row", gap: 16 }}>
+                <Pressable onPress={bulkAddCsv} disabled={bulkBusy}>
+                  <Text style={styles.addLink}>{bulkBusy ? "Adding…" : "Bulk add (CSV)"}</Text>
+                </Pressable>
+                <Pressable onPress={() => { setAdding((v) => !v); setCandidateSearch(""); }}>
+                  <Text style={styles.addLink}>{adding ? "Cancel" : "+ Add"}</Text>
+                </Pressable>
+              </View>
             ) : null}
           </View>
 

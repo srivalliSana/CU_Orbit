@@ -6601,6 +6601,57 @@ app.post('/api/channels/:id/members', auth.requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json(e); }
 });
 
+/**
+ * "Bulk add by CSV" for a single channel — same idea as the workspace-wide
+ * admin one, but scoped to one channel and gated by the same rule as the
+ * single-add route above (channel admin, app admin, or faculty). Only
+ * faculty-convention emails are accepted: students can't sign in at all
+ * (STUDENTS_BLOCKED), so provisioning one here would just create an account
+ * that can never actually join.
+ */
+app.post('/api/channels/:id/members/bulk-add', auth.requireAuth, async (req, res) => {
+    try {
+        const me = await ChannelMember.findOne({ where: { channelId: req.params.id, userId: req.user.id } });
+        if (!me) return res.status(403).json({ error: 'forbidden', message: 'Join the channel before adding others' });
+        if (me.role !== 'admin' && !isGroupAdmin(req.user) && !isFacultyEmail(req.user.email)) {
+            return res.status(403).json({ error: 'forbidden', message: 'Only channel admins or faculty can add members' });
+        }
+
+        const emails = Array.isArray(req.body.emails) ? req.body.emails : [];
+        if (emails.length > 500) return res.status(400).json({ error: 'bad_request', message: 'Up to 500 emails at a time' });
+
+        const channel = await Channel.findByPk(req.params.id);
+        const adder = await User.findByPk(req.user.id);
+        const results = { added: [], skipped: [] };
+        for (const raw of emails) {
+            const email = String(raw || '').toLowerCase().trim();
+            if (!email) continue;
+            if (!isFacultyEmail(email)) { results.skipped.push({ email: raw, reason: 'not a faculty/staff campus email' }); continue; }
+            const user = await findOrCreateOrbitUser(email, null);
+            const [, created] = await ChannelMember.findOrCreate({
+                where: { channelId: req.params.id, userId: user.id },
+                defaults: { channelId: req.params.id, userId: user.id, role: 'member' },
+            });
+            if (created) {
+                if (channel) await channel.increment('member_count');
+                results.added.push({ id: user.id, email: user.campus_email });
+            } else {
+                results.skipped.push({ email, reason: 'already a member' });
+            }
+        }
+
+        if (results.added.length) {
+            await Message.create({
+                channelId: req.params.id, senderId: adder.id, senderName: adder.name,
+                body: `${adder.name} added ${results.added.length} member${results.added.length === 1 ? '' : 's'} via CSV`,
+                type: 'system', timestamp: Date.now(),
+            });
+            await logAudit(req.user, 'channel.bulk_added', 'channel', req.params.id, `${results.added.length} added, ${results.skipped.length} skipped`);
+        }
+        res.json({ success: true, ...results });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
 app.delete('/api/channels/:id/members/:userId', auth.requireAuth, async (req, res) => {
     try {
         // Removing someone else requires channel-admin rights; anyone may remove

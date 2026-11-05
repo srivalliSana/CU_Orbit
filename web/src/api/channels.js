@@ -12,6 +12,12 @@ export const addChannelMember = (id, userId, role) =>
     body: JSON.stringify({ userId, role }),
   });
 
+export const bulkAddChannelMembers = (id, emails) =>
+  api(`/api/channels/${id}/members/bulk-add`, {
+    method: 'POST',
+    body: JSON.stringify({ emails }),
+  });
+
 export const removeChannelMember = (id, userId) =>
   api(`/api/channels/${id}/members/${userId}`, { method: 'DELETE' });
 

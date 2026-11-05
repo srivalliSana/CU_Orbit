@@ -4,6 +4,7 @@ import SharedMediaPanel from './SharedMediaPanel';
 import {
   addChannelMember,
   approveJoinRequest,
+  bulkAddChannelMembers,
   getAvailableApps,
   getChannel,
   getChannelMembers,
@@ -50,6 +51,8 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
   const [candidateSearch, setCandidateSearch] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkResult, setBulkResult] = useState(null);
 
   const load = () => {
     setError(null);
@@ -136,6 +139,36 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
       setError(e.message || 'Could not add that person.');
     } finally {
       setBusyUserId(null);
+    }
+  };
+
+  // CSV is parsed client-side (one email per line, a header row like
+  // "email" is skipped, anything after a comma on a line is ignored so a
+  // 2-column export still works) — the server only ever sees a plain email
+  // list, same payload shape as the single-add call above.
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const bulkAddCsv = async (file) => {
+    if (!file) return;
+    setBulkResult(null);
+    setBulkBusy(true);
+    try {
+      const text = await file.text();
+      const emails = text
+        .split(/\r?\n/)
+        .map((line) => line.split(',')[0].trim().toLowerCase())
+        .filter((email) => email && EMAIL_RE.test(email) && email !== 'email');
+      if (!emails.length) {
+        setError('No email addresses found in that file.');
+        return;
+      }
+      const result = await bulkAddChannelMembers(channelId, emails);
+      setBulkResult(result);
+      load();
+      onChanged?.();
+    } catch (e) {
+      setError(e.message || 'Could not bulk-add from that file.');
+    } finally {
+      setBulkBusy(false);
     }
   };
 
@@ -474,14 +507,33 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Members</h4>
                 {(isChannelAdmin || isSuperAdmin) && (
-                  <button
-                    onClick={startAdding}
-                    className="text-xs font-medium text-accent-600 hover:text-accent-700"
-                  >
-                    + Add
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <label className="cursor-pointer text-xs font-medium text-accent-600 hover:text-accent-700">
+                      {bulkBusy ? 'Adding…' : 'Bulk add (CSV)'}
+                      <input
+                        type="file"
+                        accept=".csv,text/csv"
+                        disabled={bulkBusy}
+                        onChange={(e) => { bulkAddCsv(e.target.files?.[0]); e.target.value = ''; }}
+                        className="hidden"
+                      />
+                    </label>
+                    <button
+                      onClick={startAdding}
+                      className="text-xs font-medium text-accent-600 hover:text-accent-700"
+                    >
+                      + Add
+                    </button>
+                  </div>
                 )}
               </div>
+
+              {bulkResult && (
+                <p className="mt-1 text-[11px] text-slate-400">
+                  {bulkResult.added.length} added, {bulkResult.skipped.length} skipped
+                  {bulkResult.skipped.length > 0 && ` (${bulkResult.skipped.slice(0, 3).map((s) => s.email).join(', ')}${bulkResult.skipped.length > 3 ? '…' : ''} — not a staff/faculty campus email, or already a member)`}
+                </p>
+              )}
 
               {members.length > 6 && (
                 <input

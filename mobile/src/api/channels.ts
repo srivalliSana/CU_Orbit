@@ -52,6 +52,15 @@ export const getChannelMembers = (id: string) =>
 export const addChannelMember = (id: string, userId: string, role?: "admin" | "member") =>
   client.post(`/channels/${id}/members`, { userId, role });
 
+export interface BulkAddResult {
+  success: boolean;
+  added: { id: string; email: string }[];
+  skipped: { email: string; reason: string }[];
+}
+
+export const bulkAddChannelMembers = (id: string, emails: string[]) =>
+  client.post<BulkAddResult>(`/channels/${id}/members/bulk-add`, { emails }).then((res) => res.data);
+
 export const removeChannelMember = (id: string, userId: string) =>
   client.delete(`/channels/${id}/members/${userId}`);
 
