@@ -359,41 +359,33 @@ export default function ChatScreen({ route, navigation }: Props) {
       return;
     }
 
+    // WhatsApp-style: the whole header title area (name + subtitle) is one
+    // tap target to open channel/contact info — previously only the small ⓘ
+    // icon in headerRight did this, which meant hunting for a tiny target.
+    const openInfo = () => {
+      if (kind === "channel") navigation.navigate("ChannelInfo", { channelId: containerId });
+      else if (kind === "dm" && otherUserId) navigation.navigate("ContactInfo", { userId: otherUserId, name: title, containerId });
+    };
+    const canOpenInfo = kind === "channel" || (kind === "dm" && !!otherUserId);
+
     navigation.setOptions({
       title,
       headerLeft: undefined,
-      headerTitle:
-        kind === "channel" && memberCount != null
-          ? () => (
-              <View>
-                <Text style={styles.headerTitleText} numberOfLines={1}>{title}</Text>
-                <Text style={styles.headerSubtitleText} numberOfLines={1}>
-                  {memberCount} member{memberCount === 1 ? "" : "s"}
-                </Text>
-              </View>
-            )
-          : undefined,
+      headerTitle: () => (
+        <Pressable onPress={canOpenInfo ? openInfo : undefined} disabled={!canOpenInfo} hitSlop={8}>
+          <Text style={styles.headerTitleText} numberOfLines={1}>{title}</Text>
+          {kind === "channel" && memberCount != null ? (
+            <Text style={styles.headerSubtitleText} numberOfLines={1}>
+              {memberCount} member{memberCount === 1 ? "" : "s"}
+            </Text>
+          ) : null}
+        </Pressable>
+      ),
       headerRight: () => (
         <View style={styles.headerActions}>
           <Pressable onPress={() => setWallpaperPickerOpen(true)} hitSlop={8}>
             <Ionicons name="color-palette-outline" size={22} color={colors.primary} />
           </Pressable>
-          {kind === "channel" ? (
-            <Pressable
-              onPress={() => navigation.navigate("ChannelInfo", { channelId: containerId })}
-              hitSlop={8}
-            >
-              <Ionicons name="information-circle-outline" size={24} color={colors.primary} />
-            </Pressable>
-          ) : null}
-          {kind === "dm" && otherUserId ? (
-            <Pressable
-              onPress={() => navigation.navigate("ContactInfo", { userId: otherUserId, name: title, containerId })}
-              hitSlop={8}
-            >
-              <Ionicons name="information-circle-outline" size={24} color={colors.primary} />
-            </Pressable>
-          ) : null}
         </View>
       ),
     });

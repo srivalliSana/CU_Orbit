@@ -2,8 +2,8 @@ import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Pressable,
+  ScrollView,
   Share,
   StyleSheet,
   Switch,
@@ -346,73 +346,93 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
   }
 
   return (
-    <FlatList
-      style={styles.container}
-      data={filteredMembers}
-      keyExtractor={(m) => m.id}
-      ListHeaderComponent={
-        <View>
-          <View style={styles.headerBlock}>
-            {isChannelAdmin || isSuperAdmin ? (
-              <Pressable onPress={changeAvatar} disabled={uploadingAvatar} style={styles.avatarEditWrap}>
-                <Avatar name={channel?.name ?? ""} url={channel?.avatar_url} size={72} />
-                <View style={styles.avatarEditBadge}>
-                  {uploadingAvatar ? <ActivityIndicator size="small" color={colors.primaryText} /> : <Text style={{ fontSize: 11 }}>📷</Text>}
-                </View>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 32 }}>
+      <View style={styles.hero}>
+        {isChannelAdmin || isSuperAdmin ? (
+          <Pressable onPress={changeAvatar} disabled={uploadingAvatar} style={styles.avatarEditWrap}>
+            <Avatar name={channel?.name ?? ""} url={channel?.avatar_url} size={84} />
+            <View style={styles.avatarEditBadge}>
+              {uploadingAvatar ? <ActivityIndicator size="small" color={colors.primaryText} /> : <Text style={{ fontSize: 11 }}>📷</Text>}
+            </View>
+          </Pressable>
+        ) : (
+          <Avatar name={channel?.name ?? ""} url={channel?.avatar_url} size={84} />
+        )}
+
+        {editingInfo ? (
+          <View style={styles.editInfoBlock}>
+            <TextInput
+              value={nameInput}
+              onChangeText={setNameInput}
+              placeholder="Channel name"
+              placeholderTextColor={colors.textMuted}
+              style={styles.editInfoInput}
+            />
+            <TextInput
+              value={topicInput}
+              onChangeText={setTopicInput}
+              placeholder="What's this channel about?"
+              placeholderTextColor={colors.textMuted}
+              multiline
+              style={[styles.editInfoInput, { minHeight: 60, textAlignVertical: "top" }]}
+            />
+            <View style={styles.editInfoActions}>
+              <Pressable onPress={() => setEditingInfo(false)} disabled={savingInfo}>
+                <Text style={{ color: colors.textMuted, fontSize: 13 }}>Cancel</Text>
               </Pressable>
-            ) : (
-              <Avatar name={channel?.name ?? ""} url={channel?.avatar_url} size={72} />
-            )}
-
-            {editingInfo ? (
-              <View style={styles.editInfoBlock}>
-                <TextInput
-                  value={nameInput}
-                  onChangeText={setNameInput}
-                  placeholder="Channel name"
-                  placeholderTextColor={colors.textMuted}
-                  style={styles.editInfoInput}
-                />
-                <TextInput
-                  value={topicInput}
-                  onChangeText={setTopicInput}
-                  placeholder="What's this channel about?"
-                  placeholderTextColor={colors.textMuted}
-                  multiline
-                  style={[styles.editInfoInput, { minHeight: 60, textAlignVertical: "top" }]}
-                />
-                <View style={styles.editInfoActions}>
-                  <Pressable onPress={() => setEditingInfo(false)} disabled={savingInfo}>
-                    <Text style={{ color: colors.textMuted, fontSize: 13 }}>Cancel</Text>
-                  </Pressable>
-                  <Pressable onPress={saveInfo} disabled={savingInfo || !nameInput.trim()}>
-                    <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 13 }}>
-                      {savingInfo ? "Saving…" : "Save"}
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-            ) : (
-              <>
-                <Text style={styles.channelName}># {channel?.name}</Text>
-                {channel?.topic ? <Text style={styles.topic}>{channel.topic}</Text> : null}
-                <Text style={styles.memberCount}>
-                  {channel?.member_count} member{channel?.member_count === 1 ? "" : "s"}
+              <Pressable onPress={saveInfo} disabled={savingInfo || !nameInput.trim()}>
+                <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 13 }}>
+                  {savingInfo ? "Saving…" : "Save"}
                 </Text>
-                {isChannelAdmin || isSuperAdmin ? (
-                  <Pressable onPress={startEditingInfo}>
-                    <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 12, marginTop: 6 }}>
-                      Edit name & topic
-                    </Text>
-                  </Pressable>
-                ) : null}
-              </>
-            )}
+              </Pressable>
+            </View>
           </View>
+        ) : (
+          <>
+            <Text style={styles.channelName}># {channel?.name}</Text>
+            <Text style={styles.memberCount}>
+              {channel?.member_count} member{channel?.member_count === 1 ? "" : "s"}
+            </Text>
+            {channel?.topic ? <Text style={styles.topic}>{channel.topic}</Text> : null}
+            {isChannelAdmin || isSuperAdmin ? (
+              <Pressable onPress={startEditingInfo}>
+                <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 12, marginTop: 6 }}>
+                  Edit name & topic
+                </Text>
+              </Pressable>
+            ) : null}
+          </>
+        )}
+      </View>
 
-          {channel && (isChannelAdmin || isSuperAdmin) ? (
-            <View style={styles.inviteBlock}>
-              <Text style={styles.sectionLabel}>INVITE LINK</Text>
+      <View style={styles.quickRow}>
+        <QuickAction
+          icon="🖼️"
+          label="Media"
+          onPress={() => navigation.navigate("MessageList", { containerId: channelId, mode: "media", title: "Shared media", chatTitle: `# ${channel?.name ?? ""}`, chatKind: "channel" })}
+        />
+        <QuickAction
+          icon="📌"
+          label="Pinned"
+          onPress={() => navigation.navigate("MessageList", { containerId: channelId, mode: "pinned", title: "Pinned messages", chatTitle: `# ${channel?.name ?? ""}`, chatKind: "channel" })}
+        />
+        <QuickAction
+          icon="⭐"
+          label="Starred"
+          onPress={() => navigation.navigate("MessageList", { containerId: channelId, mode: "starred", title: "Starred messages", chatTitle: `# ${channel?.name ?? ""}`, chatKind: "channel" })}
+        />
+        {isChannelAdmin || isSuperAdmin ? (
+          <QuickAction icon="＋" label="Add" onPress={() => { setAdding((v) => !v); setCandidateSearch(""); }} />
+        ) : null}
+      </View>
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      {channel && (isChannelAdmin || isSuperAdmin) ? (
+        <View style={styles.sectionWrap}>
+          <Text style={styles.sectionLabel}>INVITE</Text>
+          <View style={styles.card}>
+            <View style={styles.cardPad}>
               <Text style={styles.inviteHint}>
                 Anyone with a cutm.ac.in or cutmap.ac.in account can join with this link, shared anywhere.
               </Text>
@@ -433,236 +453,239 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
                 <Text style={styles.shareButtonText}>Share invite link</Text>
               </Pressable>
             </View>
-          ) : null}
-
-          {isChannelAdmin && channel ? (
-            <View style={styles.inviteBlock}>
-              <Text style={styles.sectionLabel}>INVITE BY EMAIL</Text>
-              <Text style={styles.inviteHint}>Sends the join link to their campus email.</Text>
-              <View style={styles.inviteEmailRow}>
-                <TextInput
-                  value={inviteEmail}
-                  onChangeText={setInviteEmail}
-                  placeholder="name@cutm.ac.in"
-                  placeholderTextColor={colors.textMuted}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  style={styles.inviteEmailInput}
-                />
-                <Pressable
-                  style={styles.shareButton}
-                  onPress={sendInvite}
-                  disabled={invitingByEmail || !inviteEmail.trim()}
-                >
-                  <Text style={styles.shareButtonText}>{invitingByEmail ? "Sending…" : "Send"}</Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : null}
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          {isChannelAdmin && joinRequests.length > 0 ? (
-            <View style={styles.inviteBlock}>
-              <Text style={styles.sectionLabel}>JOIN REQUESTS · {joinRequests.length}</Text>
-              {joinRequests.map((r) => (
-                <View key={r.id} style={styles.memberRow}>
-                  <Avatar name={r.userName} size={32} />
-                  <Text style={[styles.memberMid, styles.memberName]}>{r.userName}</Text>
-                  <View style={styles.memberActions}>
-                    <Pressable disabled={busyRequestId === r.id} onPress={() => respondToRequest(r.id, true)}>
-                      <Text style={styles.actionText}>Approve</Text>
-                    </Pressable>
-                    <Pressable disabled={busyRequestId === r.id} onPress={() => respondToRequest(r.id, false)}>
-                      <Text style={styles.removeText}>Reject</Text>
-                    </Pressable>
-                  </View>
+            {isChannelAdmin ? (
+              <View style={[styles.cardPad, styles.cardDivider]}>
+                <Text style={styles.inviteHint}>Invite by email — sends the join link to their campus email.</Text>
+                <View style={styles.inviteEmailRow}>
+                  <TextInput
+                    value={inviteEmail}
+                    onChangeText={setInviteEmail}
+                    placeholder="name@cutm.ac.in"
+                    placeholderTextColor={colors.textMuted}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    style={styles.inviteEmailInput}
+                  />
+                  <Pressable
+                    style={styles.shareButton}
+                    onPress={sendInvite}
+                    disabled={invitingByEmail || !inviteEmail.trim()}
+                  >
+                    <Text style={styles.shareButtonText}>{invitingByEmail ? "Sending…" : "Send"}</Text>
+                  </Pressable>
                 </View>
-              ))}
-            </View>
-          ) : null}
-
-          {isChannelAdmin && channel ? (
-            <View style={styles.settingsBlock}>
-              <Text style={styles.sectionLabel}>SETTINGS</Text>
-              <ToggleRow
-                label="Only admins can post"
-                value={channel.restricted_messaging}
-                onChange={(v) => toggle("restricted_messaging", v)}
-              />
-              <ToggleRow
-                label="Only admins can edit channel info"
-                value={channel.info_edit_restricted}
-                onChange={(v) => toggle("info_edit_restricted", v)}
-              />
-              <ToggleRow
-                label="Approval required to join"
-                value={channel.approval_required}
-                onChange={(v) => toggle("approval_required", v)}
-              />
-            </View>
-          ) : null}
-
-          <View style={styles.settingsBlock}>
-            <Pressable
-              style={styles.navRow}
-              onPress={() => navigation.navigate("MessageList", { containerId: channelId, mode: "media", title: "Shared media", chatTitle: `# ${channel?.name ?? ""}`, chatKind: "channel" })}
-            >
-              <Text style={styles.navRowText}>🖼️ Shared media</Text>
-            </Pressable>
-            <Pressable
-              style={styles.navRow}
-              onPress={() => navigation.navigate("MessageList", { containerId: channelId, mode: "pinned", title: "Pinned messages", chatTitle: `# ${channel?.name ?? ""}`, chatKind: "channel" })}
-            >
-              <Text style={styles.navRowText}>📌 Pinned messages</Text>
-            </Pressable>
-            <Pressable
-              style={styles.navRow}
-              onPress={() => navigation.navigate("MessageList", { containerId: channelId, mode: "starred", title: "Starred messages", chatTitle: `# ${channel?.name ?? ""}`, chatKind: "channel" })}
-            >
-              <Text style={styles.navRowText}>⭐ Starred messages</Text>
-            </Pressable>
-            <Pressable
-              style={styles.navRow}
-              onPress={() => navigation.navigate("Lists", { channelId, channelName: channel?.name })}
-            >
-              <Text style={styles.navRowText}>📋 Lists</Text>
-            </Pressable>
-            <Pressable
-              style={styles.navRow}
-              onPress={() => navigation.navigate("Canvas", { channelId })}
-            >
-              <Text style={styles.navRowText}>📝 Canvas</Text>
-            </Pressable>
-            <Pressable
-              style={styles.navRow}
-              onPress={() => navigation.navigate("Workflows", { channelId })}
-            >
-              <Text style={styles.navRowText}>⚡ Workflows</Text>
-            </Pressable>
+              </View>
+            ) : null}
           </View>
+        </View>
+      ) : null}
 
-          {selfId && channel && !isCreator(selfId) ? (
-            <View style={styles.settingsBlock}>
-              <Pressable style={styles.navRow} onPress={leaveChannel} disabled={busyUserId === selfId}>
-                <Text style={styles.deleteChannelText}>🚪 Leave channel</Text>
+      {isChannelAdmin && joinRequests.length > 0 ? (
+        <View style={styles.sectionWrap}>
+          <Text style={styles.sectionLabel}>JOIN REQUESTS · {joinRequests.length}</Text>
+          <View style={styles.card}>
+            {joinRequests.map((r, i) => (
+              <View key={r.id} style={[styles.memberRow, i > 0 && styles.cardDivider]}>
+                <Avatar name={r.userName} size={32} />
+                <Text style={[styles.memberMid, styles.memberName]}>{r.userName}</Text>
+                <View style={styles.memberActions}>
+                  <Pressable disabled={busyRequestId === r.id} onPress={() => respondToRequest(r.id, true)}>
+                    <Text style={styles.actionText}>Approve</Text>
+                  </Pressable>
+                  <Pressable disabled={busyRequestId === r.id} onPress={() => respondToRequest(r.id, false)}>
+                    <Text style={styles.removeText}>Reject</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
+      <View style={styles.sectionWrap}>
+        <View style={styles.membersHeaderRow}>
+          <Text style={styles.sectionLabel}>MEMBERS · {members.length}</Text>
+          {isChannelAdmin || isSuperAdmin ? (
+            <View style={{ flexDirection: "row", gap: 16 }}>
+              <Pressable onPress={bulkAddCsv} disabled={bulkBusy}>
+                <Text style={styles.addLink}>{bulkBusy ? "Adding…" : "Bulk add (CSV)"}</Text>
+              </Pressable>
+              <Pressable onPress={() => { setAdding((v) => !v); setCandidateSearch(""); }}>
+                <Text style={styles.addLink}>{adding ? "Cancel" : "+ Add"}</Text>
               </Pressable>
             </View>
           ) : null}
+        </View>
+
+        {members.length > 6 ? (
+          <TextInput
+            value={memberSearch}
+            onChangeText={setMemberSearch}
+            placeholder="Search members"
+            placeholderTextColor={colors.textMuted}
+            style={styles.memberSearchInput}
+          />
+        ) : null}
+
+        {adding ? (
+          <View style={styles.addBox}>
+            {usersQuery.isLoading ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : (
+              <>
+                <TextInput
+                  value={candidateSearch}
+                  onChangeText={setCandidateSearch}
+                  placeholder="Search people to add"
+                  placeholderTextColor={colors.textMuted}
+                  autoFocus
+                  style={styles.memberSearchInput}
+                />
+                {filteredCandidates.length === 0 ? (
+                  <Text style={styles.emptyText}>No one else to add.</Text>
+                ) : (
+                  filteredCandidates.map((c) => (
+                    <Pressable
+                      key={c.id}
+                      disabled={busyUserId === c.id}
+                      onPress={() => addMember(c.id)}
+                      style={styles.candidateRow}
+                    >
+                      <Avatar name={c.name} url={c.avatarUrl} size={32} />
+                      <Text style={styles.candidateName}>{c.name}</Text>
+                    </Pressable>
+                  ))
+                )}
+              </>
+            )}
+          </View>
+        ) : null}
+
+        <View style={styles.card}>
+          {filteredMembers.map((item, i) => (
+            <View key={item.id} style={[styles.memberRow, i > 0 && styles.cardDivider]}>
+              <Avatar name={item.name} url={item.avatarUrl} size={36} />
+              <View style={styles.memberMid}>
+                <Text style={styles.memberName}>
+                  {item.name}
+                  {isCreator(item.id) ? <Text style={styles.creatorTag}>  creator</Text> : null}
+                </Text>
+                {item.role === "admin" ? <Text style={styles.adminTag}>Admin</Text> : null}
+              </View>
+              {isChannelAdmin && !isCreator(item.id) && item.id !== selfId ? (
+                <View style={styles.memberActions}>
+                  <Pressable
+                    disabled={busyUserId === item.id}
+                    onPress={() => setRole(item.id, item.role === "admin" ? "member" : "admin")}
+                  >
+                    <Text style={styles.actionText}>{item.role === "admin" ? "Demote" : "Make admin"}</Text>
+                  </Pressable>
+                  <Pressable disabled={busyUserId === item.id} onPress={() => removeMember(item.id, item.name)}>
+                    <Text style={styles.removeText}>Remove</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {isChannelAdmin && channel ? (
+        <View style={styles.sectionWrap}>
+          <Text style={styles.sectionLabel}>SETTINGS</Text>
+          <View style={[styles.card, styles.cardPad]}>
+            <ToggleRow
+              label="Only admins can post"
+              value={channel.restricted_messaging}
+              onChange={(v) => toggle("restricted_messaging", v)}
+            />
+            <ToggleRow
+              label="Only admins can edit channel info"
+              value={channel.info_edit_restricted}
+              onChange={(v) => toggle("info_edit_restricted", v)}
+            />
+            <ToggleRow
+              label="Approval required to join"
+              value={channel.approval_required}
+              onChange={(v) => toggle("approval_required", v)}
+            />
+          </View>
+        </View>
+      ) : null}
+
+      <View style={styles.sectionWrap}>
+        <Text style={styles.sectionLabel}>MORE</Text>
+        <View style={styles.card}>
+          <NavRow icon="📋" label="Lists" onPress={() => navigation.navigate("Lists", { channelId, channelName: channel?.name })} />
+          <NavRow icon="📝" label="Canvas" onPress={() => navigation.navigate("Canvas", { channelId })} divider />
+          <NavRow icon="⚡" label="Workflows" onPress={() => navigation.navigate("Workflows", { channelId })} divider />
+        </View>
+      </View>
+
+      <View style={styles.sectionWrap}>
+        <Text style={[styles.sectionLabel, styles.dangerLabel]}>DANGER ZONE</Text>
+        <View style={[styles.card, styles.dangerCard]}>
+          {selfId && channel && !isCreator(selfId) ? (
+            <Pressable style={styles.cardRow} onPress={leaveChannel} disabled={busyUserId === selfId}>
+              <View style={[styles.iconWrap, styles.iconWrapDanger]}><Text>🚪</Text></View>
+              <Text style={styles.deleteChannelText}>Leave channel</Text>
+            </Pressable>
+          ) : null}
 
           {isChannelAdmin && channel ? (
-            <View style={styles.settingsBlock}>
+            <>
               {channel.archived_at ? (
                 <Text style={styles.deactivatedNotice}>
                   This channel is archived — everyone can still read its history, but no one can post until it's unarchived.
                 </Text>
               ) : null}
-              <Pressable style={styles.navRow} onPress={() => toggle("archived", !channel.archived_at)}>
-                <Text style={styles.navRowText}>{channel.archived_at ? "📤 Unarchive channel" : "🗄️ Archive channel"}</Text>
+              <Pressable style={[styles.cardRow, styles.cardDivider]} onPress={() => toggle("archived", !channel.archived_at)}>
+                <View style={[styles.iconWrap, styles.iconWrapDanger]}><Text>{channel.archived_at ? "📤" : "🗄️"}</Text></View>
+                <Text style={styles.deleteChannelText}>{channel.archived_at ? "Unarchive channel" : "Archive channel"}</Text>
               </Pressable>
-            </View>
+            </>
           ) : null}
 
           {isSuperAdmin && channel ? (
-            <View style={styles.settingsBlock}>
+            <>
               {channel.is_active === false ? (
                 <Text style={styles.deactivatedNotice}>
                   This channel is deactivated — hidden from members, and no one can message here until you reactivate it.
                 </Text>
               ) : null}
-              <Pressable style={styles.navRow} onPress={toggleChannelActive} disabled={deleting}>
+              <Pressable style={[styles.cardRow, styles.cardDivider]} onPress={toggleChannelActive} disabled={deleting}>
+                <View style={[styles.iconWrap, styles.iconWrapDanger]}><Text>{channel.is_active === false ? "✅" : "🚫"}</Text></View>
                 <Text style={[styles.deleteChannelText, channel.is_active === false && styles.reactivateText]}>
-                  {deleting ? "Updating…" : channel.is_active === false ? "✅ Reactivate channel" : "🚫 Deactivate channel"}
+                  {deleting ? "Updating…" : channel.is_active === false ? "Reactivate channel" : "Deactivate channel"}
                 </Text>
               </Pressable>
-            </View>
-          ) : null}
-
-          <View style={styles.membersHeaderRow}>
-            <Text style={styles.sectionLabel}>MEMBERS</Text>
-            {isChannelAdmin || isSuperAdmin ? (
-              <View style={{ flexDirection: "row", gap: 16 }}>
-                <Pressable onPress={bulkAddCsv} disabled={bulkBusy}>
-                  <Text style={styles.addLink}>{bulkBusy ? "Adding…" : "Bulk add (CSV)"}</Text>
-                </Pressable>
-                <Pressable onPress={() => { setAdding((v) => !v); setCandidateSearch(""); }}>
-                  <Text style={styles.addLink}>{adding ? "Cancel" : "+ Add"}</Text>
-                </Pressable>
-              </View>
-            ) : null}
-          </View>
-
-          {members.length > 6 ? (
-            <TextInput
-              value={memberSearch}
-              onChangeText={setMemberSearch}
-              placeholder="Search members"
-              placeholderTextColor={colors.textMuted}
-              style={styles.memberSearchInput}
-            />
-          ) : null}
-
-          {adding ? (
-            <View style={styles.addBox}>
-              {usersQuery.isLoading ? (
-                <ActivityIndicator color={colors.primary} />
-              ) : (
-                <>
-                  <TextInput
-                    value={candidateSearch}
-                    onChangeText={setCandidateSearch}
-                    placeholder="Search people to add"
-                    placeholderTextColor={colors.textMuted}
-                    autoFocus
-                    style={styles.memberSearchInput}
-                  />
-                  {filteredCandidates.length === 0 ? (
-                    <Text style={styles.emptyText}>No one else to add.</Text>
-                  ) : (
-                    filteredCandidates.map((c) => (
-                      <Pressable
-                        key={c.id}
-                        disabled={busyUserId === c.id}
-                        onPress={() => addMember(c.id)}
-                        style={styles.candidateRow}
-                      >
-                        <Avatar name={c.name} url={c.avatarUrl} size={32} />
-                        <Text style={styles.candidateName}>{c.name}</Text>
-                      </Pressable>
-                    ))
-                  )}
-                </>
-              )}
-            </View>
+            </>
           ) : null}
         </View>
-      }
-      renderItem={({ item }) => (
-        <View style={styles.memberRow}>
-          <Avatar name={item.name} url={item.avatarUrl} size={36} />
-          <View style={styles.memberMid}>
-            <Text style={styles.memberName}>
-              {item.name}
-              {isCreator(item.id) ? <Text style={styles.creatorTag}>  creator</Text> : null}
-            </Text>
-            {item.role === "admin" ? <Text style={styles.adminTag}>Admin</Text> : null}
-          </View>
-          {isChannelAdmin && !isCreator(item.id) && item.id !== selfId ? (
-            <View style={styles.memberActions}>
-              <Pressable
-                disabled={busyUserId === item.id}
-                onPress={() => setRole(item.id, item.role === "admin" ? "member" : "admin")}
-              >
-                <Text style={styles.actionText}>{item.role === "admin" ? "Demote" : "Make admin"}</Text>
-              </Pressable>
-              <Pressable disabled={busyUserId === item.id} onPress={() => removeMember(item.id, item.name)}>
-                <Text style={styles.removeText}>Remove</Text>
-              </Pressable>
-            </View>
-          ) : null}
-        </View>
-      )}
-    />
+      </View>
+    </ScrollView>
+  );
+}
+
+function QuickAction({ icon, label, onPress }: { icon: string; label: string; onPress: () => void }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  return (
+    <Pressable style={styles.quickBtn} onPress={onPress}>
+      <View style={styles.quickCircle}><Text style={{ fontSize: 17 }}>{icon}</Text></View>
+      <Text style={styles.quickLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function NavRow({ icon, label, onPress, divider }: { icon: string; label: string; onPress: () => void; divider?: boolean }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  return (
+    <Pressable style={[styles.cardRow, divider && styles.cardDivider]} onPress={onPress}>
+      <View style={styles.iconWrap}><Text>{icon}</Text></View>
+      <Text style={styles.navRowText}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -695,9 +718,11 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     justifyContent: "center",
     alignItems: "center",
   },
-  headerBlock: {
+  hero: {
     alignItems: "center",
-    paddingVertical: 24,
+    paddingTop: 22,
+    paddingBottom: 18,
+    paddingHorizontal: 24,
     gap: 4,
   },
   avatarEditWrap: {
@@ -738,20 +763,93 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     gap: 16,
   },
   channelName: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 19,
+    fontWeight: "800",
     color: colors.text,
-    marginTop: 8,
+    marginTop: 10,
   },
   topic: {
-    fontSize: 13,
+    fontSize: 12.5,
     color: colors.textMuted,
     textAlign: "center",
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
+    marginTop: 8,
+    lineHeight: 18,
   },
   memberCount: {
-    fontSize: 12,
+    fontSize: 12.5,
     color: colors.textMuted,
+    marginTop: 4,
+  },
+  quickRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+  },
+  quickBtn: {
+    alignItems: "center",
+    gap: 6,
+    width: 68,
+  },
+  quickCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: colors.textMuted,
+  },
+  sectionWrap: {
+    paddingHorizontal: 14,
+    marginBottom: 14,
+  },
+  card: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  cardPad: {
+    padding: 14,
+    gap: 8,
+  },
+  cardDivider: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  cardRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+  },
+  iconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    backgroundColor: `${colors.primary}22`,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconWrapDanger: {
+    backgroundColor: `${colors.danger}1A`,
+  },
+  dangerLabel: {
+    color: colors.danger,
+  },
+  dangerCard: {
+    borderColor: `${colors.danger}55`,
   },
   error: {
     color: colors.danger,

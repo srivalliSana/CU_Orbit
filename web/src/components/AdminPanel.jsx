@@ -72,6 +72,10 @@ function MembersTab({ currentUser }) {
   const [promoteBusy, setPromoteBusy] = useState(false);
   const [promoteDone, setPromoteDone] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [promoteModalOpen, setPromoteModalOpen] = useState(false);
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [rowMenuId, setRowMenuId] = useState(null);
 
   const load = () => getAdminUsers().then(setUsers).catch((e) => setError(e.message));
   useEffect(() => { load(); }, []);
@@ -119,6 +123,7 @@ function MembersTab({ currentUser }) {
       const result = await bulkAddUsers(emails);
       setBulkResult(result);
       setBulkEmails('');
+      setBulkModalOpen(false);
       load();
     } catch (e) {
       setError(e.message);
@@ -135,6 +140,7 @@ function MembersTab({ currentUser }) {
       await promoteByEmail(promoteEmail.trim().toLowerCase());
       setPromoteEmail('');
       setPromoteDone(true);
+      setPromoteModalOpen(false);
       setTimeout(() => setPromoteDone(false), 2500);
       load();
     } catch (e) {
@@ -147,149 +153,128 @@ function MembersTab({ currentUser }) {
   if (error) return <p role="alert" className="text-sm text-red-600">{error}</p>;
   if (!users) return <p className="text-sm text-slate-400">Loading…</p>;
 
+  const adminCount = users.filter((u) => u.role === 'admin').length;
+  const superadminCount = users.filter((u) => u.is_superadmin).length;
+  const filteredUsers = users.filter((u) => {
+    const q = memberSearch.trim().toLowerCase();
+    if (!q) return true;
+    return u.name?.toLowerCase().includes(q) || (u.campus_email || u.email || '').toLowerCase().includes(q);
+  });
+
   return (
-    <div className="space-y-6">
-      {isSuperAdmin && (
-        <form onSubmit={onPromote} className="rounded-xl border border-slate-200 p-3 dark:border-slate-800">
-          <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">Promote to admin by email</label>
-          <div className="mt-1 flex items-center gap-2">
-            <input
-              type="email"
-              required
-              value={promoteEmail}
-              onChange={(e) => setPromoteEmail(e.target.value)}
-              placeholder="name@cutm.ac.in"
-              className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:text-slate-100"
-            />
-            <button
-              type="submit"
-              disabled={promoteBusy || !promoteEmail.trim()}
-              className="shrink-0 rounded-lg bg-accent-600 px-3 py-2 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
-            >
-              {promoteBusy ? 'Promoting…' : promoteDone ? 'Done ✓' : 'Promote'}
-            </button>
-          </div>
-          <p className="mt-1 text-[11px] text-slate-400">
-            Creates the account if they haven't signed in yet, then makes them an app admin. Grant superadmin separately, from their row below.
-          </p>
-        </form>
-      )}
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-3">
+        <StatCard label="Members" value={users.length} />
+        <StatCard label="Admins" value={adminCount} />
+        <StatCard label="Superadmin" value={superadminCount} accent />
+      </div>
 
-      {isSuperAdmin && (
-        <div className="rounded-xl border border-red-200 bg-red-50/50 p-3 dark:border-red-900 dark:bg-red-950/20">
-          <label className="text-xs font-semibold uppercase tracking-wide text-red-600 dark:text-red-400">Student sign-in is disabled</label>
-          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-            Students can no longer sign in. Deactivate every existing student account to lock out anyone who signed in before this policy took effect.
-          </p>
-          <button
-            onClick={onDeactivateAllStudents}
-            disabled={deactivatingStudents}
-            className="mt-2 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
-          >
-            {deactivatingStudents ? 'Deactivating…' : 'Deactivate all students'}
-          </button>
-        </div>
-      )}
-
-      <form onSubmit={onBulkAdd} className="rounded-xl border border-slate-200 p-3 dark:border-slate-800">
-        <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">Bulk add by campus email</label>
-        <textarea
-          value={bulkEmails}
-          onChange={(e) => setBulkEmails(e.target.value)}
-          placeholder="one@cutm.ac.in, two@cutmap.ac.in ..."
-          rows={2}
-          className="mt-1 w-full rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:text-slate-100"
+      <div className="flex items-center gap-2">
+        <input
+          value={memberSearch}
+          onChange={(e) => setMemberSearch(e.target.value)}
+          placeholder="Search members by name or email"
+          className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:text-slate-100"
         />
-        <div className="mt-2 flex items-center justify-between">
+        <div className="relative shrink-0">
           <button
-            type="submit"
-            disabled={bulkBusy || !bulkEmails.trim()}
-            className="rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
+            onClick={() => setAddMenuOpen((v) => !v)}
+            className="flex h-[38px] w-[38px] items-center justify-center rounded-lg bg-accent-600 text-lg font-bold text-white hover:bg-accent-700"
           >
-            {bulkBusy ? 'Adding…' : 'Add'}
+            +
           </button>
-          {bulkResult && (
-            <span className="text-xs text-slate-500">
-              {bulkResult.added.length} added, {bulkResult.skipped.length} skipped
-            </span>
+          {addMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setAddMenuOpen(false)} />
+              <div className="absolute right-0 top-10 z-20 w-64 rounded-xl border border-slate-200 bg-white py-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                {isSuperAdmin && (
+                  <MenuItem label="Promote to admin by email" onClick={() => { setAddMenuOpen(false); setPromoteModalOpen(true); }} />
+                )}
+                <MenuItem label="Bulk add by campus email" onClick={() => { setAddMenuOpen(false); setBulkModalOpen(true); }} />
+                {isSuperAdmin && (
+                  <MenuItem label="Deactivate all students" danger onClick={() => { setAddMenuOpen(false); onDeactivateAllStudents(); }} />
+                )}
+              </div>
+            </>
           )}
         </div>
-      </form>
+      </div>
 
-      <input
-        value={memberSearch}
-        onChange={(e) => setMemberSearch(e.target.value)}
-        placeholder="Search members by name or email"
-        className="w-full rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:text-slate-100"
-      />
+      {bulkResult && (
+        <p className="text-xs text-slate-500">{bulkResult.added.length} added, {bulkResult.skipped.length} skipped</p>
+      )}
 
-      <div className="overflow-x-auto">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700/60">
         <table className="w-full min-w-[560px] text-left text-sm">
-          <thead>
+          <thead className="bg-slate-50 dark:bg-slate-800/60">
             <tr className="text-xs uppercase tracking-wide text-slate-400">
-              <th className="pb-2">Member</th>
-              <th className="pb-2">Role</th>
-              <th className="pb-2">Status</th>
-              <th className="pb-2" />
+              <th className="px-3.5 py-2.5">Member</th>
+              <th className="px-3.5 py-2.5">Role</th>
+              <th className="px-3.5 py-2.5">Status</th>
+              <th className="px-3.5 py-2.5" />
             </tr>
           </thead>
           <tbody>
-            {users
-              .filter((u) => {
-                const q = memberSearch.trim().toLowerCase();
-                if (!q) return true;
-                return u.name?.toLowerCase().includes(q) || (u.campus_email || u.email || '').toLowerCase().includes(q);
-              })
-              .map((u) => (
+            {filteredUsers.map((u) => (
               <tr key={u.id} className="border-t border-slate-100 dark:border-slate-800">
-                <td className="py-2 pr-3">
+                <td className="px-3.5 py-2.5">
                   <div className="flex items-center gap-2">
                     <Avatar name={u.name} url={u.avatarUrl} size={28} />
                     <div className="min-w-0">
                       <p className="truncate font-medium text-slate-800 dark:text-slate-100">
                         {u.name}
-                        {u.is_superadmin && <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Superadmin</span>}
+                        {u.is_superadmin && <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Super</span>}
                       </p>
                       <p className="truncate text-xs text-slate-400">{u.campus_email || u.email}</p>
                     </div>
                   </div>
                 </td>
-                <td className="py-2 pr-3">
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={u.role}
-                      onChange={(e) => onRoleChange(u.id, e.target.value)}
-                      // Promoting to/from admin is superadmin-only (enforced
-                      // server-side too) — disable the control entirely for
-                      // a plain admin viewing another admin's row, rather
-                      // than let them pick a change the server will 403.
-                      disabled={u.id === currentUser?.id || (u.role === 'admin' && !isSuperAdmin)}
-                      className="rounded border border-slate-200 bg-transparent px-2 py-1 text-xs dark:border-slate-700"
-                    >
-                      {ROLES.filter((r) => r !== 'admin' || isSuperAdmin || u.role === 'admin').map((r) => <option key={r} value={r}>{r}</option>)}
-                    </select>
-                    {isSuperAdmin && u.role === 'admin' && u.id !== currentUser?.id && (
-                      <button
-                        onClick={() => onToggleSuperAdmin(u)}
-                        className="text-[11px] font-medium text-accent-600 hover:text-accent-700"
-                      >
-                        {u.is_superadmin ? 'Revoke superadmin' : 'Make superadmin'}
-                      </button>
-                    )}
-                  </div>
+                <td className="px-3.5 py-2.5">
+                  <select
+                    value={u.role}
+                    onChange={(e) => onRoleChange(u.id, e.target.value)}
+                    // Promoting to/from admin is superadmin-only (enforced
+                    // server-side too) — disable the control entirely for
+                    // a plain admin viewing another admin's row, rather
+                    // than let them pick a change the server will 403.
+                    disabled={u.id === currentUser?.id || (u.role === 'admin' && !isSuperAdmin)}
+                    className="rounded border border-slate-200 bg-transparent px-2 py-1 text-xs dark:border-slate-700"
+                  >
+                    {ROLES.filter((r) => r !== 'admin' || isSuperAdmin || u.role === 'admin').map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>
                 </td>
-                <td className="py-2 pr-3">
+                <td className="px-3.5 py-2.5">
                   {u.is_active === false
                     ? <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-700 dark:bg-red-950 dark:text-red-300">Deactivated</span>
                     : <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs text-green-700 dark:bg-green-950 dark:text-green-300">Active</span>}
                 </td>
-                <td className="py-2 text-right">
+                <td className="px-3.5 py-2.5 text-right">
                   {u.id !== currentUser?.id && (
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => onToggleActive(u)} className="text-xs text-slate-500 hover:text-slate-700">
-                        {u.is_active === false ? 'Reactivate' : 'Deactivate'}
+                    <div className="relative inline-block">
+                      <button
+                        onClick={() => setRowMenuId(rowMenuId === u.id ? null : u.id)}
+                        className="rounded px-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700"
+                      >
+                        ⋮
                       </button>
-                      <button onClick={() => onRemove(u)} className="text-xs text-red-600 hover:text-red-700">Remove</button>
+                      {rowMenuId === u.id && (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={() => setRowMenuId(null)} />
+                          <div className="absolute right-0 top-8 z-20 w-56 rounded-xl border border-slate-200 bg-white py-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                            {isSuperAdmin && u.role === 'admin' && (
+                              <MenuItem
+                                label={u.is_superadmin ? 'Revoke superadmin' : 'Make superadmin'}
+                                onClick={() => { setRowMenuId(null); onToggleSuperAdmin(u); }}
+                              />
+                            )}
+                            <MenuItem
+                              label={u.is_active === false ? 'Reactivate' : 'Deactivate'}
+                              onClick={() => { setRowMenuId(null); onToggleActive(u); }}
+                            />
+                            <MenuItem label="Remove from workspace" danger onClick={() => { setRowMenuId(null); onRemove(u); }} />
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
                 </td>
@@ -297,6 +282,94 @@ function MembersTab({ currentUser }) {
             ))}
           </tbody>
         </table>
+      </div>
+
+      {promoteModalOpen && (
+        <Modal onClose={() => setPromoteModalOpen(false)} title="Promote to admin by email">
+          <form onSubmit={onPromote} className="space-y-3">
+            <p className="text-xs text-slate-400">
+              Creates the account if they haven't signed in yet, then makes them an app admin. Grant superadmin separately, from their row.
+            </p>
+            <input
+              type="email"
+              required
+              autoFocus
+              value={promoteEmail}
+              onChange={(e) => setPromoteEmail(e.target.value)}
+              placeholder="name@cutm.ac.in"
+              className="w-full rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:text-slate-100"
+            />
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setPromoteModalOpen(false)} className="text-sm text-slate-500 hover:text-slate-700">Cancel</button>
+              <button
+                type="submit"
+                disabled={promoteBusy || !promoteEmail.trim()}
+                className="rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
+              >
+                {promoteBusy ? 'Promoting…' : promoteDone ? 'Done ✓' : 'Promote'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {bulkModalOpen && (
+        <Modal onClose={() => setBulkModalOpen(false)} title="Bulk add by campus email">
+          <form onSubmit={onBulkAdd} className="space-y-3">
+            <p className="text-xs text-slate-400">Comma or newline separated.</p>
+            <textarea
+              value={bulkEmails}
+              onChange={(e) => setBulkEmails(e.target.value)}
+              placeholder="one@cutm.ac.in, two@cutmap.ac.in ..."
+              rows={3}
+              autoFocus
+              className="w-full rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:text-slate-100"
+            />
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setBulkModalOpen(false)} className="text-sm text-slate-500 hover:text-slate-700">Cancel</button>
+              <button
+                type="submit"
+                disabled={bulkBusy || !bulkEmails.trim()}
+                className="rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
+              >
+                {bulkBusy ? 'Adding…' : 'Add'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function StatCard({ label, value, accent }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center dark:border-slate-700/60 dark:bg-slate-800/40">
+      <p className={`text-lg font-extrabold ${accent ? 'text-amber-500' : 'text-slate-800 dark:text-slate-100'}`}>{value}</p>
+      <p className="text-[11px] font-semibold text-slate-400">{label}</p>
+    </div>
+  );
+}
+
+function MenuItem({ label, onClick, danger }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`block w-full px-3.5 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-700/60 ${
+        danger ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-200'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function Modal({ title, onClose, children }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+        <h3 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">{title}</h3>
+        {children}
       </div>
     </div>
   );

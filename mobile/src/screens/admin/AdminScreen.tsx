@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 
 import Avatar from "../../components/Avatar";
+import ActionSheet, { type ActionSheetAction } from "../../components/ActionSheet";
 import {
   bulkAddUsers, changeUserRole, deactivateAllStudents, getActivitySummary, getAdminUsers, getAuditLog,
   getDeletedMessages, getPermissions, getSecurityEvents, getSystemHealth, promoteByEmail, removeUser,
@@ -116,9 +117,13 @@ function MembersTab() {
   const [error, setError] = useState<string | null>(null);
   const [bulkEmails, setBulkEmails] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [promoteEmail, setPromoteEmail] = useState("");
   const [promoteBusy, setPromoteBusy] = useState(false);
+  const [promoteModalOpen, setPromoteModalOpen] = useState(false);
   const [memberSearch, setMemberSearch] = useState("");
+  const [fabOpen, setFabOpen] = useState(false);
+  const [rowMenuUser, setRowMenuUser] = useState<User | null>(null);
 
   const load = () => getAdminUsers().then(setUsers).catch((e) => setError(apiErrorMessage(e)));
   useEffect(() => { load(); }, []);
@@ -156,6 +161,7 @@ function MembersTab() {
       const result = await bulkAddUsers(emails);
       Alert.alert("Bulk add", `${result.added.length} added, ${result.skipped.length} skipped`);
       setBulkEmails("");
+      setBulkModalOpen(false);
       load();
     } catch (e) {
       setError(apiErrorMessage(e));
@@ -170,6 +176,7 @@ function MembersTab() {
       await promoteByEmail(promoteEmail.trim().toLowerCase());
       Alert.alert("Promoted", `${promoteEmail.trim()} is now an admin.`);
       setPromoteEmail("");
+      setPromoteModalOpen(false);
       load();
     } catch (e) {
       setError(apiErrorMessage(e));
@@ -209,105 +216,164 @@ function MembersTab() {
     return u.name?.toLowerCase().includes(q) || email.includes(q);
   });
 
+  const adminCount = users.filter((u) => u.role === "admin").length;
+  const superadminCount = users.filter((u) => u.is_superadmin).length;
+
+  const fabActions: ActionSheetAction[] = [];
+  if (isSuperAdmin) {
+    fabActions.push({
+      key: "promote", label: "Promote to admin by email", icon: "person-add-outline",
+      onPress: () => setPromoteModalOpen(true),
+    });
+  }
+  fabActions.push({
+    key: "bulk", label: "Bulk add by campus email", icon: "people-outline",
+    onPress: () => setBulkModalOpen(true),
+  });
+  if (isSuperAdmin) {
+    fabActions.push({
+      key: "deactivate-students", label: "Deactivate all students", icon: "close-circle-outline",
+      destructive: true, onPress: onDeactivateAllStudents,
+    });
+  }
+
+  const rowMenuActions: ActionSheetAction[] = rowMenuUser ? [
+    ...(isSuperAdmin && rowMenuUser.role === "admin" ? [{
+      key: "superadmin", label: rowMenuUser.is_superadmin ? "Revoke superadmin" : "Make superadmin",
+      icon: "shield-checkmark-outline" as const, onPress: () => onToggleSuperAdmin(rowMenuUser),
+    }] : []),
+    {
+      key: "active", label: rowMenuUser.is_active === false ? "Reactivate" : "Deactivate",
+      icon: "power-outline", onPress: () => onToggleActive(rowMenuUser),
+    },
+    {
+      key: "remove", label: "Remove from workspace", icon: "trash-outline",
+      destructive: true, onPress: () => onRemove(rowMenuUser),
+    },
+  ] : [];
+
   return (
-    <FlatList
-      data={filteredUsers}
-      keyExtractor={(u) => u.id}
-      contentContainerStyle={{ paddingBottom: 24 }}
-      ListHeaderComponent={
-        <View>
-          {isSuperAdmin ? (
-            <View style={styles.bulkBox}>
-              <Text style={styles.bulkLabel}>Promote to admin by email</Text>
+    <>
+      <FlatList
+        data={filteredUsers}
+        keyExtractor={(u) => u.id}
+        contentContainerStyle={{ paddingBottom: 24 }}
+        ListHeaderComponent={
+          <View>
+            <View style={styles.statRow}>
+              <StatTile label="Members" value={users.length} />
+              <StatTile label="Admins" value={adminCount} />
+              <StatTile label="Superadmin" value={superadminCount} />
+            </View>
+
+            <View style={styles.toolbarRow}>
               <TextInput
-                value={promoteEmail}
-                onChangeText={setPromoteEmail}
-                placeholder="name@cutm.ac.in"
+                value={memberSearch}
+                onChangeText={setMemberSearch}
+                placeholder="Search members by name or email"
                 placeholderTextColor={colors.textMuted}
                 autoCapitalize="none"
-                keyboardType="email-address"
-                style={styles.bulkInput}
+                style={[styles.bulkInput, { flex: 1, minHeight: 0 }]}
               />
-              <Pressable onPress={onPromote} disabled={promoteBusy || !promoteEmail.trim()} style={styles.bulkButton}>
-                <Text style={styles.bulkButtonText}>{promoteBusy ? "Promoting…" : "Promote"}</Text>
-              </Pressable>
-              <Text style={styles.permDetail}>Grant superadmin separately, from their row below.</Text>
-            </View>
-          ) : null}
-          {isSuperAdmin ? (
-            <View style={styles.dangerBox}>
-              <Text style={styles.dangerLabel}>Student sign-in is disabled</Text>
-              <Text style={styles.permDetail}>
-                Students can no longer sign in. Deactivate every existing student account to lock out anyone who signed in before this policy took effect.
-              </Text>
-              <Pressable onPress={onDeactivateAllStudents} disabled={deactivatingStudents} style={styles.dangerButton}>
-                <Text style={styles.bulkButtonText}>{deactivatingStudents ? "Deactivating…" : "Deactivate all students"}</Text>
+              <Pressable onPress={() => setFabOpen(true)} style={styles.fabPlus}>
+                <Text style={{ color: colors.primaryText, fontSize: 20, fontWeight: "700", lineHeight: 22 }}>＋</Text>
               </Pressable>
             </View>
-          ) : null}
-        <View style={styles.bulkBox}>
-          <Text style={styles.bulkLabel}>Bulk add by campus email</Text>
-          <TextInput
-            value={bulkEmails}
-            onChangeText={setBulkEmails}
-            placeholder="one@cutm.ac.in, two@cutmap.ac.in ..."
-            placeholderTextColor={colors.textMuted}
-            multiline
-            style={styles.bulkInput}
-          />
-          <Pressable onPress={onBulkAdd} disabled={bulkBusy || !bulkEmails.trim()} style={styles.bulkButton}>
-            <Text style={styles.bulkButtonText}>{bulkBusy ? "Adding…" : "Add"}</Text>
-          </Pressable>
+
+            <Text style={styles.sectionLabel}>ALL MEMBERS</Text>
           </View>
-          {users.length > 6 ? (
+        }
+        renderItem={({ item }) => (
+          <View style={styles.memberRow}>
+            <Avatar name={item.name} url={item.avatarUrl} size={36} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.memberName}>
+                {item.name}
+                {item.is_superadmin ? <Text style={styles.superadminChip}>  SUPER</Text> : null}
+              </Text>
+              <Text style={styles.memberEmail}>{item.campusEmail || item.campus_email || item.email}</Text>
+              <View style={styles.memberMetaRow}>
+                <Pressable
+                  onPress={() => onRoleChange(item)}
+                  disabled={item.id === selfId || (item.role === "admin" && !isSuperAdmin)}
+                >
+                  <Text style={styles.roleChip}>{item.role}</Text>
+                </Pressable>
+                {item.is_active === false ? <Text style={styles.deactivatedChip}>Deactivated</Text> : null}
+              </View>
+            </View>
+            {item.id !== selfId ? (
+              <Pressable onPress={() => setRowMenuUser(item)} hitSlop={10} style={{ padding: 4 }}>
+                <Text style={{ color: colors.textMuted, fontSize: 18 }}>⋮</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        )}
+      />
+
+      <ActionSheet
+        visible={fabOpen}
+        title="Add & manage members"
+        actions={fabActions}
+        onClose={() => setFabOpen(false)}
+      />
+
+      <ActionSheet
+        visible={!!rowMenuUser}
+        title={rowMenuUser?.name || ""}
+        actions={rowMenuActions}
+        onClose={() => setRowMenuUser(null)}
+      />
+
+      <Modal visible={promoteModalOpen} transparent animationType="fade" onRequestClose={() => setPromoteModalOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setPromoteModalOpen(false)}>
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Promote to admin by email</Text>
+            <Text style={styles.permDetail}>Creates the account if they haven't signed in yet. Grant superadmin separately, from their row.</Text>
             <TextInput
-              value={memberSearch}
-              onChangeText={setMemberSearch}
-              placeholder="Search members by name or email"
+              value={promoteEmail}
+              onChangeText={setPromoteEmail}
+              placeholder="name@cutm.ac.in"
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
-              style={styles.bulkInput}
+              keyboardType="email-address"
+              autoFocus
+              style={[styles.bulkInput, { minHeight: 0, marginTop: 10 }]}
             />
-          ) : null}
-        </View>
-      }
-      renderItem={({ item }) => (
-        <View style={styles.memberRow}>
-          <Avatar name={item.name} url={item.avatarUrl} size={36} />
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.memberName}>
-              {item.name}
-              {item.is_superadmin ? <Text style={styles.superadminChip}>  SUPERADMIN</Text> : null}
-            </Text>
-            <Text style={styles.memberEmail}>{item.campusEmail || item.campus_email || item.email}</Text>
-            <View style={styles.memberMetaRow}>
-              <Pressable
-                onPress={() => onRoleChange(item)}
-                disabled={item.id === selfId || (item.role === "admin" && !isSuperAdmin)}
-              >
-                <Text style={styles.roleChip}>{item.role}</Text>
-              </Pressable>
-              {item.is_active === false ? <Text style={styles.deactivatedChip}>Deactivated</Text> : null}
-            </View>
-          </View>
-          {item.id !== selfId ? (
-            <View style={{ gap: 4 }}>
-              {isSuperAdmin && item.role === "admin" ? (
-                <Pressable onPress={() => onToggleSuperAdmin(item)}>
-                  <Text style={styles.linkText}>{item.is_superadmin ? "Revoke superadmin" : "Make superadmin"}</Text>
-                </Pressable>
-              ) : null}
-              <Pressable onPress={() => onToggleActive(item)}>
-                <Text style={styles.linkText}>{item.is_active === false ? "Reactivate" : "Deactivate"}</Text>
-              </Pressable>
-              <Pressable onPress={() => onRemove(item)}>
-                <Text style={styles.linkTextDanger}>Remove</Text>
+            <View style={styles.modalActions}>
+              <Pressable onPress={() => setPromoteModalOpen(false)}><Text style={styles.linkText}>Cancel</Text></Pressable>
+              <Pressable onPress={onPromote} disabled={promoteBusy || !promoteEmail.trim()}>
+                <Text style={styles.bulkButtonText2}>{promoteBusy ? "Promoting…" : "Promote"}</Text>
               </Pressable>
             </View>
-          ) : null}
-        </View>
-      )}
-    />
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={bulkModalOpen} transparent animationType="fade" onRequestClose={() => setBulkModalOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setBulkModalOpen(false)}>
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Bulk add by campus email</Text>
+            <Text style={styles.permDetail}>Comma or newline separated.</Text>
+            <TextInput
+              value={bulkEmails}
+              onChangeText={setBulkEmails}
+              placeholder="one@cutm.ac.in, two@cutmap.ac.in ..."
+              placeholderTextColor={colors.textMuted}
+              multiline
+              autoFocus
+              style={[styles.bulkInput, { marginTop: 10 }]}
+            />
+            <View style={styles.modalActions}>
+              <Pressable onPress={() => setBulkModalOpen(false)}><Text style={styles.linkText}>Cancel</Text></Pressable>
+              <Pressable onPress={onBulkAdd} disabled={bulkBusy || !bulkEmails.trim()}>
+                <Text style={styles.bulkButtonText2}>{bulkBusy ? "Adding…" : "Add"}</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
@@ -561,6 +627,58 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     borderRadius: 10,
     padding: 10,
     marginBottom: 12,
+  },
+  statRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  toolbarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  fabPlus: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    padding: 18,
+  },
+  modalTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 4,
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 18,
+    marginTop: 14,
+  },
+  bulkButtonText2: {
+    color: colors.primary,
+    fontWeight: "700",
+    fontSize: 13,
   },
   dangerBox: {
     borderWidth: 1,

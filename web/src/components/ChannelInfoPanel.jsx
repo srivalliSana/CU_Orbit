@@ -349,14 +349,14 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
             <div className="flex flex-col items-center text-center">
               {isChannelAdmin || isSuperAdmin ? (
                 <label className="group relative cursor-pointer">
-                  <Avatar name={channel.name} url={channel.avatar_url} kind="channel" size={72} />
+                  <Avatar name={channel.name} url={channel.avatar_url} kind="channel" size={84} />
                   <span className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-accent-600 text-[11px] text-white ring-2 ring-white dark:ring-slate-900">
                     {uploadingAvatar ? '…' : '📷'}
                   </span>
                   <input type="file" accept="image/*" className="hidden" onChange={changeAvatar} disabled={uploadingAvatar} />
                 </label>
               ) : (
-                <Avatar name={channel.name} url={channel.avatar_url} kind="channel" size={72} />
+                <Avatar name={channel.name} url={channel.avatar_url} kind="channel" size={84} />
               )}
 
               {editingInfo ? (
@@ -385,9 +385,9 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                 </div>
               ) : (
                 <>
-                  <h3 className="mt-3 text-lg font-semibold text-slate-800 dark:text-slate-100"># {channel.name}</h3>
-                  {channel.topic && <p className="mt-1 text-sm text-slate-500">{channel.topic}</p>}
+                  <h3 className="mt-3 text-lg font-bold text-slate-800 dark:text-slate-100"># {channel.name}</h3>
                   <p className="mt-1 text-xs text-slate-400">{channel.member_count} member{channel.member_count === 1 ? '' : 's'}</p>
+                  {channel.topic && <p className="mt-2 max-w-xs text-sm text-slate-500">{channel.topic}</p>}
                   {isChannelAdmin || isSuperAdmin ? (
                     <button onClick={startEditingInfo} className="mt-2 text-xs font-medium text-accent-600 hover:text-accent-700">
                       Edit name & topic
@@ -397,67 +397,70 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
               )}
             </div>
 
-            {(isChannelAdmin || isSuperAdmin) && (
-              <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Invite link</h4>
-                <p className="mt-1 text-[11px] text-slate-400">
-                  Anyone with a cutm.ac.in or cutmap.ac.in account can join with this link, shared anywhere.
-                </p>
-                <div className="mt-2 flex items-center gap-2">
-                  <input
-                    readOnly
-                    value={`${window.location.origin}/join/${channel.invite_code}`}
-                    onFocus={(e) => e.target.select()}
-                    className="min-w-0 flex-1 truncate rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                  />
-                  <button
-                    onClick={() => {
-                      navigator.clipboard?.writeText(`${window.location.origin}/join/${channel.invite_code}`);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 1500);
-                    }}
-                    className="shrink-0 rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700"
-                  >
-                    {copied ? 'Copied' : 'Copy'}
-                  </button>
-                </div>
-              </div>
-            )}
+            <div className="mt-5 flex justify-center gap-3">
+              <QuickAction icon="🖼️" label="Media" onClick={() => setView('media')} />
+              <QuickAction icon="📌" label="Pinned" onClick={() => setView('pinned')} />
+              <QuickAction icon="⭐" label="Starred" onClick={() => setView('starred')} />
+              {(isChannelAdmin || isSuperAdmin) && (
+                <QuickAction icon="＋" label="Add" onClick={startAdding} />
+              )}
+            </div>
 
             {(isChannelAdmin || isSuperAdmin) && (
-              <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Invite by email</h4>
-                <p className="mt-1 text-[11px] text-slate-400">
-                  Sends the join link to their campus email instead of sharing it yourself.
-                </p>
-                <form onSubmit={sendInvite} className="mt-2 flex items-center gap-2">
-                  <input
-                    type="email"
-                    required
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="name@cutm.ac.in"
-                    className="min-w-0 flex-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-800 dark:text-slate-200"
-                  />
-                  <button
-                    type="submit"
-                    disabled={invitingByEmail}
-                    className="shrink-0 rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
-                  >
-                    {invitingByEmail ? 'Sending…' : inviteSent ? 'Sent ✓' : 'Send'}
-                  </button>
-                </form>
-              </div>
+              <Section label="Invite">
+                <Card>
+                  <div className="p-3.5">
+                    <p className="text-[11px] text-slate-400">
+                      Anyone with a cutm.ac.in or cutmap.ac.in account can join with this link, shared anywhere.
+                    </p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <input
+                        readOnly
+                        value={`${window.location.origin}/join/${channel.invite_code}`}
+                        onFocus={(e) => e.target.select()}
+                        className="min-w-0 flex-1 truncate rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300"
+                      />
+                      <button
+                        onClick={() => {
+                          navigator.clipboard?.writeText(`${window.location.origin}/join/${channel.invite_code}`);
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 1500);
+                        }}
+                        className="shrink-0 rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700"
+                      >
+                        {copied ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="border-t border-slate-200 p-3.5 dark:border-slate-700/60">
+                    <p className="text-[11px] text-slate-400">Invite by email — sends the join link to their campus email.</p>
+                    <form onSubmit={sendInvite} className="mt-2 flex items-center gap-2">
+                      <input
+                        type="email"
+                        required
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        placeholder="name@cutm.ac.in"
+                        className="min-w-0 flex-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-accent-500/40 dark:bg-slate-900 dark:text-slate-200"
+                      />
+                      <button
+                        type="submit"
+                        disabled={invitingByEmail}
+                        className="shrink-0 rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
+                      >
+                        {invitingByEmail ? 'Sending…' : inviteSent ? 'Sent ✓' : 'Send'}
+                      </button>
+                    </form>
+                  </div>
+                </Card>
+              </Section>
             )}
 
             {joinRequests.length > 0 && (
-              <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Join requests · {joinRequests.length}
-                </h4>
-                <ul className="mt-2 space-y-2">
-                  {joinRequests.map((r) => (
-                    <li key={r.id} className="flex items-center gap-3">
+              <Section label={`Join requests · ${joinRequests.length}`}>
+                <Card>
+                  {joinRequests.map((r, i) => (
+                    <div key={r.id} className={`flex items-center gap-3 p-3 ${i > 0 ? 'border-t border-slate-200 dark:border-slate-700/60' : ''}`}>
                       <Avatar name={r.userName} size={32} />
                       <p className="min-w-0 flex-1 truncate text-sm text-slate-700 dark:text-slate-200">{r.userName}</p>
                       <div className="flex shrink-0 items-center gap-2">
@@ -476,37 +479,16 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                           Reject
                         </button>
                       </div>
-                    </li>
+                    </div>
                   ))}
-                </ul>
-              </div>
+                </Card>
+              </Section>
             )}
 
-            {isChannelAdmin && (
-              <div className="mt-6 space-y-3 border-t border-slate-200 pt-4 dark:border-slate-800">
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Settings</h4>
-                <ToggleRow
-                  label="Only admins can post"
-                  checked={!!channel.restricted_messaging}
-                  onChange={(v) => toggle('restricted_messaging', v)}
-                />
-                <ToggleRow
-                  label="Only admins can edit channel info"
-                  checked={!!channel.info_edit_restricted}
-                  onChange={(v) => toggle('info_edit_restricted', v)}
-                />
-                <ToggleRow
-                  label="Approval required to join"
-                  checked={!!channel.approval_required}
-                  onChange={(v) => toggle('approval_required', v)}
-                />
-              </div>
-            )}
-
-            <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Members</h4>
-                {(isChannelAdmin || isSuperAdmin) && (
+            <Section
+              label={`Members · ${members.length}`}
+              action={
+                (isChannelAdmin || isSuperAdmin) && (
                   <div className="flex items-center gap-3">
                     <label className="cursor-pointer text-xs font-medium text-accent-600 hover:text-accent-700">
                       {bulkBusy ? 'Adding…' : 'Bulk add (CSV)'}
@@ -518,18 +500,15 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                         className="hidden"
                       />
                     </label>
-                    <button
-                      onClick={startAdding}
-                      className="text-xs font-medium text-accent-600 hover:text-accent-700"
-                    >
+                    <button onClick={startAdding} className="text-xs font-medium text-accent-600 hover:text-accent-700">
                       + Add
                     </button>
                   </div>
-                )}
-              </div>
-
+                )
+              }
+            >
               {bulkResult && (
-                <p className="mt-1 text-[11px] text-slate-400">
+                <p className="mb-2 text-[11px] text-slate-400">
                   {bulkResult.added.length} added, {bulkResult.skipped.length} skipped
                   {bulkResult.skipped.length > 0 && ` (${bulkResult.skipped.slice(0, 3).map((s) => s.email).join(', ')}${bulkResult.skipped.length > 3 ? '…' : ''} — not a staff/faculty campus email, or already a member)`}
                 </p>
@@ -540,18 +519,52 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                   value={memberSearch}
                   onChange={(e) => setMemberSearch(e.target.value)}
                   placeholder="Search members"
-                  className="mt-2 w-full rounded-lg border border-slate-200 bg-transparent px-3 py-1.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-accent-500 focus:outline-none dark:border-slate-700 dark:text-slate-200"
+                  className="mb-2 w-full rounded-lg border border-slate-200 bg-transparent px-3 py-1.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-accent-500 focus:outline-none dark:border-slate-700 dark:text-slate-200"
                 />
               )}
 
-              <ul className="mt-2 space-y-1">
+              {adding && (
+                <div className="mb-2">
+                  <input
+                    autoFocus
+                    value={candidateSearch}
+                    onChange={(e) => setCandidateSearch(e.target.value)}
+                    placeholder="Search people to add"
+                    className="w-full rounded-lg border border-slate-200 bg-transparent px-3 py-1.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-accent-500 focus:outline-none dark:border-slate-700 dark:text-slate-200"
+                  />
+                  <div className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                    {(() => {
+                      const q = candidateSearch.trim().toLowerCase();
+                      const filtered = q
+                        ? candidates.filter((c) => c.name?.toLowerCase().includes(q) || (c.campus_email || c.email || '').toLowerCase().includes(q))
+                        : candidates;
+                      if (filtered.length === 0) {
+                        return <p className="p-3 text-xs text-slate-400">No one else to add.</p>;
+                      }
+                      return filtered.map((c) => (
+                        <button
+                          key={c.id}
+                          disabled={busyUserId === c.id}
+                          onClick={() => addMember(c.id)}
+                          className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 disabled:opacity-40 dark:hover:bg-slate-800"
+                        >
+                          <Avatar name={c.name} url={c.avatarUrl} size={28} />
+                          <span className="truncate text-sm text-slate-700 dark:text-slate-200">{c.name}</span>
+                        </button>
+                      ));
+                    })()}
+                  </div>
+                </div>
+              )}
+
+              <Card>
                 {members
                   .filter((m) => m.name?.toLowerCase().includes(memberSearch.trim().toLowerCase()))
-                  .map((m) => (
-                  <li key={m.id} className="flex items-center gap-3 py-1.5">
+                  .map((m, i) => (
+                  <div key={m.id} className={`flex items-center gap-3 p-3 ${i > 0 ? 'border-t border-slate-200 dark:border-slate-700/60' : ''}`}>
                     <button
                       onClick={() => onOpenProfile?.(m.id)}
-                      className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left hover:bg-slate-50 dark:hover:bg-slate-800"
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
                     >
                       <Avatar name={m.name} url={m.avatarUrl} size={32} />
                       <div className="min-w-0 flex-1">
@@ -585,58 +598,46 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                         </button>
                       </div>
                     )}
-                  </li>
-                ))}
-              </ul>
-
-              {adding && (
-                <div className="mt-3">
-                  <input
-                    autoFocus
-                    value={candidateSearch}
-                    onChange={(e) => setCandidateSearch(e.target.value)}
-                    placeholder="Search people to add"
-                    className="w-full rounded-lg border border-slate-200 bg-transparent px-3 py-1.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-accent-500 focus:outline-none dark:border-slate-700 dark:text-slate-200"
-                  />
-                  <div className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                    {(() => {
-                      const q = candidateSearch.trim().toLowerCase();
-                      const filtered = q
-                        ? candidates.filter((c) => c.name?.toLowerCase().includes(q) || (c.campus_email || c.email || '').toLowerCase().includes(q))
-                        : candidates;
-                      if (filtered.length === 0) {
-                        return <p className="p-3 text-xs text-slate-400">No one else to add.</p>;
-                      }
-                      return filtered.map((c) => (
-                        <button
-                          key={c.id}
-                          disabled={busyUserId === c.id}
-                          onClick={() => addMember(c.id)}
-                          className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 disabled:opacity-40 dark:hover:bg-slate-800"
-                        >
-                          <Avatar name={c.name} url={c.avatarUrl} size={28} />
-                          <span className="truncate text-sm text-slate-700 dark:text-slate-200">{c.name}</span>
-                        </button>
-                      ));
-                    })()}
                   </div>
-                </div>
-              )}
-            </div>
+                ))}
+              </Card>
+            </Section>
+
+            {isChannelAdmin && (
+              <Section label="Settings">
+                <Card>
+                  <div className="space-y-3 p-3.5">
+                    <ToggleRow
+                      label="Only admins can post"
+                      checked={!!channel.restricted_messaging}
+                      onChange={(v) => toggle('restricted_messaging', v)}
+                    />
+                    <ToggleRow
+                      label="Only admins can edit channel info"
+                      checked={!!channel.info_edit_restricted}
+                      onChange={(v) => toggle('info_edit_restricted', v)}
+                    />
+                    <ToggleRow
+                      label="Approval required to join"
+                      checked={!!channel.approval_required}
+                      onChange={(v) => toggle('approval_required', v)}
+                    />
+                  </div>
+                </Card>
+              </Section>
+            )}
 
             {(isChannelAdmin || isSuperAdmin) && (
-              <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Apps</h4>
-                  <button
-                    onClick={startAddingApp}
-                    className="text-xs font-medium text-accent-600 hover:text-accent-700"
-                  >
+              <Section
+                label="Apps"
+                action={
+                  <button onClick={startAddingApp} className="text-xs font-medium text-accent-600 hover:text-accent-700">
                     + Add app
                   </button>
-                </div>
+                }
+              >
                 {addingApp && (
-                  <div className="mt-3 max-h-52 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                  <div className="max-h-52 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700">
                     {availableApps.length === 0 && (
                       <p className="p-3 text-xs text-slate-400">No installed apps to add — register or install one from Admin → Apps first.</p>
                     )}
@@ -653,75 +654,111 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                     ))}
                   </div>
                 )}
-              </div>
+              </Section>
             )}
 
-            <div className="mt-6 space-y-1 border-t border-slate-200 pt-4 dark:border-slate-800">
-              <button onClick={() => setView('media')} className="block w-full rounded-lg px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
-                🖼️ Shared media
-              </button>
-              <button onClick={() => setView('pinned')} className="block w-full rounded-lg px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
-                📌 Pinned messages
-              </button>
-              <button onClick={() => setView('starred')} className="block w-full rounded-lg px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
-                ⭐ Starred messages
-              </button>
-            </div>
-
-            {!isCreator(currentUser?.id) && (
-              <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
-                <button
-                  onClick={leaveChannel}
-                  disabled={busyUserId === currentUser?.id}
-                  className="block w-full rounded-lg px-2 py-2 text-left text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-40 dark:hover:bg-red-950/40"
-                >
-                  🚪 Leave channel
-                </button>
-              </div>
-            )}
-
-            {isChannelAdmin && (
-              <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
-                {channel.archived_at && (
-                  <p className="mb-2 rounded-lg bg-slate-100 px-2.5 py-2 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                    This channel is archived — everyone can still read its history, but no one can post until it's unarchived.
-                  </p>
+            <Section label="Danger zone" labelClass="text-red-500 dark:text-red-400">
+              <Card className="border-red-200 dark:border-red-900/60">
+                {!isCreator(currentUser?.id) && (
+                  <NavRow
+                    icon="🚪"
+                    label="Leave channel"
+                    onClick={leaveChannel}
+                    disabled={busyUserId === currentUser?.id}
+                    danger
+                  />
                 )}
-                <button
-                  onClick={() => toggle('archived', !channel.archived_at)}
-                  className="block w-full rounded-lg px-2 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  {channel.archived_at ? '📤 Unarchive channel' : '🗄️ Archive channel'}
-                </button>
-              </div>
-            )}
-
-            {isSuperAdmin && (
-              <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
-                {channel.is_active === false && (
-                  <p className="mb-2 rounded-lg bg-amber-50 px-2.5 py-2 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300">
-                    This channel is deactivated — hidden from members, and no one can message here until you reactivate it.
-                  </p>
+                {isChannelAdmin && (
+                  <>
+                    {channel.archived_at && (
+                      <p className="mx-3.5 mt-3 rounded-lg bg-slate-100 px-2.5 py-2 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                        This channel is archived — everyone can still read its history, but no one can post until it's unarchived.
+                      </p>
+                    )}
+                    <NavRow
+                      icon={channel.archived_at ? '📤' : '🗄️'}
+                      label={channel.archived_at ? 'Unarchive channel' : 'Archive channel'}
+                      onClick={() => toggle('archived', !channel.archived_at)}
+                      danger
+                      divider={!isCreator(currentUser?.id)}
+                    />
+                  </>
                 )}
-                <button
-                  onClick={toggleChannelActive}
-                  disabled={togglingActive}
-                  className={`block w-full rounded-lg px-2 py-2 text-left text-sm font-medium disabled:opacity-40 ${
-                    channel.is_active === false
-                      ? 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
-                      : 'text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40'
-                  }`}
-                >
-                  {togglingActive
-                    ? 'Updating…'
-                    : channel.is_active === false ? '✅ Reactivate channel' : '🚫 Deactivate channel'}
-                </button>
-              </div>
-            )}
+                {isSuperAdmin && (
+                  <>
+                    {channel.is_active === false && (
+                      <p className="mx-3.5 mt-3 rounded-lg bg-amber-50 px-2.5 py-2 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                        This channel is deactivated — hidden from members, and no one can message here until you reactivate it.
+                      </p>
+                    )}
+                    <NavRow
+                      icon={channel.is_active === false ? '✅' : '🚫'}
+                      label={togglingActive ? 'Updating…' : channel.is_active === false ? 'Reactivate channel' : 'Deactivate channel'}
+                      onClick={toggleChannelActive}
+                      disabled={togglingActive}
+                      danger={channel.is_active !== false}
+                      divider={!isCreator(currentUser?.id) || isChannelAdmin}
+                    />
+                  </>
+                )}
+              </Card>
+            </Section>
           </>
         )}
       </div>
     </aside>
+  );
+}
+
+function QuickAction({ icon, label, onClick }) {
+  return (
+    <button onClick={onClick} className="flex w-16 flex-col items-center gap-1.5">
+      <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-base dark:border-slate-700 dark:bg-slate-800/60">
+        {icon}
+      </span>
+      <span className="text-[10px] font-semibold text-slate-400">{label}</span>
+    </button>
+  );
+}
+
+function Section({ label, labelClass, action, children }) {
+  return (
+    <div className="mt-5">
+      <div className="mb-1.5 flex items-center justify-between">
+        <h4 className={`text-[11px] font-bold uppercase tracking-wide text-slate-400 ${labelClass || ''}`}>{label}</h4>
+        {action || null}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Card({ className = '', children }) {
+  return (
+    <div className={`overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 dark:border-slate-700/60 dark:bg-slate-800/40 ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+function NavRow({ icon, label, onClick, disabled, danger, divider }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex w-full items-center gap-3 p-3.5 text-left text-sm font-medium disabled:opacity-40 ${
+        divider ? 'border-t border-slate-200 dark:border-slate-700/60' : ''
+      } ${danger ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-200'}`}
+    >
+      <span
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm ${
+          danger ? 'bg-red-100 dark:bg-red-950/40' : 'bg-accent-50 dark:bg-accent-900/20'
+        }`}
+      >
+        {icon}
+      </span>
+      {label}
+    </button>
   );
 }
 
