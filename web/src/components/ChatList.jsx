@@ -1,16 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Avatar from './Avatar';
 import { timeLabel } from '../lib/format';
 import { searchDirectory, searchMessages, setConversationPref } from '../api/chat';
-import { isFacultyEmail } from '../lib/permissions';
+import { getPermissions } from '../api/admin';
 
 /** Left pane: search, then channels and direct messages. */
 
 export default function ChatList({ user, chats, workspaces, workspaceId, onSwitchWorkspace, activeId, onSelect, onNewGroup, onOpenContact, tab, onTabChange, width }) {
-  // Mirrors isFacultyEmail() on the server. The server is the authority for
-  // channel creation; this only avoids showing an action that would 403.
-  const canCreate = user?.role === 'admin' || isFacultyEmail(user?.campus_email || user?.email);
+  // The server is the authority for channel creation (restrict_channel_creation,
+  // toggled from Admin → Permissions); this only avoids showing an action
+  // that would 403. Slack-style default: any member can create unless an
+  // admin has switched the restriction on.
+  const { data: perms } = useQuery({ queryKey: ['permissions'], queryFn: getPermissions, staleTime: 60000 });
+  const canCreate = user?.role === 'admin' || !perms?.restrict_channel_creation;
   const [q, setQ] = useState('');
   const [people, setPeople] = useState([]);
   const [searching, setSearching] = useState(false);

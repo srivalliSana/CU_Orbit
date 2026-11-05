@@ -139,6 +139,10 @@ const User = sequelize.define('User', {
     // org_roles can elevate to examcell or coordinator. Keep these in step with
     // lib/auth-options.ts there, or elevated users get silently downgraded.
     role: { type: DataTypes.ENUM('student', 'faculty', 'admin', 'examcell', 'coordinator'), defaultValue: 'student' },
+    // Only meaningful when role === 'admin' — see isSuperAdmin(). Grants
+    // the one extra power an app admin doesn't have: managing who else is
+    // an admin or superadmin.
+    is_superadmin: { type: DataTypes.BOOLEAN, defaultValue: false },
     // Carried from the handoff token — drives auto-provisioning of cohort and
     // campus channels without CU Orbit querying the roster on every login.
     cohort: { type: DataTypes.STRING, allowNull: true },
@@ -198,7 +202,12 @@ const Workspace = sequelize.define('Workspace', {
     slug: { type: DataTypes.STRING, unique: true },
     icon_url: { type: DataTypes.STRING, defaultValue: '' },
     description: { type: DataTypes.TEXT, defaultValue: '' },
-    member_count: { type: DataTypes.INTEGER, defaultValue: 0 }
+    member_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+    // Slack-style permission: off (default) lets any member create a
+    // (public) channel; on restricts channel creation to workspace admins.
+    // Private-channel creation has its own separate admin-only rule either
+    // way (see POST /api/workspaces/:workspaceId/channels).
+    restrict_channel_creation: { type: DataTypes.BOOLEAN, defaultValue: false },
 });
 
 const Channel = sequelize.define('Channel', {
@@ -2112,6 +2121,13 @@ app.get('/api/unread', auth.requireAuth, async (req, res) => {
  * matter what role the caller holds.
  */
 const isGroupAdmin = (user) => user?.role === 'admin';
+// A superadmin is an admin (gets every isGroupAdmin-gated capability
+// automatically, everywhere that check already exists) plus one extra
+// power: managing who else is an admin/superadmin. A flag on top of the
+// existing role rather than a new role value, specifically so every
+// isGroupAdmin() check already in this file keeps working unchanged for
+// a superadmin — only the admin-roster actions need this stricter check.
+const isSuperAdmin = (user) => isGroupAdmin(user) && !!user?.is_superadmin;
 // Matches real Slack: building/configuring an app doesn't need workspace-admin
 // rights (anyone can be a developer) — only installing it into the actual
 // workspace (POST /api/oauth/authorize) and workspace-wide moderation
@@ -5461,7 +5477,11 @@ app.get('/api/admin/users', auth.requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
-/** "Change member role (Member → Admin → Owner)" — our role enum's version of that ladder. */
+/** "Change member role (Member → Admin → Owner)" — our role enum's version
+ *  of that ladder. Promoting to admin, or demoting someone who currently
+ *  is one, is superadmin-only — every other transition (student ↔
+ *  faculty ↔ examcell ↔ coordinator) stays available to any app admin,
+ *  same as before. */
 app.put('/api/admin/users/:id/role', auth.requireAuth, async (req, res) => {
     if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
     try {
@@ -5470,9 +5490,38 @@ app.put('/api/admin/users/:id/role', auth.requireAuth, async (req, res) => {
         const target = await User.findByPk(req.params.id);
         if (!target) return res.status(404).json({ error: 'not_found' });
         const previous = target.role;
+        const touchesAdmin = role === 'admin' || previous === 'admin';
+        if (touchesAdmin && !isSuperAdmin(req.user)) {
+            return res.status(403).json({ error: 'forbidden', message: 'Only a superadmin can promote or demote an admin.' });
+        }
         target.role = role;
+        // Demoting an admin away also clears their superadmin flag — it's
+        // meaningless (and a dangling privilege) without the admin role
+        // it's layered on top of.
+        if (previous === 'admin' && role !== 'admin') target.is_superadmin = false;
         await target.save();
         await logAudit(req.user, 'user.role_changed', 'user', target.id, `${previous} → ${role}`);
+        res.json({ success: true, user: target });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** Grants or revokes superadmin — superadmin-only, and only on someone who
+ *  is already (or is becoming) an app admin; the flag is meaningless on
+ *  its own. The very first superadmin comes from migration 041's
+ *  bootstrap (every admin at the time it ran), not from this route. */
+app.put('/api/admin/users/:id/superadmin', auth.requireAuth, async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: 'forbidden', message: 'Only a superadmin can grant or revoke superadmin.' });
+    try {
+        const { is_superadmin } = req.body;
+        if (typeof is_superadmin !== 'boolean') return res.status(400).json({ error: 'bad_request', message: 'is_superadmin must be true or false' });
+        const target = await User.findByPk(req.params.id);
+        if (!target) return res.status(404).json({ error: 'not_found' });
+        if (is_superadmin && target.role !== 'admin') {
+            return res.status(400).json({ error: 'bad_request', message: 'Make them an admin first — superadmin only applies on top of the admin role.' });
+        }
+        target.is_superadmin = is_superadmin;
+        await target.save();
+        await logAudit(req.user, is_superadmin ? 'user.superadmin_granted' : 'user.superadmin_revoked', 'user', target.id, target.name);
         res.json({ success: true, user: target });
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
@@ -5547,7 +5596,9 @@ app.post('/api/admin/users/bulk-add', auth.requireAuth, async (req, res) => {
  * hasn't signed in for the first time yet.
  */
 app.post('/api/admin/users/promote-by-email', auth.requireAuth, async (req, res) => {
-    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    // Promotes straight to admin, so this is one of the admin-roster
+    // actions — superadmin-only, same as PUT /api/admin/users/:id/role.
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: 'forbidden', message: 'Only a superadmin can promote someone to admin.' });
     try {
         const email = String(req.body.email || '').toLowerCase().trim();
         if (!email || !isCampusEmail(email)) {
@@ -5556,7 +5607,7 @@ app.post('/api/admin/users/promote-by-email', auth.requireAuth, async (req, res)
         const user = await findOrCreateOrbitUser(email, null);
         user.role = 'admin';
         await user.save();
-        await logAudit(req.user, 'user.promoted_superadmin', 'user', user.id, user.campus_email || user.email);
+        await logAudit(req.user, 'user.promoted_admin', 'user', user.id, user.campus_email || user.email);
         res.json({ success: true, user });
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
@@ -5654,17 +5705,28 @@ app.get('/api/workspaces', auth.requireAuth, async (req, res) => {
 
 app.post('/api/workspaces/:workspaceId/channels', auth.requireAuth, async (req, res) => {
     try {
-        if (!isGroupAdmin(req.user) && !isFacultyEmail(req.user.email)) {
-            return res.status(403).json({
-                error: 'forbidden',
-                message: 'Only faculty and staff can create channels.',
-            });
+        const workspaceId = await resolveWorkspaceId(req.params.workspaceId);
+        if (!workspaceId) return res.status(404).json({ error: 'not_found', message: 'No workspace' });
+
+        // Slack-style: off (default) lets any member create a channel; an
+        // admin can restrict creation to workspace admins only. Replaces
+        // the old hardcoded "faculty and staff only" rule.
+        if (!isGroupAdmin(req.user)) {
+            const ws = await Workspace.findByPk(workspaceId, { attributes: ['restrict_channel_creation'] });
+            if (ws?.restrict_channel_creation) {
+                return res.status(403).json({
+                    error: 'forbidden',
+                    message: 'Only workspace admins can create channels right now.',
+                });
+            }
         }
         const { name, type, description, members } = req.body;
 
         // "ADMIN: Create public channels (not private)" / "SUPERADMIN: Create
         // channels (public & private)" — only a global admin may create a
         // private one; everyone else who can create at all gets public only.
+        // This is a separate rule from restrict_channel_creation above —
+        // it always applies, on or off.
         const wantsPrivate = type === 'private';
         if (wantsPrivate && !isGroupAdmin(req.user)) {
             return res.status(403).json({ error: 'forbidden', message: 'Only workspace admins can create private channels.' });
@@ -5673,9 +5735,6 @@ app.post('/api/workspaces/:workspaceId/channels', auth.requireAuth, async (req, 
         const clean = String(name || '').trim().replace(/^#/, '');
         if (!clean) return res.status(400).json({ error: 'bad_request', message: 'Group name is required' });
         if (clean.length > 80) return res.status(400).json({ error: 'bad_request', message: 'Group name is too long' });
-
-        const workspaceId = await resolveWorkspaceId(req.params.workspaceId);
-        if (!workspaceId) return res.status(404).json({ error: 'not_found', message: 'No workspace' });
 
         // Creator comes from the session — a body-supplied userId let anyone
         // create a group owned by someone else.
@@ -5775,6 +5834,33 @@ app.get('/api/admin/security-events', auth.requireAuth, async (req, res) => {
     try {
         const entries = await SecurityEvent.findAll({ order: [['createdAt', 'DESC']], limit: 200 });
         res.json(entries);
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** Workspace-level permission toggles — just channel creation for now,
+ *  mirroring Slack's "who can create channels" admin setting. Readable by
+ *  anyone signed in (clients use it to decide whether to show a "Create
+ *  channel" entry at all), writable by workspace admins only. */
+app.get('/api/admin/permissions', auth.requireAuth, async (req, res) => {
+    try {
+        const workspaceId = await resolveWorkspaceId();
+        const ws = await Workspace.findByPk(workspaceId, { attributes: ['restrict_channel_creation'] });
+        res.json({ restrict_channel_creation: !!ws?.restrict_channel_creation });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+app.put('/api/admin/permissions', auth.requireAuth, async (req, res) => {
+    if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
+    try {
+        const workspaceId = await resolveWorkspaceId();
+        const ws = await Workspace.findByPk(workspaceId);
+        if (!ws) return res.status(404).json({ error: 'not_found' });
+        if (typeof req.body.restrict_channel_creation === 'boolean') {
+            ws.restrict_channel_creation = req.body.restrict_channel_creation;
+            await ws.save();
+            await logAudit(req.user, 'workspace.channel_creation_restriction_changed', 'workspace', ws.id, `restricted: ${ws.restrict_channel_creation}`);
+        }
+        res.json({ restrict_channel_creation: ws.restrict_channel_creation });
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 

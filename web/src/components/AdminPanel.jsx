@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import Avatar from './Avatar';
 import {
   bulkAddUsers, changeUserRole, getActivitySummary, getAdminUsers, getAuditLog, getDeletedMessages,
-  getSecurityEvents, getSystemHealth, promoteByEmail, removeUser, setUserActive,
+  getPermissions, getSecurityEvents, getSystemHealth, promoteByEmail, removeUser, setPermissions,
+  setSuperAdmin, setUserActive,
 } from '../api/admin';
 import { timeLabel } from '../lib/format';
 import AppsTab from './admin/AppsTab';
@@ -10,6 +11,7 @@ import AppsTab from './admin/AppsTab';
 const ROLES = ['student', 'faculty', 'admin', 'examcell', 'coordinator'];
 const TABS = [
   { id: 'members', label: 'Members' },
+  { id: 'permissions', label: 'Permissions' },
   { id: 'activity', label: 'Activity monitor' },
   { id: 'security', label: 'Security monitor' },
   { id: 'apps', label: 'Apps' },
@@ -47,6 +49,7 @@ export default function AdminPanel({ currentUser, onClose }) {
 
         <div className="flex-1 overflow-y-auto p-5">
           {tab === 'members' && <MembersTab currentUser={currentUser} />}
+          {tab === 'permissions' && <PermissionsTab />}
           {tab === 'activity' && <ActivityTab />}
           {tab === 'security' && <SecurityTab />}
           {tab === 'apps' && <AppsTab />}
@@ -71,8 +74,14 @@ function MembersTab({ currentUser }) {
   const load = () => getAdminUsers().then(setUsers).catch((e) => setError(e.message));
   useEffect(() => { load(); }, []);
 
+  const isSuperAdmin = !!currentUser?.is_superadmin;
+
   const onRoleChange = async (id, role) => {
     try { await changeUserRole(id, role); load(); } catch (e) { setError(e.message); }
+  };
+
+  const onToggleSuperAdmin = async (u) => {
+    try { await setSuperAdmin(u.id, !u.is_superadmin); load(); } catch (e) { setError(e.message); }
   };
 
   const onToggleActive = async (u) => {
@@ -123,29 +132,31 @@ function MembersTab({ currentUser }) {
 
   return (
     <div className="space-y-6">
-      <form onSubmit={onPromote} className="rounded-xl border border-slate-200 p-3 dark:border-slate-800">
-        <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">Make superadmin by email</label>
-        <div className="mt-1 flex items-center gap-2">
-          <input
-            type="email"
-            required
-            value={promoteEmail}
-            onChange={(e) => setPromoteEmail(e.target.value)}
-            placeholder="name@cutm.ac.in"
-            className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:text-slate-100"
-          />
-          <button
-            type="submit"
-            disabled={promoteBusy || !promoteEmail.trim()}
-            className="shrink-0 rounded-lg bg-accent-600 px-3 py-2 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
-          >
-            {promoteBusy ? 'Promoting…' : promoteDone ? 'Done ✓' : 'Promote'}
-          </button>
-        </div>
-        <p className="mt-1 text-[11px] text-slate-400">
-          Creates the account if they haven't signed in yet, then gives them full superadmin access.
-        </p>
-      </form>
+      {isSuperAdmin && (
+        <form onSubmit={onPromote} className="rounded-xl border border-slate-200 p-3 dark:border-slate-800">
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">Promote to admin by email</label>
+          <div className="mt-1 flex items-center gap-2">
+            <input
+              type="email"
+              required
+              value={promoteEmail}
+              onChange={(e) => setPromoteEmail(e.target.value)}
+              placeholder="name@cutm.ac.in"
+              className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:text-slate-100"
+            />
+            <button
+              type="submit"
+              disabled={promoteBusy || !promoteEmail.trim()}
+              className="shrink-0 rounded-lg bg-accent-600 px-3 py-2 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
+            >
+              {promoteBusy ? 'Promoting…' : promoteDone ? 'Done ✓' : 'Promote'}
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] text-slate-400">
+            Creates the account if they haven't signed in yet, then makes them an app admin. Grant superadmin separately, from their row below.
+          </p>
+        </form>
+      )}
 
       <form onSubmit={onBulkAdd} className="rounded-xl border border-slate-200 p-3 dark:border-slate-800">
         <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">Bulk add by campus email</label>
@@ -189,20 +200,37 @@ function MembersTab({ currentUser }) {
                   <div className="flex items-center gap-2">
                     <Avatar name={u.name} url={u.avatarUrl} size={28} />
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-slate-800 dark:text-slate-100">{u.name}</p>
+                      <p className="truncate font-medium text-slate-800 dark:text-slate-100">
+                        {u.name}
+                        {u.is_superadmin && <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Superadmin</span>}
+                      </p>
                       <p className="truncate text-xs text-slate-400">{u.campus_email || u.email}</p>
                     </div>
                   </div>
                 </td>
                 <td className="py-2 pr-3">
-                  <select
-                    value={u.role}
-                    onChange={(e) => onRoleChange(u.id, e.target.value)}
-                    disabled={u.id === currentUser?.id}
-                    className="rounded border border-slate-200 bg-transparent px-2 py-1 text-xs dark:border-slate-700"
-                  >
-                    {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={u.role}
+                      onChange={(e) => onRoleChange(u.id, e.target.value)}
+                      // Promoting to/from admin is superadmin-only (enforced
+                      // server-side too) — disable the control entirely for
+                      // a plain admin viewing another admin's row, rather
+                      // than let them pick a change the server will 403.
+                      disabled={u.id === currentUser?.id || (u.role === 'admin' && !isSuperAdmin)}
+                      className="rounded border border-slate-200 bg-transparent px-2 py-1 text-xs dark:border-slate-700"
+                    >
+                      {ROLES.filter((r) => r !== 'admin' || isSuperAdmin || u.role === 'admin').map((r) => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                    {isSuperAdmin && u.role === 'admin' && u.id !== currentUser?.id && (
+                      <button
+                        onClick={() => onToggleSuperAdmin(u)}
+                        className="text-[11px] font-medium text-accent-600 hover:text-accent-700"
+                      >
+                        {u.is_superadmin ? 'Revoke superadmin' : 'Make superadmin'}
+                      </button>
+                    )}
+                  </div>
                 </td>
                 <td className="py-2 pr-3">
                   {u.is_active === false
@@ -224,6 +252,58 @@ function MembersTab({ currentUser }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/** Slack-style workspace permission toggles. Just channel creation for
+ *  now — off (default) lets any member create a channel, on restricts it
+ *  to workspace admins. Direct messages are never affected. */
+function PermissionsTab() {
+  const [perms, setPerms] = useState(null);
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { getPermissions().then(setPerms).catch((e) => setError(e.message)); }, []);
+
+  const toggleRestrict = async () => {
+    const next = !perms.restrict_channel_creation;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await setPermissions({ restrict_channel_creation: next });
+      setPerms(updated);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (error) return <p role="alert" className="text-sm text-red-600">{error}</p>;
+  if (!perms) return <p className="text-sm text-slate-400">Loading…</p>;
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Who can create channels</h3>
+      <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
+        <span>
+          <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">Restrict channel creation to admins</span>
+          <span className="mt-0.5 block text-xs text-slate-400">
+            {perms.restrict_channel_creation
+              ? 'Only workspace admins can create channels right now.'
+              : 'Any member can create a (public) channel. Private channels are always admin-only.'}
+          </span>
+          <span className="mt-0.5 block text-xs text-slate-400">Starting a direct message is never affected by this.</span>
+        </span>
+        <input
+          type="checkbox"
+          checked={perms.restrict_channel_creation}
+          onChange={toggleRestrict}
+          disabled={saving}
+          className="h-5 w-5 shrink-0"
+        />
+      </label>
     </div>
   );
 }

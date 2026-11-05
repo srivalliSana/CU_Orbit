@@ -17,6 +17,14 @@ export const bulkAddUsers = (emails) =>
 export const promoteByEmail = (email) =>
   api('/api/admin/users/promote-by-email', { method: 'POST', body: JSON.stringify({ email }) });
 
+export const setSuperAdmin = (id, isSuperAdmin) =>
+  api(`/api/admin/users/${id}/superadmin`, { method: 'PUT', body: JSON.stringify({ is_superadmin: isSuperAdmin }) });
+
+export const getPermissions = () => api('/api/admin/permissions');
+
+export const setPermissions = (data) =>
+  api('/api/admin/permissions', { method: 'PUT', body: JSON.stringify(data) });
+
 export const getAuditLog = () => api('/api/admin/audit-log');
 
 export const getDeletedMessages = () => api('/api/admin/deleted-messages');
