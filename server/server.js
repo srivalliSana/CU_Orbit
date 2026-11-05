@@ -12,6 +12,7 @@ require('dotenv').config();
 const { OAuth2Client } = require('google-auth-library');
 const nodemailer = require('nodemailer');
 const geoip = require('geoip-lite');   // offline MaxMind-lite lookup — no outbound network call
+const compression = require('compression');
 const auth = require('./lib/auth');
 const campus = require('./lib/campus');
 const realtime = require('./lib/realtime');
@@ -23,6 +24,10 @@ const app = express();
 app.set('trust proxy', 'loopback');
 app.use(express.json());
 app.use(cors());
+// Every JSON response (message lists especially) and the web bundle's own
+// JS/CSS go out gzipped — smaller, faster responses matter a lot more once
+// there are hundreds of concurrent clients than with a handful.
+app.use(compression());
 
 // UTILS
 function normalizePhone(phone) {
@@ -124,7 +129,14 @@ const sequelize = new Sequelize(dbConfig.name, dbConfig.user, dbConfig.pass, {
     dialect: 'mysql',
     logging: false,
     dialectOptions: { connectTimeout: 10000 },
-    pool: { max: 10, min: 0, acquire: 30000, idle: 10000 }
+    // Was max: 10 — fine for a handful of people, but at real concurrent
+    // load (hundreds/thousands of users, each polling and hitting the API)
+    // every request needing a DB connection queues up behind only 10 of
+    // them, and that queueing IS what "the app hangs" looks like from the
+    // outside — not a crash, just everything waiting on `acquire` up to
+    // its 30s timeout. MySQL's own default max_connections is 151; this
+    // leaves headroom for a second process, migrations, and a DB client.
+    pool: { max: 50, min: 2, acquire: 30000, idle: 10000 }
 });
 
 // MODELS

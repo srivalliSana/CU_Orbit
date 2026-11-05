@@ -36,10 +36,15 @@ export function useMessages(containerId: string) {
       lastPage.length >= PAGE_SIZE ? lastPage[0]?.sent_at : undefined,
     // Mirrors Android's ChatViewModel: poll only while the chat screen is
     // on-screen, cancelled the moment it isn't (refetchIntervalInBackground
-    // stays false so backgrounding the app also stops it). Only the first
-    // (newest) page needs to stay live — invalidating refetches every page
-    // already loaded, same as before.
-    refetchInterval: isFocused ? 3000 : false,
+    // stays false so backgrounding the app also stops it). This is a
+    // dropped-socket safety net, not the primary delivery path (the socket
+    // is) — 3s was fine for a handful of testers but multiplies badly at
+    // real concurrency (1000 users x one poll every 3s is 300+ req/s on
+    // this one endpoint alone), and on an infinite query a tick refetches
+    // every page already loaded, not just the newest — doubly expensive
+    // for anyone who scrolled back through history. 12s keeps the safety
+    // net meaningfully faster than web's (20s) without that multiplier.
+    refetchInterval: isFocused ? 12000 : false,
     refetchIntervalInBackground: false,
   });
 
