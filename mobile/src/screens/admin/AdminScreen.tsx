@@ -3,9 +3,9 @@ import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, StyleSheet, 
 
 import Avatar from "../../components/Avatar";
 import {
-  bulkAddUsers, changeUserRole, getActivitySummary, getAdminUsers, getAuditLog, getDeletedMessages,
-  getPermissions, getSecurityEvents, getSystemHealth, promoteByEmail, removeUser, setPermissions,
-  setSuperAdmin, setUserActive,
+  bulkAddUsers, changeUserRole, deactivateAllStudents, getActivitySummary, getAdminUsers, getAuditLog,
+  getDeletedMessages, getPermissions, getSecurityEvents, getSystemHealth, promoteByEmail, removeUser,
+  setPermissions, setSuperAdmin, setUserActive,
   type ActivitySummary, type AuditLogEntry, type DeletedMessage, type SecurityEvent, type SystemHealth,
   type WorkspacePermissions,
 } from "../../api/admin";
@@ -169,6 +169,33 @@ function MembersTab() {
     }
   };
 
+  const [deactivatingStudents, setDeactivatingStudents] = useState(false);
+  const onDeactivateAllStudents = () => {
+    Alert.alert(
+      "Deactivate every student account?",
+      "This locks out every current student member immediately. Not a delete — reversible one at a time.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Deactivate all",
+          style: "destructive",
+          onPress: async () => {
+            setDeactivatingStudents(true);
+            try {
+              const { deactivated } = await deactivateAllStudents();
+              Alert.alert("Done", `${deactivated} student account(s) deactivated.`);
+              load();
+            } catch (e) {
+              setError(apiErrorMessage(e));
+            } finally {
+              setDeactivatingStudents(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (error) return <Text style={styles.error}>{error}</Text>;
   if (!users) return <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />;
 
@@ -195,6 +222,17 @@ function MembersTab() {
                 <Text style={styles.bulkButtonText}>{promoteBusy ? "Promoting…" : "Promote"}</Text>
               </Pressable>
               <Text style={styles.permDetail}>Grant superadmin separately, from their row below.</Text>
+            </View>
+          ) : null}
+          {isSuperAdmin ? (
+            <View style={styles.dangerBox}>
+              <Text style={styles.dangerLabel}>Student sign-in is disabled</Text>
+              <Text style={styles.permDetail}>
+                Students can no longer sign in. Deactivate every existing student account to lock out anyone who signed in before this policy took effect.
+              </Text>
+              <Pressable onPress={onDeactivateAllStudents} disabled={deactivatingStudents} style={styles.dangerButton}>
+                <Text style={styles.bulkButtonText}>{deactivatingStudents ? "Deactivating…" : "Deactivate all students"}</Text>
+              </Pressable>
             </View>
           ) : null}
         <View style={styles.bulkBox}>
@@ -485,6 +523,29 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     borderRadius: 10,
     padding: 10,
     marginBottom: 12,
+  },
+  dangerBox: {
+    borderWidth: 1,
+    borderColor: colors.danger,
+    backgroundColor: `${colors.danger}14`,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
+  },
+  dangerLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    color: colors.danger,
+    marginBottom: 4,
+  },
+  dangerButton: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    backgroundColor: colors.danger,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   bulkLabel: {
     fontSize: 11,

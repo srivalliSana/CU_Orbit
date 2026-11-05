@@ -34,6 +34,9 @@ export const bulkAddUsers = (emails: string[]) =>
 export const promoteByEmail = (email: string) =>
   client.post<{ success: boolean; user: User }>("/admin/users/promote-by-email", { email }).then((res) => res.data);
 
+export const deactivateAllStudents = () =>
+  client.post<{ success: boolean; deactivated: number }>("/admin/users/deactivate-students").then((res) => res.data);
+
 export const setSuperAdmin = (id: string, isSuperAdmin: boolean) =>
   client.put<{ success: boolean; user: User }>(`/admin/users/${id}/superadmin`, { is_superadmin: isSuperAdmin }).then((res) => res.data);
 

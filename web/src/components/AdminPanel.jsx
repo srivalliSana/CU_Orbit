@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import Avatar from './Avatar';
 import {
-  bulkAddUsers, changeUserRole, getActivitySummary, getAdminUsers, getAuditLog, getDeletedMessages,
-  getPermissions, getSecurityEvents, getSystemHealth, promoteByEmail, removeUser, setPermissions,
-  setSuperAdmin, setUserActive,
+  bulkAddUsers, changeUserRole, deactivateAllStudents, getActivitySummary, getAdminUsers, getAuditLog,
+  getDeletedMessages, getPermissions, getSecurityEvents, getSystemHealth, promoteByEmail, removeUser,
+  setPermissions, setSuperAdmin, setUserActive,
 } from '../api/admin';
 import { timeLabel } from '../lib/format';
 import AppsTab from './admin/AppsTab';
@@ -88,6 +88,21 @@ function MembersTab({ currentUser }) {
     try { await setUserActive(u.id, !u.is_active); load(); } catch (e) { setError(e.message); }
   };
 
+  const [deactivatingStudents, setDeactivatingStudents] = useState(false);
+  const onDeactivateAllStudents = async () => {
+    if (!confirm('Deactivate every student account? This locks out every current student member immediately. Not a delete — reversible one at a time.')) return;
+    setDeactivatingStudents(true);
+    try {
+      const { deactivated } = await deactivateAllStudents();
+      alert(`${deactivated} student account(s) deactivated.`);
+      load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setDeactivatingStudents(false);
+    }
+  };
+
   const onRemove = async (u) => {
     if (!confirm(`Remove ${u.name} from the workspace? They'll be dropped from every channel.`)) return;
     try { await removeUser(u.id); load(); } catch (e) { setError(e.message); }
@@ -156,6 +171,22 @@ function MembersTab({ currentUser }) {
             Creates the account if they haven't signed in yet, then makes them an app admin. Grant superadmin separately, from their row below.
           </p>
         </form>
+      )}
+
+      {isSuperAdmin && (
+        <div className="rounded-xl border border-red-200 bg-red-50/50 p-3 dark:border-red-900 dark:bg-red-950/20">
+          <label className="text-xs font-semibold uppercase tracking-wide text-red-600 dark:text-red-400">Student sign-in is disabled</label>
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+            Students can no longer sign in. Deactivate every existing student account to lock out anyone who signed in before this policy took effect.
+          </p>
+          <button
+            onClick={onDeactivateAllStudents}
+            disabled={deactivatingStudents}
+            className="mt-2 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            {deactivatingStudents ? 'Deactivating…' : 'Deactivate all students'}
+          </button>
+        </div>
       )}
 
       <form onSubmit={onBulkAdd} className="rounded-xl border border-slate-200 p-3 dark:border-slate-800">

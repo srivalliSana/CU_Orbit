@@ -1855,6 +1855,7 @@ app.get('/api/directory/search', auth.requireAuth, async (req, res) => {
             if (!key || key === me) continue;
             const u = byEmail.get(key);
             if (!u) continue;   // never signed in to Orbit — not a contact
+            if (u.role === 'student') continue;   // students aren't part of the application anymore
             results.push({
                 // Identity and profile: from CampusOne.
                 email: p.email,
@@ -2220,6 +2221,16 @@ function isCampusEmail(email) {
     return FACULTY_EMAIL_DOMAINS.includes(domain);
 }
 
+// Student sign-in is turned off: isCampusEmail alone lets anyone on an
+// allowed domain in (student or staff); this is the extra bar every real
+// sign-in route checks on top of it. Deliberately separate from
+// isFacultyEmail/isCampusEmail — those stay what they already meant
+// elsewhere (gating specific features), this is sign-in's own policy.
+const STUDENTS_BLOCKED = true;
+function isStudentEmail(email) {
+    return isCampusEmail(email) && !isFacultyEmail(email);
+}
+
 /** A channel is visible to its members, or to a global CampusOne admin
  * overseeing the workspace — no one else, even with the exact id. */
 async function canViewChannel(userId, channelId, user) {
@@ -2427,6 +2438,10 @@ app.post('/api/auth/google', async (req, res) => {
             logSecurityEvent('non_campus_login_attempt', req, email);
             return res.status(403).json({ error: 'forbidden', message: 'Sign in with your CUTM campus Google account' });
         }
+        if (STUDENTS_BLOCKED && isStudentEmail(email)) {
+            logSecurityEvent('student_login_blocked', req, email);
+            return res.status(403).json({ error: 'forbidden', message: "Student sign-in isn't available right now." });
+        }
 
         const user = await findOrCreateOrbitUser(email, payload.name);
 
@@ -2454,6 +2469,10 @@ app.post('/api/auth/otp/request', async (req, res) => {
         if (!isCampusEmail(email)) {
             logSecurityEvent('non_campus_login_attempt', req, email);
             return res.status(403).json({ error: 'forbidden', message: 'Use your CUTM campus email address' });
+        }
+        if (STUDENTS_BLOCKED && isStudentEmail(email)) {
+            logSecurityEvent('student_login_blocked', req, email);
+            return res.status(403).json({ error: 'forbidden', message: "Student sign-in isn't available right now." });
         }
         if (!mailer) {
             console.error('[otp] SMTP is not configured — cannot send codes');
@@ -2496,6 +2515,13 @@ app.post('/api/auth/otp/verify', async (req, res) => {
         const email = String(req.body.email || '').toLowerCase().trim();
         const code = String(req.body.code || '').trim();
         if (!email || !code) return res.status(400).json({ error: 'bad_request', message: 'email and code required' });
+        // Belt-and-suspenders — otp/request already refuses to send a
+        // student a code at all, but a code issued before this policy
+        // shipped should not still work.
+        if (STUDENTS_BLOCKED && isStudentEmail(email)) {
+            logSecurityEvent('student_login_blocked', req, email);
+            return res.status(403).json({ error: 'forbidden', message: "Student sign-in isn't available right now." });
+        }
 
         const record = await EmailOtp.findByPk(email);
         if (!record) return res.status(401).json({ error: 'invalid_code', message: 'Request a new code' });
@@ -5462,8 +5488,12 @@ app.post('/api/status', auth.requireAuth, async (req, res) => {
 // ahead of time is a legitimate, separate use of this same list.
 app.get('/api/users', auth.requireAuth, async (req, res) => {
     try {
-        const where = req.query.signed_in === 'true' ? { last_seen_at: { [Op.ne]: null } } : undefined;
-        res.json(await User.findAll(where ? { where } : undefined));
+        // Students are blocked from signing in (STUDENTS_BLOCKED) and aren't
+        // part of the application anymore — never surface one in a people
+        // picker (add to channel, new DM, etc.), signed-in filter or not.
+        const where = { role: { [Op.ne]: 'student' } };
+        if (req.query.signed_in === 'true') where.last_seen_at = { [Op.ne]: null };
+        res.json(await User.findAll({ where }));
     } catch (e) { res.json([]); }
 });
 
@@ -5476,7 +5506,13 @@ app.get('/api/users', auth.requireAuth, async (req, res) => {
 app.get('/api/admin/users', auth.requireAuth, async (req, res) => {
     if (!isGroupAdmin(req.user)) return res.status(403).json({ error: 'forbidden' });
     try {
-        const users = await User.findAll({ where: { last_seen_at: { [Op.ne]: null } }, order: [['createdAt', 'ASC']] });
+        // Students aren't part of the application anymore (STUDENTS_BLOCKED)
+        // — excluded here too, not just from sign-in, so the admin roster
+        // reflects who can actually use Orbit going forward.
+        const users = await User.findAll({
+            where: { last_seen_at: { [Op.ne]: null }, role: { [Op.ne]: 'student' } },
+            order: [['createdAt', 'ASC']],
+        });
         res.json(users);
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
@@ -5545,6 +5581,27 @@ app.put('/api/admin/users/:id/active', auth.requireAuth, async (req, res) => {
         await target.save();
         await logAudit(req.user, active ? 'user.reactivated' : 'user.deactivated', 'user', target.id, null);
         res.json({ success: true, user: target });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/**
+ * One-time bulk action to go with STUDENTS_BLOCKED: deactivates every
+ * currently-active student account in one call, so existing students lose
+ * access the same way a newly-blocked sign-in would, instead of staying
+ * active just because they signed in before the policy changed.
+ * Reversible one at a time via PUT /api/admin/users/:id/active, same as
+ * any other deactivation — this isn't a delete.
+ */
+app.post('/api/admin/users/deactivate-students', auth.requireAuth, async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: 'forbidden', message: 'Only a superadmin can do this.' });
+    try {
+        const students = await User.findAll({ where: { role: 'student', is_active: { [Op.ne]: false } } });
+        for (const u of students) {
+            u.is_active = false;
+            await u.save();
+        }
+        await logAudit(req.user, 'user.bulk_deactivated_students', 'user', null, `${students.length} student account(s) deactivated`);
+        res.json({ success: true, deactivated: students.length });
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 

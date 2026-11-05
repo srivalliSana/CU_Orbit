@@ -17,6 +17,9 @@ export const bulkAddUsers = (emails) =>
 export const promoteByEmail = (email) =>
   api('/api/admin/users/promote-by-email', { method: 'POST', body: JSON.stringify({ email }) });
 
+export const deactivateAllStudents = () =>
+  api('/api/admin/users/deactivate-students', { method: 'POST' });
+
 export const setSuperAdmin = (id, isSuperAdmin) =>
   api(`/api/admin/users/${id}/superadmin`, { method: 'PUT', body: JSON.stringify({ is_superadmin: isSuperAdmin }) });
 
