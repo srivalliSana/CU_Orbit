@@ -40,7 +40,7 @@ export default function ChatScreen({ route, navigation }: Props) {
   const { containerId, title, kind, scrollToMessageId } = route.params;
   const [wallpaper, setWallpaper] = useState<string | null>(null);
   const [wallpaperPickerOpen, setWallpaperPickerOpen] = useState(false);
-  const { data: messages, isLoading, error, refetch, send, react, remove, hide, edit, pin, star, vote, action } = useMessages(containerId);
+  const { data: messages, isLoading, error, refetch, send, react, remove, hide, edit, pin, star, vote, action, loadOlder, hasOlder, loadingOlder } = useMessages(containerId);
   const { typingName, notifyTyping } = useTyping(containerId);
   const selfId = useAuthStore((s) => s.user?.id);
   const selfRole = useAuthStore((s) => s.user?.role);
@@ -471,6 +471,24 @@ export default function ChatScreen({ route, navigation }: Props) {
         data={messages}
         style={wallpaperColor(wallpaper, isDark) ? { backgroundColor: wallpaperColor(wallpaper, isDark)! } : undefined}
         keyExtractor={(m) => m.id}
+        // The list isn't inverted (renders oldest-at-top, newest-at-bottom,
+        // same as it always has), so "load older" triggers on scrolling
+        // near the TOP, not FlatList's built-in onEndReached (that's the
+        // bottom). maintainVisibleContentPosition keeps whatever the user
+        // was looking at in place once older messages get prepended above
+        // it, instead of the view jumping.
+        onScroll={({ nativeEvent }) => {
+          if (nativeEvent.contentOffset.y < 80 && hasOlder && !loadingOlder) loadOlder();
+        }}
+        scrollEventThrottle={200}
+        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+        ListHeaderComponent={
+          loadingOlder ? (
+            <View style={{ paddingVertical: 14, alignItems: "center" }}>
+              <ActivityIndicator size="small" color={colors.textMuted} />
+            </View>
+          ) : null
+        }
         onScrollToIndexFailed={(info) => {
           // The target isn't rendered yet (variable-height rows) — approximate
           // an offset, then let the exact scrollToIndex retry land.

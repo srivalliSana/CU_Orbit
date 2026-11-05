@@ -2946,7 +2946,11 @@ app.post('/api/users/me/dnd', auth.requireAuth, async (req, res) => {
 // an active channel's full history could be thousands of rows, all of which
 // used to be fetched (and re-fetched on every 3s poll) on every open. Pass
 // ?before=<timestamp> to page further back.
-const MESSAGE_PAGE_SIZE = 200;
+// Was 200 — safe to shrink now that both clients actually paginate with
+// ?before= on scroll-up (they never did before, so a huge first page was
+// the only way to see any real history). A smaller first page means less
+// to fetch/serialize/render before a channel feels open.
+const MESSAGE_PAGE_SIZE = 50;
 app.get('/api/messages/:containerId', auth.requireAuth, async (req, res) => {
     try {
         const { containerId } = req.params;

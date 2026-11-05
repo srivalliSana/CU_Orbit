@@ -16,10 +16,25 @@ import { saveFile } from '../lib/saveFile';
 // connection, so it can be slow.
 const POLL_MS = 20000;
 const TYPING_TTL_MS = 4000;
+// Matches the server's MESSAGE_PAGE_SIZE — a full page means there might be
+// more/older messages to fetch.
+const MESSAGE_PAGE_SIZE = 50;
+
+// A poll/refresh only ever returns the newest page (no `before`), which
+// would otherwise blow away any older history the user scrolled up to
+// load — merge instead of replace: keep anything already in state that's
+// older than the fresh batch's oldest message.
+function mergeFreshMessages(prev, fresh) {
+  if (!fresh.length) return prev;
+  const cutoff = fresh[0].sent_at;
+  return [...prev.filter((m) => m.sent_at < cutoff), ...fresh];
+}
 
 export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenChannelInfo, onOpenLists, onOpenCanvas, onOpenWorkflows, onStartHuddle, onOpenProfile, onOpenDm, onBack, scrollToMessageId, onScrolledToMessage }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasOlder, setHasOlder] = useState(true);
   const [typing, setTyping] = useState([]);
   const [sendError, setSendError] = useState(null);
   const [canModerate, setCanModerate] = useState(false);
@@ -156,7 +171,10 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
   // called directly after a reaction/pin/edit/delete, so those actions show
   // up immediately rather than waiting for the next poll tick.
   const refreshMessages = async () => {
-    try { setMessages(await getMessages(chat.id)); } catch { /* keep showing stale data */ }
+    try {
+      const data = await getMessages(chat.id);
+      setMessages((prev) => mergeFreshMessages(prev, data));
+    } catch { /* keep showing stale data */ }
   };
 
   useEffect(() => {
@@ -164,13 +182,40 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
     const load = async () => {
       try {
         const data = await getMessages(chat.id);
-        if (alive) { setMessages(data); setLoading(false); }
+        if (alive) {
+          setMessages((prev) => mergeFreshMessages(prev, data));
+          setHasOlder(data.length >= MESSAGE_PAGE_SIZE);
+          setLoading(false);
+        }
       } catch { if (alive) setLoading(false); }
     };
     load();
     const t = setInterval(load, POLL_MS);
     return () => { alive = false; clearInterval(t); };
   }, [chat.id]);
+
+  // Scrolling near the top loads older history — the server already
+  // supported ?before= pagination, but nothing on web ever called it, so
+  // any channel's history was capped at its most recent page.
+  const loadOlder = async () => {
+    if (loadingOlder || !hasOlder || !messages.length) return;
+    setLoadingOlder(true);
+    const el = scroller.current;
+    const prevScrollHeight = el?.scrollHeight ?? 0;
+    try {
+      const older = await getMessages(chat.id, messages[0].sent_at);
+      setHasOlder(older.length >= MESSAGE_PAGE_SIZE);
+      if (older.length) {
+        setMessages((prev) => [...older, ...prev]);
+        // Keep whatever the user was looking at in the same spot instead
+        // of the view jumping once older messages are prepended above it.
+        requestAnimationFrame(() => {
+          if (el) el.scrollTop += el.scrollHeight - prevScrollHeight;
+        });
+      }
+    } catch { /* leave hasOlder as-is; the next scroll near top retries */ }
+    finally { setLoadingOlder(false); }
+  };
 
   // Marking read is tied to the messages actually rendered, not merely to
   // opening the chat, so a receipt means it was on screen.
@@ -204,6 +249,7 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
     const el = scroller.current;
     if (!el) return;
     atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (el.scrollTop < 80) loadOlder();
   };
 
   // A different conversation starts with a clean composer, not a stale reply.
@@ -476,6 +522,7 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
         {!loading && messages.length === 0 && (
           <p className="py-8 text-center text-sm text-slate-400">No messages yet. Say hello.</p>
         )}
+        {loadingOlder && <p className="py-2 text-center text-xs text-slate-400">Loading earlier messages…</p>}
         {messages.map((m) => {
           const day = dayLabel(m.sent_at);
           const divider = day !== lastDay ? (lastDay = day) : null;

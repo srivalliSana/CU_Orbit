@@ -5,8 +5,8 @@ import { api, getToken } from './auth';
 export const getHome = (workspaceId = 'default') =>
   api(`/api/home/me/${workspaceId}`);
 
-export const getMessages = (containerId) =>
-  api(`/api/messages/${encodeURIComponent(containerId)}`);
+export const getMessages = (containerId, before) =>
+  api(`/api/messages/${encodeURIComponent(containerId)}${before ? `?before=${before}` : ''}`);
 
 export const sendMessage = ({ containerId, body, type = 'text', mediaUrl, mediaName, mediaMimeType, enrichedMentions, replyToId, forwardedFromName }) =>
   api('/api/messages', {

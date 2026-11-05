@@ -1,4 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useIsFocused } from "@react-navigation/native";
 
 import {
@@ -14,19 +15,41 @@ import {
   unstarMessage,
   votePoll,
 } from "../api/messages";
+import type { Message } from "../types/api";
+
+// Matches the server's MESSAGE_PAGE_SIZE — a full page means there might be
+// more/older messages to fetch; a short page means we've hit the start of
+// the conversation's history.
+const PAGE_SIZE = 50;
 
 export function useMessages(containerId: string) {
   const isFocused = useIsFocused();
 
-  const query = useQuery({
+  const query = useInfiniteQuery({
     queryKey: ["messages", containerId],
-    queryFn: () => getMessages(containerId),
+    queryFn: ({ pageParam }: { pageParam?: number }) => getMessages(containerId, pageParam),
+    initialPageParam: undefined as number | undefined,
+    // Each page comes back oldest-to-newest; its first message is the
+    // right `before` cursor for fetching the next (older) page. A page
+    // shorter than PAGE_SIZE means there's nothing older left.
+    getNextPageParam: (lastPage: Message[]) =>
+      lastPage.length >= PAGE_SIZE ? lastPage[0]?.sent_at : undefined,
     // Mirrors Android's ChatViewModel: poll only while the chat screen is
     // on-screen, cancelled the moment it isn't (refetchIntervalInBackground
-    // stays false so backgrounding the app also stops it).
+    // stays false so backgrounding the app also stops it). Only the first
+    // (newest) page needs to stay live — invalidating refetches every page
+    // already loaded, same as before.
     refetchInterval: isFocused ? 3000 : false,
     refetchIntervalInBackground: false,
   });
+
+  // query.data.pages[0] is the newest batch (fetched first), later pages
+  // are progressively older — reverse them so the flattened result reads
+  // oldest-to-newest, the order the chat screen has always rendered in.
+  const messages = useMemo(
+    () => (query.data ? [...query.data.pages].reverse().flat() : undefined),
+    [query.data]
+  );
 
   const queryClient = useQueryClient();
   const send = useMutation({
@@ -107,5 +130,15 @@ export function useMessages(containerId: string) {
     },
   });
 
-  return { ...query, send, react, remove, hide, edit, pin, star, vote, action };
+  return {
+    ...query,
+    // Overrides query.data (the raw {pages, pageParams}) with the
+    // flattened, chronological array every existing call site already
+    // expects under this same property name.
+    data: messages,
+    loadOlder: query.fetchNextPage,
+    hasOlder: !!query.hasNextPage,
+    loadingOlder: query.isFetchingNextPage,
+    send, react, remove, hide, edit, pin, star, vote, action,
+  };
 }

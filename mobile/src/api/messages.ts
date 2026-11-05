@@ -1,9 +1,9 @@
 import { client } from "./client";
 import type { Message } from "../types/api";
 
-export const getMessages = (containerId: string) =>
+export const getMessages = (containerId: string, before?: number) =>
   client
-    .get<Message[]>(`/messages/${encodeURIComponent(containerId)}`)
+    .get<Message[]>(`/messages/${encodeURIComponent(containerId)}${before ? `?before=${before}` : ""}`)
     .then((res) => res.data);
 
 export interface MessageReads {
