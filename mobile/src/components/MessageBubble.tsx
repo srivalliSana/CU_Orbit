@@ -21,6 +21,7 @@ import ConfettiBurst from "./ConfettiBurst";
 import LinkPreviewCard from "./LinkPreviewCard";
 import { renderMarkdown, renderMessageText } from "../lib/markdown";
 import { openFile, saveFile } from "../lib/fileActions";
+import { useCachedMediaUri } from "../hooks/useCachedMediaUri";
 import { getReads } from "../api/messages";
 import { resolveMediaUrl } from "../constants/config";
 import { clockLabel } from "../lib/format";
@@ -207,6 +208,13 @@ export default function MessageBubble({
   }
 
   const attachmentUrl = resolveMediaUrl(message.attachments?.[0]?.url);
+  // Pre-warms the local file cache for an image/video attachment as soon as
+  // it renders, and swaps the display to that local copy once ready — so a
+  // chat scrolled through once still shows its photos, and Save still
+  // works, after the device goes offline.
+  const cachedAttachmentUri = useCachedMediaUri(
+    message.type === "image" || message.type === "video" ? attachmentUrl : null
+  );
   // The server stores files under a timestamp-prefixed name to avoid
   // collisions on disk — attachments[0].name is the sender's original
   // filename, shown/saved instead of "1755000000000-report.pdf". Messages
@@ -398,7 +406,7 @@ export default function MessageBubble({
 
         {message.type === "image" && attachmentUrl ? (
           <Pressable onPress={() => (selectionMode ? onToggleSelect?.() : setImageViewerVisible(true))}>
-            <Image source={{ uri: attachmentUrl }} style={styles.image} resizeMode="cover" />
+            <Image source={{ uri: cachedAttachmentUri || attachmentUrl }} style={styles.image} resizeMode="cover" />
           </Pressable>
         ) : message.type === "video" && attachmentUrl ? (
           // Tapping opens a dedicated fullscreen viewer (below) instead of
@@ -410,7 +418,7 @@ export default function MessageBubble({
           // the outer one always won). A tap now reliably opens a bigger
           // player with an explicit Save button, matching the image viewer.
           <Pressable onPress={() => (selectionMode ? onToggleSelect?.() : setVideoViewerVisible(true))}>
-            <VideoBubble uri={attachmentUrl} style={styles.image} controls={false} />
+            <VideoBubble uri={cachedAttachmentUri || attachmentUrl} style={styles.image} controls={false} />
             <View style={styles.videoPlayOverlay} pointerEvents="none">
               <Ionicons name="play-circle" size={44} color="#fff" />
             </View>
@@ -525,7 +533,7 @@ export default function MessageBubble({
             <Pressable style={styles.viewerCopyButton} onPress={() => Clipboard.setStringAsync(attachmentUrl)} hitSlop={10}>
               <Ionicons name="link-outline" size={22} color="#fff" />
             </Pressable>
-            <ZoomableImage uri={attachmentUrl} style={styles.viewerImage} />
+            <ZoomableImage uri={cachedAttachmentUri || attachmentUrl} style={styles.viewerImage} />
             <Pressable style={styles.viewerSaveButton} onPress={handleSave}>
               <Text style={styles.viewerSaveText}>Save image</Text>
             </Pressable>
@@ -547,7 +555,7 @@ export default function MessageBubble({
             <Pressable style={styles.viewerCopyButton} onPress={() => Clipboard.setStringAsync(attachmentUrl)} hitSlop={10}>
               <Ionicons name="link-outline" size={22} color="#fff" />
             </Pressable>
-            <VideoBubble uri={attachmentUrl} style={styles.viewerVideo} />
+            <VideoBubble uri={cachedAttachmentUri || attachmentUrl} style={styles.viewerVideo} />
             <Pressable style={styles.viewerSaveButton} onPress={handleSave}>
               <Text style={styles.viewerSaveText}>Save video</Text>
             </Pressable>

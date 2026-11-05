@@ -18,6 +18,21 @@ function cacheKeyFor(url: string) {
   return `orbit-${Math.abs(hash)}.${ext}`;
 }
 
+/** Same cache ensureCached() uses, exposed so a chat screen can pre-warm an
+ *  image/video's local copy as soon as it's rendered — not just when the
+ *  user later taps Open/Save — so viewing and saving both still work once
+ *  the device goes offline. Returns the original remote url if the fetch
+ *  fails (no network and nothing cached yet); the caller falls back to
+ *  that the same way it already did before this cache existed. */
+export async function ensureCachedMediaUri(url: string): Promise<string> {
+  try {
+    const file = await ensureCached(url);
+    return file.uri;
+  } catch {
+    return url;
+  }
+}
+
 async function ensureCached(url: string): Promise<File> {
   const destination = new File(Paths.cache, cacheKeyFor(url));
   if (destination.exists) return destination;

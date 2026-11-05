@@ -4592,7 +4592,14 @@ app.get('/api/link-preview', auth.requireAuth, async (req, res) => {
 //   AI_TEXT_MODEL       e.g. mistral:7b
 //   AI_TEXT_API_KEY     sent as "Authorization: Bearer <key>", if set
 //   AI_IMAGE_BASE_URL / AI_IMAGE_MODEL / AI_IMAGE_API_KEY — same idea
-const AI_SYSTEM_PROMPT = "You are CU AI, a helpful assistant built into Let's Connect, a university messaging app. Be friendly, concise, and genuinely useful — help with how to use the app's features (channels, DMs, reminders, scheduling, lists, polls, etc.) as well as general questions. Keep replies short unless the question calls for more detail.";
+// Written defensively against a small, weakly-instruction-following local
+// model (mistral:7b) that was found to recite a canned feature list on
+// almost every reply, ignoring the actual question — including after being
+// told directly to stop. Explicit, repeated "answer THIS question" and "do
+// not list features unless asked" framing measurably cuts that down; it's
+// not a guarantee with a 7B model, but it's the one lever we have without
+// switching models.
+const AI_SYSTEM_PROMPT = "You are CU AI, a helpful assistant built into Let's Connect, a university messaging app. Answer the user's most recent message directly and specifically — never repeat an introduction, a greeting, or a list of app features unless the user explicitly asks what you can do or what the app's features are. Do not restate earlier replies. Keep answers short and to the point.";
 const AI_HISTORY_LIMIT = 20;
 
 function aiHeaders(apiKey) {
@@ -4648,9 +4655,18 @@ app.post('/api/ai/messages', auth.requireAuth, async (req, res) => {
         if (native) {
             // Ollama's /api/generate takes one prompt string, not a
             // messages array — recent turns flattened into a transcript.
-            const transcript = ordered.map((r) => `${r.role === 'user' ? 'User' : 'Assistant'}: ${r.text}`).join('\n');
+            // A short window (not the full AI_HISTORY_LIMIT) and an
+            // explicit trailing cue, both specifically to stop the model
+            // from drifting back into repeating its own earlier replies
+            // the longer a flattened transcript gets.
+            const transcript = ordered.slice(-8).map((r) => `${r.role === 'user' ? 'User' : 'Assistant'}: ${r.text}`).join('\n');
             endpoint = baseUrl;
-            body = { model, prompt: transcript, system: AI_SYSTEM_PROMPT, stream: false };
+            body = {
+                model,
+                prompt: `${transcript}\n\nReply only to the User's last message above. Do not repeat anything Assistant already said.\nAssistant:`,
+                system: AI_SYSTEM_PROMPT,
+                stream: false,
+            };
         } else {
             endpoint = aiEndpoint(baseUrl, 'chat/completions');
             body = {
