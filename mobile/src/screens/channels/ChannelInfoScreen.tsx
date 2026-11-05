@@ -33,6 +33,7 @@ import { apiErrorMessage } from "../../api/client";
 import { useAuthStore } from "../../state/authStore";
 import Avatar from "../../components/Avatar";
 import { useThemeColors } from "../../state/themeStore";
+import { confirmAsync } from "../../components/ConfirmDialog";
 import type { HomeStackParamList } from "../../navigation/types";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "ChannelInfo">;
@@ -61,6 +62,8 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
   const [topicInput, setTopicInput] = useState("");
   const [savingInfo, setSavingInfo] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [memberSearch, setMemberSearch] = useState("");
+  const [candidateSearch, setCandidateSearch] = useState("");
 
   const channelQuery = useQuery({ queryKey: ["channel", channelId], queryFn: () => getChannel(channelId) });
   const membersQuery = useQuery({
@@ -74,6 +77,9 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
   const myMembership = members.find((m) => m.id === selfId);
   const isChannelAdmin = myMembership?.role === "admin";
   const isCreator = (id: string) => channel?.created_by === id;
+  const filteredMembers = members.filter((m) =>
+    m.name?.toLowerCase().includes(memberSearch.trim().toLowerCase())
+  );
 
   const joinRequestsQuery = useQuery({
     queryKey: ["channelJoinRequests", channelId],
@@ -110,6 +116,7 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
       await addChannelMember(channelId, userId);
       reload();
       setAdding(false);
+      setCandidateSearch("");
     } catch (e) {
       setError(apiErrorMessage(e, "Could not add that person."));
     } finally {
@@ -117,26 +124,19 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
     }
   };
 
-  const removeMember = (userId: string, name: string) => {
-    Alert.alert(`Remove ${name}?`, undefined, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          setBusyUserId(userId);
-          setError(null);
-          try {
-            await removeChannelMember(channelId, userId);
-            reload();
-          } catch (e) {
-            setError(apiErrorMessage(e, "Could not remove that person."));
-          } finally {
-            setBusyUserId(null);
-          }
-        },
-      },
-    ]);
+  const removeMember = async (userId: string, name: string) => {
+    const ok = await confirmAsync({ title: `Remove ${name}?`, confirmText: "Remove", destructive: true });
+    if (!ok) return;
+    setBusyUserId(userId);
+    setError(null);
+    try {
+      await removeChannelMember(channelId, userId);
+      reload();
+    } catch (e) {
+      setError(apiErrorMessage(e, "Could not remove that person."));
+    } finally {
+      setBusyUserId(null);
+    }
   };
 
   const setRole = async (userId: string, role: "admin" | "member") => {
@@ -152,28 +152,26 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
     }
   };
 
-  const leaveChannel = () => {
+  const leaveChannel = async () => {
     if (!selfId) return;
-    Alert.alert("Leave channel?", `You'll stop receiving messages from ${channel?.name ? `#${channel.name}` : "this channel"}.`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Leave",
-        style: "destructive",
-        onPress: async () => {
-          setBusyUserId(selfId);
-          setError(null);
-          try {
-            await removeChannelMember(channelId, selfId);
-            queryClient.invalidateQueries({ queryKey: ["home"] });
-            navigation.goBack();
-          } catch (e) {
-            setError(apiErrorMessage(e, "Could not leave that channel."));
-          } finally {
-            setBusyUserId(null);
-          }
-        },
-      },
-    ]);
+    const ok = await confirmAsync({
+      title: "Leave channel?",
+      message: `You'll stop receiving messages from ${channel?.name ? `#${channel.name}` : "this channel"}.`,
+      confirmText: "Leave",
+      destructive: true,
+    });
+    if (!ok) return;
+    setBusyUserId(selfId);
+    setError(null);
+    try {
+      await removeChannelMember(channelId, selfId);
+      queryClient.invalidateQueries({ queryKey: ["home"] });
+      navigation.goBack();
+    } catch (e) {
+      setError(apiErrorMessage(e, "Could not leave that channel."));
+    } finally {
+      setBusyUserId(null);
+    }
   };
 
   const sendInvite = async () => {
@@ -254,6 +252,12 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
   };
 
   const candidates = (usersQuery.data ?? []).filter((u) => !members.some((m) => m.id === u.id));
+  const filteredCandidates = candidates.filter((c) => {
+    const q = candidateSearch.trim().toLowerCase();
+    if (!q) return true;
+    const email = (c.campusEmail || c.campus_email || c.email || "").toLowerCase();
+    return c.name?.toLowerCase().includes(q) || email.includes(q);
+  });
 
   const toggleChannelActive = () => {
     if (!channel) return;
@@ -271,14 +275,12 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
       }
     };
     if (!active) {
-      Alert.alert(
-        `Deactivate #${channel.name}?`,
-        "No one will be able to see or message in it until you reactivate it.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Deactivate", style: "destructive", onPress: apply },
-        ]
-      );
+      confirmAsync({
+        title: `Deactivate #${channel.name}?`,
+        message: "No one will be able to see or message in it until you reactivate it.",
+        confirmText: "Deactivate",
+        destructive: true,
+      }).then((ok) => { if (ok) apply(); });
     } else {
       apply();
     }
@@ -305,7 +307,7 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
   return (
     <FlatList
       style={styles.container}
-      data={members}
+      data={filteredMembers}
       keyExtractor={(m) => m.id}
       ListHeaderComponent={
         <View>
@@ -537,29 +539,53 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
 
           <View style={styles.membersHeaderRow}>
             <Text style={styles.sectionLabel}>MEMBERS</Text>
-            <Pressable onPress={() => setAdding((v) => !v)}>
-              <Text style={styles.addLink}>{adding ? "Cancel" : "+ Add"}</Text>
-            </Pressable>
+            {isChannelAdmin || isSuperAdmin ? (
+              <Pressable onPress={() => { setAdding((v) => !v); setCandidateSearch(""); }}>
+                <Text style={styles.addLink}>{adding ? "Cancel" : "+ Add"}</Text>
+              </Pressable>
+            ) : null}
           </View>
+
+          {members.length > 6 ? (
+            <TextInput
+              value={memberSearch}
+              onChangeText={setMemberSearch}
+              placeholder="Search members"
+              placeholderTextColor={colors.textMuted}
+              style={styles.memberSearchInput}
+            />
+          ) : null}
 
           {adding ? (
             <View style={styles.addBox}>
               {usersQuery.isLoading ? (
                 <ActivityIndicator color={colors.primary} />
-              ) : candidates.length === 0 ? (
-                <Text style={styles.emptyText}>No one else to add.</Text>
               ) : (
-                candidates.map((c) => (
-                  <Pressable
-                    key={c.id}
-                    disabled={busyUserId === c.id}
-                    onPress={() => addMember(c.id)}
-                    style={styles.candidateRow}
-                  >
-                    <Avatar name={c.name} url={c.avatarUrl} size={32} />
-                    <Text style={styles.candidateName}>{c.name}</Text>
-                  </Pressable>
-                ))
+                <>
+                  <TextInput
+                    value={candidateSearch}
+                    onChangeText={setCandidateSearch}
+                    placeholder="Search people to add"
+                    placeholderTextColor={colors.textMuted}
+                    autoFocus
+                    style={styles.memberSearchInput}
+                  />
+                  {filteredCandidates.length === 0 ? (
+                    <Text style={styles.emptyText}>No one else to add.</Text>
+                  ) : (
+                    filteredCandidates.map((c) => (
+                      <Pressable
+                        key={c.id}
+                        disabled={busyUserId === c.id}
+                        onPress={() => addMember(c.id)}
+                        style={styles.candidateRow}
+                      >
+                        <Avatar name={c.name} url={c.avatarUrl} size={32} />
+                        <Text style={styles.candidateName}>{c.name}</Text>
+                      </Pressable>
+                    ))
+                  )}
+                </>
               )}
             </View>
           ) : null}
@@ -791,6 +817,16 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     color: colors.primary,
     fontWeight: "700",
     fontSize: 13,
+  },
+  memberSearchInput: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: colors.text,
   },
   addBox: {
     marginHorizontal: 16,

@@ -12,6 +12,7 @@ import { apiErrorMessage } from "../../api/client";
 import Avatar from "../../components/Avatar";
 import OptionPickerModal from "../../components/lists/OptionPickerModal";
 import { useThemeColors } from "../../state/themeStore";
+import { confirmAsync } from "../../components/ConfirmDialog";
 import type { HomeStackParamList } from "../../navigation/types";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "ListItem">;
@@ -63,11 +64,9 @@ export default function ListItemScreen({ route, navigation }: Props) {
     },
   });
 
-  const confirmDelete = () => {
-    Alert.alert("Delete this item?", undefined, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => remove.mutate() },
-    ]);
+  const confirmDelete = async () => {
+    const ok = await confirmAsync({ title: "Delete this item?", confirmText: "Delete", destructive: true });
+    if (ok) remove.mutate();
   };
 
   const addSubtask = useMutation({
@@ -248,11 +247,9 @@ function CommentsSection({
     setDraft("");
   };
 
-  const confirmRemove = (id: number) => {
-    Alert.alert("Delete this comment?", undefined, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => onRemove(id) },
-    ]);
+  const confirmRemove = async (id: number) => {
+    const ok = await confirmAsync({ title: "Delete this comment?", confirmText: "Delete", destructive: true });
+    if (ok) onRemove(id);
   };
 
   return (

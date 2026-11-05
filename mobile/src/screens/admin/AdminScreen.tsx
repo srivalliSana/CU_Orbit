@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { useQueryClient } from "@tanstack/react-query";
 
 import Avatar from "../../components/Avatar";
 import {
@@ -13,6 +14,7 @@ import { apiErrorMessage } from "../../api/client";
 import { timeLabel } from "../../lib/format";
 import { useAuthStore } from "../../state/authStore";
 import { useThemeColors } from "../../state/themeStore";
+import { confirmAsync } from "../../components/ConfirmDialog";
 import type { User } from "../../types/api";
 
 const ROLES = ["student", "faculty", "admin", "examcell", "coordinator"] as const;
@@ -60,6 +62,7 @@ function PermissionsTab() {
   const [perms, setPerms] = useState<WorkspacePermissions | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
 
   useEffect(() => { getPermissions().then(setPerms).catch((e) => setError(apiErrorMessage(e))); }, []);
 
@@ -68,7 +71,13 @@ function PermissionsTab() {
     const next = !perms.restrict_channel_creation;
     setSaving(true);
     try {
-      setPerms(await setPermissions({ restrict_channel_creation: next }));
+      const updated = await setPermissions({ restrict_channel_creation: next });
+      setPerms(updated);
+      // HomeScreen's FAB/add-channel entry points read this same endpoint
+      // through react-query with a 60s staleTime — without this the toggle
+      // would silently take up to a minute to actually take effect.
+      queryClient.setQueryData(["permissions"], updated);
+      queryClient.invalidateQueries({ queryKey: ["permissions"] });
     } catch (e) {
       setError(apiErrorMessage(e));
     } finally {
@@ -109,6 +118,7 @@ function MembersTab() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [promoteEmail, setPromoteEmail] = useState("");
   const [promoteBusy, setPromoteBusy] = useState(false);
+  const [memberSearch, setMemberSearch] = useState("");
 
   const load = () => getAdminUsers().then(setUsers).catch((e) => setError(apiErrorMessage(e)));
   useEffect(() => { load(); }, []);
@@ -133,13 +143,10 @@ function MembersTab() {
     try { await setUserActive(user.id, user.is_active === false); load(); } catch (e) { setError(apiErrorMessage(e)); }
   };
 
-  const onRemove = (user: User) => {
-    Alert.alert("Remove member", `Remove ${user.name} from the workspace?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Remove", style: "destructive", onPress: async () => {
-        try { await removeUser(user.id); load(); } catch (e) { setError(apiErrorMessage(e)); }
-      } },
-    ]);
+  const onRemove = async (user: User) => {
+    const ok = await confirmAsync({ title: "Remove member", message: `Remove ${user.name} from the workspace?`, confirmText: "Remove", destructive: true });
+    if (!ok) return;
+    try { await removeUser(user.id); load(); } catch (e) { setError(apiErrorMessage(e)); }
   };
 
   const onBulkAdd = async () => {
@@ -172,38 +179,39 @@ function MembersTab() {
   };
 
   const [deactivatingStudents, setDeactivatingStudents] = useState(false);
-  const onDeactivateAllStudents = () => {
-    Alert.alert(
-      "Deactivate every student account?",
-      "This locks out every current student member immediately. Not a delete — reversible one at a time.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Deactivate all",
-          style: "destructive",
-          onPress: async () => {
-            setDeactivatingStudents(true);
-            try {
-              const { deactivated } = await deactivateAllStudents();
-              Alert.alert("Done", `${deactivated} student account(s) deactivated.`);
-              load();
-            } catch (e) {
-              setError(apiErrorMessage(e));
-            } finally {
-              setDeactivatingStudents(false);
-            }
-          },
-        },
-      ]
-    );
+  const onDeactivateAllStudents = async () => {
+    const ok = await confirmAsync({
+      title: "Deactivate every student account?",
+      message: "This locks out every current student member immediately. Not a delete — reversible one at a time.",
+      confirmText: "Deactivate all",
+      destructive: true,
+    });
+    if (!ok) return;
+    setDeactivatingStudents(true);
+    try {
+      const { deactivated } = await deactivateAllStudents();
+      Alert.alert("Done", `${deactivated} student account(s) deactivated.`);
+      load();
+    } catch (e) {
+      setError(apiErrorMessage(e));
+    } finally {
+      setDeactivatingStudents(false);
+    }
   };
 
   if (error) return <Text style={styles.error}>{error}</Text>;
   if (!users) return <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />;
 
+  const filteredUsers = users.filter((u) => {
+    const q = memberSearch.trim().toLowerCase();
+    if (!q) return true;
+    const email = (u.campusEmail || u.campus_email || u.email || "").toLowerCase();
+    return u.name?.toLowerCase().includes(q) || email.includes(q);
+  });
+
   return (
     <FlatList
-      data={users}
+      data={filteredUsers}
       keyExtractor={(u) => u.id}
       contentContainerStyle={{ paddingBottom: 24 }}
       ListHeaderComponent={
@@ -251,6 +259,16 @@ function MembersTab() {
             <Text style={styles.bulkButtonText}>{bulkBusy ? "Adding…" : "Add"}</Text>
           </Pressable>
           </View>
+          {users.length > 6 ? (
+            <TextInput
+              value={memberSearch}
+              onChangeText={setMemberSearch}
+              placeholder="Search members by name or email"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              style={styles.bulkInput}
+            />
+          ) : null}
         </View>
       }
       renderItem={({ item }) => (

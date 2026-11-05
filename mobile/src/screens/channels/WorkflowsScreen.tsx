@@ -13,6 +13,7 @@ import {
 } from "../../api/workflows";
 import { getLists, type ListSummary } from "../../api/lists";
 import { useThemeColors } from "../../state/themeStore";
+import { confirmAsync } from "../../components/ConfirmDialog";
 import type { HomeStackParamList } from "../../navigation/types";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "Workflows">;
@@ -67,11 +68,11 @@ export default function WorkflowsScreen({ route, navigation }: Props) {
     load();
   };
 
-  const remove = (w: WorkflowRow) => {
-    Alert.alert(`Delete "${w.name}"?`, undefined, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => { await deleteWorkflow(w.id).catch(() => {}); load(); } },
-    ]);
+  const remove = async (w: WorkflowRow) => {
+    const ok = await confirmAsync({ title: `Delete "${w.name}"?`, confirmText: "Delete", destructive: true });
+    if (!ok) return;
+    await deleteWorkflow(w.id).catch(() => {});
+    load();
   };
 
   return (

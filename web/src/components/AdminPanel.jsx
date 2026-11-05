@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import Avatar from './Avatar';
 import {
   bulkAddUsers, changeUserRole, deactivateAllStudents, getActivitySummary, getAdminUsers, getAuditLog,
@@ -70,6 +71,7 @@ function MembersTab({ currentUser }) {
   const [promoteEmail, setPromoteEmail] = useState('');
   const [promoteBusy, setPromoteBusy] = useState(false);
   const [promoteDone, setPromoteDone] = useState(false);
+  const [memberSearch, setMemberSearch] = useState('');
 
   const load = () => getAdminUsers().then(setUsers).catch((e) => setError(e.message));
   useEffect(() => { load(); }, []);
@@ -214,6 +216,13 @@ function MembersTab({ currentUser }) {
         </div>
       </form>
 
+      <input
+        value={memberSearch}
+        onChange={(e) => setMemberSearch(e.target.value)}
+        placeholder="Search members by name or email"
+        className="w-full rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-500/40 dark:border-slate-700 dark:text-slate-100"
+      />
+
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] text-left text-sm">
           <thead>
@@ -225,7 +234,13 @@ function MembersTab({ currentUser }) {
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
+            {users
+              .filter((u) => {
+                const q = memberSearch.trim().toLowerCase();
+                if (!q) return true;
+                return u.name?.toLowerCase().includes(q) || (u.campus_email || u.email || '').toLowerCase().includes(q);
+              })
+              .map((u) => (
               <tr key={u.id} className="border-t border-slate-100 dark:border-slate-800">
                 <td className="py-2 pr-3">
                   <div className="flex items-center gap-2">
@@ -294,6 +309,7 @@ function PermissionsTab() {
   const [perms, setPerms] = useState(null);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
 
   useEffect(() => { getPermissions().then(setPerms).catch((e) => setError(e.message)); }, []);
 
@@ -304,6 +320,12 @@ function PermissionsTab() {
     try {
       const updated = await setPermissions({ restrict_channel_creation: next });
       setPerms(updated);
+      // ChatList's "Create channel" button reads this same endpoint through
+      // react-query with a 60s staleTime — without this, toggling here would
+      // silently take up to a minute to actually take effect for anyone,
+      // including the admin who just flipped it.
+      queryClient.setQueryData(['permissions'], updated);
+      queryClient.invalidateQueries({ queryKey: ['permissions'] });
     } catch (e) {
       setError(e.message);
     } finally {

@@ -10,6 +10,7 @@ import { createItem, deleteList, exportListCsvText, getList, type ListField, typ
 import { getChannelMembers } from "../../api/channels";
 import { apiErrorMessage } from "../../api/client";
 import { useThemeColors } from "../../state/themeStore";
+import { confirmAsync } from "../../components/ConfirmDialog";
 import type { HomeStackParamList } from "../../navigation/types";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "ListDetail">;
@@ -92,10 +93,10 @@ export default function ListDetailScreen({ route, navigation }: Props) {
         { text: "Export CSV", onPress: exportCsv },
         {
           text: "Delete list", style: "destructive",
-          onPress: () => Alert.alert("Delete this list?", "This removes every item in it.", [
-            { text: "Cancel", style: "cancel" },
-            { text: "Delete", style: "destructive", onPress: () => removeList.mutate() },
-          ]),
+          onPress: async () => {
+            const ok = await confirmAsync({ title: "Delete this list?", message: "This removes every item in it.", confirmText: "Delete", destructive: true });
+            if (ok) removeList.mutate();
+          },
         },
         { text: "Cancel", style: "cancel" },
       ]

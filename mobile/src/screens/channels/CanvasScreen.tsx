@@ -5,6 +5,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { createCanvas, deleteCanvas, getCanvas, updateCanvas, type CanvasRow } from "../../api/canvas";
 import { renderMessageText } from "../../lib/markdown";
 import { useThemeColors } from "../../state/themeStore";
+import { confirmAsync } from "../../components/ConfirmDialog";
 import type { HomeStackParamList } from "../../navigation/types";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "Canvas">;
@@ -65,15 +66,12 @@ export default function CanvasScreen({ route, navigation }: Props) {
     }
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!canvas) return;
-    Alert.alert("Delete this canvas?", "This removes it for everyone in the channel.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete", style: "destructive",
-        onPress: async () => { await deleteCanvas(canvas.id).catch(() => {}); setCanvas(null); },
-      },
-    ]);
+    const ok = await confirmAsync({ title: "Delete this canvas?", message: "This removes it for everyone in the channel.", confirmText: "Delete", destructive: true });
+    if (!ok) return;
+    await deleteCanvas(canvas.id).catch(() => {});
+    setCanvas(null);
   };
 
   useLayoutEffect(() => {

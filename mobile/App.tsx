@@ -11,6 +11,7 @@ import NetInfo from "@react-native-community/netinfo";
 import RootNavigator from "./src/navigation/RootNavigator";
 import ErrorBoundary from "./src/components/ErrorBoundary";
 import UpdateBanner from "./src/components/UpdateBanner";
+import ConfirmHost from "./src/components/ConfirmDialog";
 
 // React Query has no browser navigator.onLine to fall back on in React
 // Native — without this it doesn't reliably know the device is offline, so
@@ -60,6 +61,7 @@ export default function App() {
             >
               <RootNavigator />
               <UpdateBanner />
+              <ConfirmHost />
               <StatusBar style="auto" />
             </PersistQueryClientProvider>
           </SafeAreaProvider>

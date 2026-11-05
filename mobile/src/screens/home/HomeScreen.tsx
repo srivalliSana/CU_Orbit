@@ -20,6 +20,7 @@ import { useChatActions } from "../../hooks/useChatActions";
 import { useNavGuard } from "../../hooks/useNavGuard";
 import { searchMessages, type SearchResult } from "../../api/search";
 import { setConversationPref } from "../../api/conversations";
+import { getPermissions } from "../../api/admin";
 import ChatListRow, { type ChatRowItem } from "../../components/ChatListRow";
 import CuAiBubble from "../../components/CuAiBubble";
 import { channelToRow, dmToRow } from "../../lib/chatRows";
@@ -68,6 +69,12 @@ export default function HomeScreen({ navigation }: Props) {
   const currentUser = useAuthStore((s) => s.user);
   const [sectionTarget, setSectionTarget] = useState<ChatRowItem | null>(null);
   const [sectionInput, setSectionInput] = useState("");
+
+  // Mirrors web's ChatList: the server is the authority (it 403s a blocked
+  // create regardless), this just decides whether to show the entry point
+  // at all so a restricted member doesn't hit a surprise error.
+  const { data: perms } = useQuery({ queryKey: ["permissions"], queryFn: getPermissions, staleTime: 60000 });
+  const canCreateChannel = currentUser?.role === "admin" || !perms?.restrict_channel_creation;
 
   const saveSection = async (value: string | null) => {
     if (!sectionTarget) return;
@@ -157,13 +164,13 @@ export default function HomeScreen({ navigation }: Props) {
       kind: "sectionHeader",
       id: "channels-header",
       label: "Channels",
-      onAdd: () => navigation.navigate("CreateChannel"),
+      onAdd: canCreateChannel ? () => navigation.navigate("CreateChannel") : undefined,
     });
     list.push(...unsectioned.map((row) => ({ kind: "row" as const, id: row.id, row })));
     list.push({ kind: "sectionHeader", id: "dms-header", label: "Direct messages" });
     list.push(...dmRows.map((row) => ({ kind: "row" as const, id: row.id, row })));
     return list;
-  }, [data, query, unreadMentionCount, navigation, messageResults]);
+  }, [data, query, unreadMentionCount, navigation, messageResults, canCreateChannel]);
 
   if (isLoading) {
     return (
@@ -334,6 +341,7 @@ export default function HomeScreen({ navigation }: Props) {
         <>
           <Pressable style={styles.fabBackdrop} onPress={() => setFabMenuOpen(false)} />
           <View style={styles.fabMenu}>
+            {canCreateChannel ? (
             <Pressable
               style={styles.fabMenuRow}
               onPress={() => { setFabMenuOpen(false); navigation.navigate("CreateChannel"); }}
@@ -346,6 +354,7 @@ export default function HomeScreen({ navigation }: Props) {
                 <Text style={styles.fabMenuSubtitle}>Start a public or private group</Text>
               </View>
             </Pressable>
+            ) : null}
             <View style={styles.fabMenuDivider} />
             <Pressable
               style={styles.fabMenuRow}

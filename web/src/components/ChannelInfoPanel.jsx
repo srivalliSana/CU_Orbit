@@ -48,6 +48,8 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
   const [topicInput, setTopicInput] = useState('');
   const [savingInfo, setSavingInfo] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [candidateSearch, setCandidateSearch] = useState('');
 
   const load = () => {
     setError(null);
@@ -113,6 +115,7 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
 
   const startAdding = () => {
     setAdding(true);
+    setCandidateSearch('');
     listUsers()
       .then((list) => {
         const memberIds = new Set(members.map((m) => m.id));
@@ -128,6 +131,7 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
       load();
       onChanged?.();
       setAdding(false);
+      setCandidateSearch('');
     } catch (e) {
       setError(e.message || 'Could not add that person.');
     } finally {
@@ -469,16 +473,29 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
             <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Members</h4>
-                <button
-                  onClick={startAdding}
-                  className="text-xs font-medium text-accent-600 hover:text-accent-700"
-                >
-                  + Add
-                </button>
+                {(isChannelAdmin || isSuperAdmin) && (
+                  <button
+                    onClick={startAdding}
+                    className="text-xs font-medium text-accent-600 hover:text-accent-700"
+                  >
+                    + Add
+                  </button>
+                )}
               </div>
 
+              {members.length > 6 && (
+                <input
+                  value={memberSearch}
+                  onChange={(e) => setMemberSearch(e.target.value)}
+                  placeholder="Search members"
+                  className="mt-2 w-full rounded-lg border border-slate-200 bg-transparent px-3 py-1.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-accent-500 focus:outline-none dark:border-slate-700 dark:text-slate-200"
+                />
+              )}
+
               <ul className="mt-2 space-y-1">
-                {members.map((m) => (
+                {members
+                  .filter((m) => m.name?.toLowerCase().includes(memberSearch.trim().toLowerCase()))
+                  .map((m) => (
                   <li key={m.id} className="flex items-center gap-3 py-1.5">
                     <button
                       onClick={() => onOpenProfile?.(m.id)}
@@ -521,21 +538,36 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
               </ul>
 
               {adding && (
-                <div className="mt-3 max-h-52 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                  {candidates.length === 0 && (
-                    <p className="p-3 text-xs text-slate-400">No one else to add.</p>
-                  )}
-                  {candidates.map((c) => (
-                    <button
-                      key={c.id}
-                      disabled={busyUserId === c.id}
-                      onClick={() => addMember(c.id)}
-                      className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 disabled:opacity-40 dark:hover:bg-slate-800"
-                    >
-                      <Avatar name={c.name} url={c.avatarUrl} size={28} />
-                      <span className="truncate text-sm text-slate-700 dark:text-slate-200">{c.name}</span>
-                    </button>
-                  ))}
+                <div className="mt-3">
+                  <input
+                    autoFocus
+                    value={candidateSearch}
+                    onChange={(e) => setCandidateSearch(e.target.value)}
+                    placeholder="Search people to add"
+                    className="w-full rounded-lg border border-slate-200 bg-transparent px-3 py-1.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-accent-500 focus:outline-none dark:border-slate-700 dark:text-slate-200"
+                  />
+                  <div className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                    {(() => {
+                      const q = candidateSearch.trim().toLowerCase();
+                      const filtered = q
+                        ? candidates.filter((c) => c.name?.toLowerCase().includes(q) || (c.campus_email || c.email || '').toLowerCase().includes(q))
+                        : candidates;
+                      if (filtered.length === 0) {
+                        return <p className="p-3 text-xs text-slate-400">No one else to add.</p>;
+                      }
+                      return filtered.map((c) => (
+                        <button
+                          key={c.id}
+                          disabled={busyUserId === c.id}
+                          onClick={() => addMember(c.id)}
+                          className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 disabled:opacity-40 dark:hover:bg-slate-800"
+                        >
+                          <Avatar name={c.name} url={c.avatarUrl} size={28} />
+                          <span className="truncate text-sm text-slate-700 dark:text-slate-200">{c.name}</span>
+                        </button>
+                      ));
+                    })()}
+                  </div>
                 </div>
               )}
             </div>

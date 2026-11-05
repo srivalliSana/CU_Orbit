@@ -7,6 +7,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { createField, deleteField, getList, updateField, type ListField, type ListFieldType } from "../../api/lists";
 import { apiErrorMessage } from "../../api/client";
 import { useThemeColors } from "../../state/themeStore";
+import { confirmAsync } from "../../components/ConfirmDialog";
 import type { HomeStackParamList } from "../../navigation/types";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "ListFields">;
@@ -41,11 +42,9 @@ export default function ListFieldsScreen({ route }: Props) {
     onSuccess: invalidate,
   });
 
-  const confirmDelete = (field: ListField) => {
-    Alert.alert(`Remove "${field.name}"?`, "This deletes its data from every item.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Remove", style: "destructive", onPress: () => remove.mutate(field.id) },
-    ]);
+  const confirmDelete = async (field: ListField) => {
+    const ok = await confirmAsync({ title: `Remove "${field.name}"?`, message: "This deletes its data from every item.", confirmText: "Remove", destructive: true });
+    if (ok) remove.mutate(field.id);
   };
 
   if (isLoading) {
