@@ -34,6 +34,18 @@ export const bulkAddUsers = (emails: string[]) =>
 export const promoteByEmail = (email: string) =>
   client.post<{ success: boolean; user: User }>("/admin/users/promote-by-email", { email }).then((res) => res.data);
 
+export const setSuperAdmin = (id: string, isSuperAdmin: boolean) =>
+  client.put<{ success: boolean; user: User }>(`/admin/users/${id}/superadmin`, { is_superadmin: isSuperAdmin }).then((res) => res.data);
+
+export interface WorkspacePermissions {
+  restrict_channel_creation: boolean;
+}
+
+export const getPermissions = () => client.get<WorkspacePermissions>("/admin/permissions").then((res) => res.data);
+
+export const setPermissions = (data: Partial<WorkspacePermissions>) =>
+  client.put<WorkspacePermissions>("/admin/permissions", data).then((res) => res.data);
+
 export const getAuditLog = () => client.get<AuditLogEntry[]>("/admin/audit-log").then((res) => res.data);
 
 export const getDeletedMessages = () => client.get<DeletedMessage[]>("/admin/deleted-messages").then((res) => res.data);

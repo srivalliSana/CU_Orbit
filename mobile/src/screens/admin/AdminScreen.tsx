@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 
 import Avatar from "../../components/Avatar";
 import {
   bulkAddUsers, changeUserRole, getActivitySummary, getAdminUsers, getAuditLog, getDeletedMessages,
-  getSecurityEvents, getSystemHealth, promoteByEmail, removeUser, setUserActive,
+  getPermissions, getSecurityEvents, getSystemHealth, promoteByEmail, removeUser, setPermissions,
+  setSuperAdmin, setUserActive,
   type ActivitySummary, type AuditLogEntry, type DeletedMessage, type SecurityEvent, type SystemHealth,
+  type WorkspacePermissions,
 } from "../../api/admin";
 import { apiErrorMessage } from "../../api/client";
 import { timeLabel } from "../../lib/format";
@@ -16,6 +18,7 @@ import type { User } from "../../types/api";
 const ROLES = ["student", "faculty", "admin", "examcell", "coordinator"] as const;
 const TABS = [
   { id: "members", label: "Members" },
+  { id: "permissions", label: "Permissions" },
   { id: "activity", label: "Activity" },
   { id: "security", label: "Security" },
   { id: "audit", label: "Audit log" },
@@ -29,14 +32,15 @@ export default function AdminScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.tabRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabRow} contentContainerStyle={{ gap: 8 }}>
         {TABS.map((t) => (
           <Pressable key={t.id} onPress={() => setTab(t.id)} style={[styles.tab, tab === t.id && styles.tabActive]}>
             <Text style={[styles.tabText, tab === t.id && styles.tabTextActive]}>{t.label}</Text>
           </Pressable>
         ))}
-      </View>
+      </ScrollView>
       {tab === "members" ? <MembersTab />
+        : tab === "permissions" ? <PermissionsTab />
         : tab === "activity" ? <ActivityTab />
         : tab === "security" ? <SecurityTab />
         : tab === "audit" ? <AuditTab />
@@ -45,10 +49,58 @@ export default function AdminScreen() {
   );
 }
 
+/** Slack-style "who can create channels" toggle. Off (default) lets any
+ *  member create a channel, on restricts it to workspace admins. Direct
+ *  messages are never affected. */
+function PermissionsTab() {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [perms, setPerms] = useState<WorkspacePermissions | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { getPermissions().then(setPerms).catch((e) => setError(apiErrorMessage(e))); }, []);
+
+  const toggle = async () => {
+    if (!perms) return;
+    const next = !perms.restrict_channel_creation;
+    setSaving(true);
+    try {
+      setPerms(await setPermissions({ restrict_channel_creation: next }));
+    } catch (e) {
+      setError(apiErrorMessage(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (error) return <Text style={styles.error}>{error}</Text>;
+  if (!perms) return <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />;
+
+  return (
+    <View>
+      <Text style={styles.sectionLabel}>WHO CAN CREATE CHANNELS</Text>
+      <View style={styles.permRow}>
+        <View style={{ flex: 1, paddingRight: 10 }}>
+          <Text style={styles.permTitle}>Restrict channel creation to admins</Text>
+          <Text style={styles.permDetail}>
+            {perms.restrict_channel_creation
+              ? "Only workspace admins can create channels right now."
+              : "Any member can create a (public) channel. Private channels are always admin-only."}
+          </Text>
+          <Text style={styles.permDetail}>Starting a direct message is never affected by this.</Text>
+        </View>
+        <Switch value={perms.restrict_channel_creation} onValueChange={toggle} disabled={saving} />
+      </View>
+    </View>
+  );
+}
+
 function MembersTab() {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const selfId = useAuthStore((s) => s.user?.id);
+  const isSuperAdmin = useAuthStore((s) => !!s.user?.is_superadmin);
   const [users, setUsers] = useState<User[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [bulkEmails, setBulkEmails] = useState("");
@@ -60,11 +112,19 @@ function MembersTab() {
   useEffect(() => { load(); }, []);
 
   const onRoleChange = (user: User) => {
+    // Promoting to/from admin is superadmin-only (enforced server-side
+    // too) — a plain admin viewing another admin's row only gets the
+    // non-admin roles offered, same reasoning as hiding it on web.
+    const options = ROLES.filter((r) => r !== "admin" || isSuperAdmin || user.role === "admin");
     Alert.alert(
       "Change role",
       user.name,
-      ROLES.map((r) => ({ text: r, onPress: () => changeUserRole(user.id, r).then(load).catch((e) => setError(apiErrorMessage(e))) }))
+      options.map((r) => ({ text: r, onPress: () => changeUserRole(user.id, r).then(load).catch((e) => setError(apiErrorMessage(e))) }))
     );
+  };
+
+  const onToggleSuperAdmin = async (user: User) => {
+    try { await setSuperAdmin(user.id, !user.is_superadmin); load(); } catch (e) { setError(apiErrorMessage(e)); }
   };
 
   const onToggleActive = async (user: User) => {
@@ -99,7 +159,7 @@ function MembersTab() {
     setPromoteBusy(true);
     try {
       await promoteByEmail(promoteEmail.trim().toLowerCase());
-      Alert.alert("Promoted", `${promoteEmail.trim()} is now a superadmin.`);
+      Alert.alert("Promoted", `${promoteEmail.trim()} is now an admin.`);
       setPromoteEmail("");
       load();
     } catch (e) {
@@ -119,21 +179,24 @@ function MembersTab() {
       contentContainerStyle={{ paddingBottom: 24 }}
       ListHeaderComponent={
         <View>
-          <View style={styles.bulkBox}>
-            <Text style={styles.bulkLabel}>Make superadmin by email</Text>
-            <TextInput
-              value={promoteEmail}
-              onChangeText={setPromoteEmail}
-              placeholder="name@cutm.ac.in"
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              style={styles.bulkInput}
-            />
-            <Pressable onPress={onPromote} disabled={promoteBusy || !promoteEmail.trim()} style={styles.bulkButton}>
-              <Text style={styles.bulkButtonText}>{promoteBusy ? "Promoting…" : "Promote"}</Text>
-            </Pressable>
-          </View>
+          {isSuperAdmin ? (
+            <View style={styles.bulkBox}>
+              <Text style={styles.bulkLabel}>Promote to admin by email</Text>
+              <TextInput
+                value={promoteEmail}
+                onChangeText={setPromoteEmail}
+                placeholder="name@cutm.ac.in"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                style={styles.bulkInput}
+              />
+              <Pressable onPress={onPromote} disabled={promoteBusy || !promoteEmail.trim()} style={styles.bulkButton}>
+                <Text style={styles.bulkButtonText}>{promoteBusy ? "Promoting…" : "Promote"}</Text>
+              </Pressable>
+              <Text style={styles.permDetail}>Grant superadmin separately, from their row below.</Text>
+            </View>
+          ) : null}
         <View style={styles.bulkBox}>
           <Text style={styles.bulkLabel}>Bulk add by campus email</Text>
           <TextInput
@@ -154,10 +217,16 @@ function MembersTab() {
         <View style={styles.memberRow}>
           <Avatar name={item.name} url={item.avatarUrl} size={36} />
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.memberName}>{item.name}</Text>
+            <Text style={styles.memberName}>
+              {item.name}
+              {item.is_superadmin ? <Text style={styles.superadminChip}>  SUPERADMIN</Text> : null}
+            </Text>
             <Text style={styles.memberEmail}>{item.campusEmail || item.campus_email || item.email}</Text>
             <View style={styles.memberMetaRow}>
-              <Pressable onPress={() => onRoleChange(item)} disabled={item.id === selfId}>
+              <Pressable
+                onPress={() => onRoleChange(item)}
+                disabled={item.id === selfId || (item.role === "admin" && !isSuperAdmin)}
+              >
                 <Text style={styles.roleChip}>{item.role}</Text>
               </Pressable>
               {item.is_active === false ? <Text style={styles.deactivatedChip}>Deactivated</Text> : null}
@@ -165,6 +234,11 @@ function MembersTab() {
           </View>
           {item.id !== selfId ? (
             <View style={{ gap: 4 }}>
+              {isSuperAdmin && item.role === "admin" ? (
+                <Pressable onPress={() => onToggleSuperAdmin(item)}>
+                  <Text style={styles.linkText}>{item.is_superadmin ? "Revoke superadmin" : "Make superadmin"}</Text>
+                </Pressable>
+              ) : null}
               <Pressable onPress={() => onToggleActive(item)}>
                 <Text style={styles.linkText}>{item.is_active === false ? "Reactivate" : "Deactivate"}</Text>
               </Pressable>
@@ -477,6 +551,34 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   deactivatedChip: {
     fontSize: 11,
     color: colors.danger,
+  },
+  superadminChip: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#06130D",
+    backgroundColor: colors.warning,
+    borderRadius: 999,
+    overflow: "hidden",
+    paddingHorizontal: 6,
+  },
+  permRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    padding: 12,
+  },
+  permTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.text,
+    marginBottom: 4,
+  },
+  permDetail: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 2,
   },
   linkText: {
     fontSize: 11,

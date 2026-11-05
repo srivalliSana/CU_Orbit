@@ -5,6 +5,7 @@ export interface User {
   campusEmail?: string;
   campus_email?: string;
   role: string;
+  is_superadmin?: boolean;
   avatarUrl?: string | null;
   handle?: string;
   bio?: string;
