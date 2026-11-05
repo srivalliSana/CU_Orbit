@@ -88,6 +88,10 @@ async function requireAuth(req, res, next) {
             if (result === false) return res.status(403).json({ error: 'account_deactivated', message: 'This account has been deactivated.' });
             if (result && result.active === false) return res.status(403).json({ error: 'account_deactivated', message: 'This account has been deactivated.' });
             if (result && result.role) req.user.role = result.role;
+            // Same reasoning as role above — is_superadmin must reflect the
+            // live row on every request, not just whatever was true when
+            // the session token was issued (which never carried it at all).
+            if (result && typeof result.is_superadmin === 'boolean') req.user.is_superadmin = result.is_superadmin;
         }
         // Must never break the request it is observing.
         try { onAuthenticated?.(req.user.id); } catch (e) { /* ignore */ }

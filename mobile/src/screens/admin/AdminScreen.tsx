@@ -32,19 +32,21 @@ export default function AdminScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabRow} contentContainerStyle={{ gap: 8 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabRow} contentContainerStyle={styles.tabRowContent}>
         {TABS.map((t) => (
           <Pressable key={t.id} onPress={() => setTab(t.id)} style={[styles.tab, tab === t.id && styles.tabActive]}>
             <Text style={[styles.tabText, tab === t.id && styles.tabTextActive]}>{t.label}</Text>
           </Pressable>
         ))}
       </ScrollView>
-      {tab === "members" ? <MembersTab />
-        : tab === "permissions" ? <PermissionsTab />
-        : tab === "activity" ? <ActivityTab />
-        : tab === "security" ? <SecurityTab />
-        : tab === "audit" ? <AuditTab />
-        : <DeletedTab />}
+      <View style={styles.tabContent}>
+        {tab === "members" ? <MembersTab />
+          : tab === "permissions" ? <PermissionsTab />
+          : tab === "activity" ? <ActivityTab />
+          : tab === "security" ? <SecurityTab />
+          : tab === "audit" ? <AuditTab />
+          : <DeletedTab />}
+      </View>
     </View>
   );
 }
@@ -486,13 +488,31 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     padding: 16,
   },
   tabRow: {
-    flexDirection: "row",
-    gap: 8,
+    // Fixed, bounded height — without this, a horizontal ScrollView with
+    // no explicit size can expand to fill whatever vertical space its
+    // sibling below doesn't use (e.g. a tab showing just a one-line error
+    // instead of a full list), and a row's default cross-axis alignItems
+    // is "stretch", so every tab pill stretched to match: the exact giant
+    // vertical-pill bug this was shipped with.
+    height: 40,
+    flexGrow: 0,
+    flexShrink: 0,
     marginBottom: 12,
+  },
+  tabRowContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  tabContent: {
+    flex: 1,
   },
   tab: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    height: 32,
+    justifyContent: "center",
+    alignItems: "center",
+    alignSelf: "center",
     borderRadius: 999,
     backgroundColor: colors.surface,
   },

@@ -1761,9 +1761,9 @@ auth.setOnAuthenticated(touchLastSeen);
 // Admin Panel takes effect on the promoted/demoted person's very next
 // request instead of waiting for their token to expire.
 auth.setActiveCheck(async (userId) => {
-    const user = await User.findByPk(userId, { attributes: ['is_active', 'role'] });
+    const user = await User.findByPk(userId, { attributes: ['is_active', 'role', 'is_superadmin'] });
     if (!user) return { active: true }; // missing row: let requireAuth's own logic decide, not this hook
-    return { active: user.is_active !== false, role: user.role };
+    return { active: user.is_active !== false, role: user.role, is_superadmin: !!user.is_superadmin };
 });
 
 /** Helper for the audit trail — never let logging break the action it's recording. */
