@@ -12,7 +12,8 @@ type Props = NativeStackScreenProps<HomeStackParamList, "ContactInfo">;
  * DM contact info — identity plus links into the shared media/pinned/starred
  * browser (MessageListScreen), same as a channel's info screen. Deliberately
  * lighter than web's ContactPanel (department/role/bio) — that needs the
- * faculty-only CampusOne directory API this app doesn't call.
+ * faculty-only CampusOne directory API this app doesn't call. Styled to
+ * match ChannelInfoScreen's hero + quick-row + card layout.
  */
 export default function ContactInfoScreen({ route, navigation }: Props) {
   const colors = useThemeColors();
@@ -20,33 +21,41 @@ export default function ContactInfoScreen({ route, navigation }: Props) {
   const { name, containerId } = route.params;
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.headerBlock}>
-        <Avatar name={name} size={80} />
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 32 }}>
+      <View style={styles.hero}>
+        <Avatar name={name} size={84} />
         <Text style={styles.name}>{name}</Text>
       </View>
 
-      <View style={styles.navBlock}>
-        <Pressable
-          style={styles.navRow}
+      <View style={styles.quickRow}>
+        <QuickAction
+          icon="🖼️"
+          label="Media"
           onPress={() => navigation.navigate("MessageList", { containerId, mode: "media", title: "Shared media", chatTitle: name, chatKind: "dm" })}
-        >
-          <Text style={styles.navRowText}>🖼️ Shared media</Text>
-        </Pressable>
-        <Pressable
-          style={styles.navRow}
+        />
+        <QuickAction
+          icon="📌"
+          label="Pinned"
           onPress={() => navigation.navigate("MessageList", { containerId, mode: "pinned", title: "Pinned messages", chatTitle: name, chatKind: "dm" })}
-        >
-          <Text style={styles.navRowText}>📌 Pinned messages</Text>
-        </Pressable>
-        <Pressable
-          style={styles.navRow}
+        />
+        <QuickAction
+          icon="⭐"
+          label="Starred"
           onPress={() => navigation.navigate("MessageList", { containerId, mode: "starred", title: "Starred messages", chatTitle: name, chatKind: "dm" })}
-        >
-          <Text style={styles.navRowText}>⭐ Starred messages</Text>
-        </Pressable>
+        />
       </View>
     </ScrollView>
+  );
+}
+
+function QuickAction({ icon, label, onPress }: { icon: string; label: string; onPress: () => void }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  return (
+    <Pressable style={styles.quickBtn} onPress={onPress}>
+      <View style={styles.quickCircle}><Text style={{ fontSize: 17 }}>{icon}</Text></View>
+      <Text style={styles.quickLabel}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -55,28 +64,44 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     flex: 1,
     backgroundColor: colors.background,
   },
-  headerBlock: {
+  hero: {
     alignItems: "center",
-    paddingVertical: 24,
+    paddingTop: 22,
+    paddingBottom: 18,
+    paddingHorizontal: 24,
     gap: 4,
   },
   name: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 19,
+    fontWeight: "800",
     color: colors.text,
-    marginTop: 8,
+    marginTop: 10,
   },
-  navBlock: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
+  quickRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 10,
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingBottom: 20,
   },
-  navRow: {
-    paddingVertical: 12,
+  quickBtn: {
+    alignItems: "center",
+    gap: 6,
+    width: 68,
   },
-  navRowText: {
-    fontSize: 14,
-    color: colors.text,
+  quickCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: colors.textMuted,
   },
 });

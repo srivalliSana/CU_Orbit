@@ -144,29 +144,11 @@ export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMess
               )}
             </div>
 
-            <dl className="mt-6 space-y-3">
-              <Field label="Email" value={person.email} />
-              <Field label="Role" value={person.role} capitalize />
-              {person.is_hod && <Field label="Position" value="Head of Department" />}
-              <Field label="Department" value={person.department} />
-              <Field label="School" value={person.school} />
-              <Field label="Registration no." value={person.regno} />
-              <Field label="Cohort" value={person.cohort} />
-              <Field label="Campus" value={person.campus} />
-              <Field label="About" value={person.bio} />
-            </dl>
-
             {target?.containerId && (
-              <div className="mt-6 space-y-1 border-t border-slate-200 pt-4 dark:border-slate-800">
-                <button onClick={() => setView('media')} className="block w-full rounded-lg px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
-                  🖼️ Shared media
-                </button>
-                <button onClick={() => setView('pinned')} className="block w-full rounded-lg px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
-                  📌 Pinned messages
-                </button>
-                <button onClick={() => setView('starred')} className="block w-full rounded-lg px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
-                  ⭐ Starred messages
-                </button>
+              <div className="mt-5 flex justify-center gap-3">
+                <QuickAction icon="🖼️" label="Media" onClick={() => setView('media')} />
+                <QuickAction icon="📌" label="Pinned" onClick={() => setView('pinned')} />
+                <QuickAction icon="⭐" label="Starred" onClick={() => setView('starred')} />
               </div>
             )}
 
@@ -180,22 +162,41 @@ export default function ContactPanel({ target, onClose, onOpenChat, onJumpToMess
               </button>
             )}
 
+            <Section label="About">
+              <Card className="p-3.5">
+                <dl className="space-y-3">
+                  <Field label="Email" value={person.email} />
+                  <Field label="Role" value={person.role} capitalize />
+                  {person.is_hod && <Field label="Position" value="Head of Department" />}
+                  <Field label="Department" value={person.department} />
+                  <Field label="School" value={person.school} />
+                  <Field label="Registration no." value={person.regno} />
+                  <Field label="Cohort" value={person.cohort} />
+                  <Field label="Campus" value={person.campus} />
+                  <Field label="About" value={person.bio} />
+                </dl>
+              </Card>
+            </Section>
+
             {person.id && (
-              <div className="mt-6 space-y-1 border-t border-slate-200 pt-4 dark:border-slate-800">
-                <button
-                  onClick={toggleBlock}
-                  disabled={blockBusy}
-                  className="block w-full rounded-lg px-2 py-2 text-left text-sm text-red-600 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-950/40"
-                >
-                  {person.is_blocked_by_me ? '✅ Unblock' : '🚫 Block'} {person.name}
-                </button>
-                <button
-                  onClick={() => setReportOpen(true)}
-                  className="block w-full rounded-lg px-2 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
-                >
-                  ⚠️ Report {person.name}
-                </button>
-              </div>
+              <Section label="Actions">
+                <Card>
+                  <NavRow
+                    icon={person.is_blocked_by_me ? '✅' : '🚫'}
+                    label={`${person.is_blocked_by_me ? 'Unblock' : 'Block'} ${person.name}`}
+                    onClick={toggleBlock}
+                    disabled={blockBusy}
+                    danger
+                  />
+                  <NavRow
+                    icon="⚠️"
+                    label={`Report ${person.name}`}
+                    onClick={() => setReportOpen(true)}
+                    danger
+                    divider
+                  />
+                </Card>
+              </Section>
             )}
           </>
         )}
@@ -244,5 +245,54 @@ function Field({ label, value, capitalize }) {
       <dt className="text-[11px] uppercase tracking-wide text-slate-400">{label}</dt>
       <dd className={`text-sm text-slate-700 dark:text-slate-200 ${capitalize ? 'capitalize' : ''}`}>{value}</dd>
     </div>
+  );
+}
+
+function QuickAction({ icon, label, onClick }) {
+  return (
+    <button onClick={onClick} className="flex w-16 flex-col items-center gap-1.5">
+      <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-base dark:border-slate-700 dark:bg-slate-800/60">
+        {icon}
+      </span>
+      <span className="text-[10px] font-semibold text-slate-400">{label}</span>
+    </button>
+  );
+}
+
+function Section({ label, children }) {
+  return (
+    <div className="mt-5">
+      <h4 className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-400">{label}</h4>
+      {children}
+    </div>
+  );
+}
+
+function Card({ className = '', children }) {
+  return (
+    <div className={`overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 dark:border-slate-700/60 dark:bg-slate-800/40 ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+function NavRow({ icon, label, onClick, disabled, danger, divider }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex w-full items-center gap-3 p-3.5 text-left text-sm font-medium disabled:opacity-40 ${
+        divider ? 'border-t border-slate-200 dark:border-slate-700/60' : ''
+      } ${danger ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-200'}`}
+    >
+      <span
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm ${
+          danger ? 'bg-red-100 dark:bg-red-950/40' : 'bg-accent-50 dark:bg-accent-900/20'
+        }`}
+      >
+        {icon}
+      </span>
+      {label}
+    </button>
   );
 }

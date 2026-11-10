@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   Share,
@@ -11,6 +12,9 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { Ionicons } from "@expo/vector-icons";
+import ZoomableImage from "../../components/ZoomableImage";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import * as ImagePicker from "expo-image-picker";
@@ -36,6 +40,7 @@ import { apiErrorMessage } from "../../api/client";
 import { parseCsv } from "../../lib/csv";
 import { useAuthStore } from "../../state/authStore";
 import Avatar from "../../components/Avatar";
+import { resolveMediaUrl } from "../../constants/config";
 import { useThemeColors } from "../../state/themeStore";
 import { confirmAsync } from "../../components/ConfirmDialog";
 import type { HomeStackParamList } from "../../navigation/types";
@@ -66,6 +71,7 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
   const [topicInput, setTopicInput] = useState("");
   const [savingInfo, setSavingInfo] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarViewerVisible, setAvatarViewerVisible] = useState(false);
   const [memberSearch, setMemberSearch] = useState("");
   const [candidateSearch, setCandidateSearch] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -349,15 +355,42 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 32 }}>
       <View style={styles.hero}>
         {isChannelAdmin || isSuperAdmin ? (
-          <Pressable onPress={changeAvatar} disabled={uploadingAvatar} style={styles.avatarEditWrap}>
+          <Pressable
+            onPress={() => (channel?.avatar_url ? setAvatarViewerVisible(true) : changeAvatar())}
+            disabled={uploadingAvatar}
+            style={styles.avatarEditWrap}
+          >
             <Avatar name={channel?.name ?? ""} url={channel?.avatar_url} size={84} />
-            <View style={styles.avatarEditBadge}>
+            <Pressable
+              onPress={changeAvatar}
+              disabled={uploadingAvatar}
+              hitSlop={8}
+              style={styles.avatarEditBadge}
+            >
               {uploadingAvatar ? <ActivityIndicator size="small" color={colors.primaryText} /> : <Text style={{ fontSize: 11 }}>📷</Text>}
-            </View>
+            </Pressable>
           </Pressable>
         ) : (
-          <Avatar name={channel?.name ?? ""} url={channel?.avatar_url} size={84} />
+          <Pressable onPress={() => channel?.avatar_url && setAvatarViewerVisible(true)}>
+            <Avatar name={channel?.name ?? ""} url={channel?.avatar_url} size={84} />
+          </Pressable>
         )}
+
+        <Modal
+          visible={avatarViewerVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setAvatarViewerVisible(false)}
+        >
+          <GestureHandlerRootView style={styles.avatarViewerBackdrop}>
+            <Pressable style={styles.avatarViewerClose} onPress={() => setAvatarViewerVisible(false)} hitSlop={10}>
+              <Ionicons name="close" size={26} color="#fff" />
+            </Pressable>
+            {channel?.avatar_url ? (
+              <ZoomableImage uri={resolveMediaUrl(channel.avatar_url) ?? channel.avatar_url} style={styles.avatarViewerImage} />
+            ) : null}
+          </GestureHandlerRootView>
+        </Modal>
 
         {editingInfo ? (
           <View style={styles.editInfoBlock}>
@@ -570,7 +603,7 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
                   {item.name}
                   {isCreator(item.id) ? <Text style={styles.creatorTag}>  creator</Text> : null}
                 </Text>
-                {item.role === "admin" ? <Text style={styles.adminTag}>Admin</Text> : null}
+                {item.role === "admin" ? <Text style={styles.adminTag}>Channel admin</Text> : null}
               </View>
               {isChannelAdmin && !isCreator(item.id) && item.id !== selfId ? (
                 <View style={styles.memberActions}>
@@ -740,6 +773,22 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     justifyContent: "center",
     borderWidth: 2,
     borderColor: colors.background,
+  },
+  avatarViewerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.92)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  avatarViewerImage: {
+    width: "100%",
+    height: "70%",
+  },
+  avatarViewerClose: {
+    position: "absolute",
+    top: 48,
+    left: 16,
+    zIndex: 1,
   },
   editInfoBlock: {
     width: "100%",

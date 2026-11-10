@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import * as SecureStore from "expo-secure-store";
 
+import { unregisterPushToken } from "../api/push";
 import type { User } from "../types/api";
 
 const SESSION_KEY = "orbit_session";
@@ -59,6 +60,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   clear: async () => {
+    // Best-effort: must fire while the session token is still valid, so
+    // the server knows to stop pushing to this device for this account.
+    // Never let a network failure here block signing out.
+    try {
+      await unregisterPushToken();
+    } catch {}
     await SecureStore.deleteItemAsync(SESSION_KEY);
     await SecureStore.deleteItemAsync(USER_KEY);
     set({ token: null, user: null, status: "signedOut" });

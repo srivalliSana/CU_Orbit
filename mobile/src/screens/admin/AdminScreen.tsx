@@ -124,6 +124,7 @@ function MembersTab() {
   const [memberSearch, setMemberSearch] = useState("");
   const [fabOpen, setFabOpen] = useState(false);
   const [rowMenuUser, setRowMenuUser] = useState<User | null>(null);
+  const [statFilter, setStatFilter] = useState<"all" | "admin" | "superadmin">("all");
 
   const load = () => getAdminUsers().then(setUsers).catch((e) => setError(apiErrorMessage(e)));
   useEffect(() => { load(); }, []);
@@ -210,6 +211,8 @@ function MembersTab() {
   if (!users) return <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />;
 
   const filteredUsers = users.filter((u) => {
+    if (statFilter === "admin" && u.role !== "admin") return false;
+    if (statFilter === "superadmin" && !u.is_superadmin) return false;
     const q = memberSearch.trim().toLowerCase();
     if (!q) return true;
     const email = (u.campusEmail || u.campus_email || u.email || "").toLowerCase();
@@ -242,6 +245,14 @@ function MembersTab() {
       key: "superadmin", label: rowMenuUser.is_superadmin ? "Revoke superadmin" : "Make superadmin",
       icon: "shield-checkmark-outline" as const, onPress: () => onToggleSuperAdmin(rowMenuUser),
     }] : []),
+    ...(isSuperAdmin && rowMenuUser.role === "admin" ? [{
+      key: "remove-admin", label: "Remove admin",
+      icon: "person-remove-outline" as const, onPress: () => changeUserRole(rowMenuUser.id, "student").then(load).catch((e: unknown) => setError(apiErrorMessage(e))),
+    }] : []),
+    ...(isSuperAdmin && rowMenuUser.role !== "admin" ? [{
+      key: "make-admin", label: "Make admin",
+      icon: "person-add-outline" as const, onPress: () => changeUserRole(rowMenuUser.id, "admin").then(load).catch((e: unknown) => setError(apiErrorMessage(e))),
+    }] : []),
     {
       key: "active", label: rowMenuUser.is_active === false ? "Reactivate" : "Deactivate",
       icon: "power-outline", onPress: () => onToggleActive(rowMenuUser),
@@ -261,10 +272,17 @@ function MembersTab() {
         ListHeaderComponent={
           <View>
             <View style={styles.statRow}>
-              <StatTile label="Members" value={users.length} />
-              <StatTile label="Admins" value={adminCount} />
-              <StatTile label="Superadmin" value={superadminCount} />
+              <StatTile label="Members" value={users.length} active={statFilter === "all"} onPress={() => setStatFilter("all")} />
+              <StatTile label="Admins" value={adminCount} active={statFilter === "admin"} onPress={() => setStatFilter(statFilter === "admin" ? "all" : "admin")} />
+              <StatTile label="Superadmin" value={superadminCount} active={statFilter === "superadmin"} onPress={() => setStatFilter(statFilter === "superadmin" ? "all" : "superadmin")} />
             </View>
+            {statFilter !== "all" && (
+              <Pressable onPress={() => setStatFilter("all")} style={{ paddingHorizontal: 4, paddingBottom: 8 }}>
+                <Text style={{ color: colors.primary, fontSize: 12 }}>
+                  Showing only {statFilter === "admin" ? "admins" : "superadmins"} · Clear
+                </Text>
+              </Pressable>
+            )}
 
             <View style={styles.toolbarRow}>
               <TextInput
@@ -463,15 +481,19 @@ function HealthBar({ label, percent, detail }: { label: string; percent: number;
   );
 }
 
-function StatTile({ label, value }: { label: string; value: string | number }) {
+function StatTile({
+  label, value, active, onPress,
+}: { label: string; value: string | number; active?: boolean; onPress?: () => void }) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  return (
-    <View style={styles.statTile}>
+  const content = (
+    <View style={[styles.statTile, active ? { borderColor: colors.primary, borderWidth: 1 } : null]}>
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
+  if (!onPress) return content;
+  return <Pressable onPress={onPress}>{content}</Pressable>;
 }
 
 /** Server health (CPU/memory/disk/uptime) + a live activity snapshot — polls every 8s while open. */

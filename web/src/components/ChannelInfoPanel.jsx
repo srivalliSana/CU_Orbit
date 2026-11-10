@@ -577,7 +577,7 @@ export default function ChannelInfoPanel({ channelId, currentUser, onClose, onCh
                           )}
                           {isCreator(m.id) && <span className="ml-1.5 text-[10px] text-slate-400">creator</span>}
                         </p>
-                        {m.role === 'admin' && <p className="text-[11px] text-accent-500">Admin</p>}
+                        {m.role === 'admin' && <p className="text-[11px] text-accent-500">Channel admin</p>}
                       </div>
                     </button>
                     {isChannelAdmin && !isCreator(m.id) && m.id !== currentUser?.id && (

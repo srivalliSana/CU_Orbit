@@ -5766,7 +5766,20 @@ app.put('/api/users/me/push-token', auth.requireAuth, async (req, res) => {
     try {
         const { token } = req.body;
         if (!token) return res.status(400).json({ error: 'bad_request', message: 'token required' });
+        // The same device token can still be sitting on whichever account was
+        // last signed in here (logout never used to clear it) — without this,
+        // both accounts keep receiving each other's pushes on a shared device.
+        await User.update({ push_token: null }, { where: { push_token: token } });
         await User.update({ push_token: token }, { where: { id: req.user.id } });
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** Clears this device's push token on sign-out, so a shared/reused device
+ *  stops receiving pushes for an account nobody is signed into anymore. */
+app.delete('/api/users/me/push-token', auth.requireAuth, async (req, res) => {
+    try {
+        await User.update({ push_token: null }, { where: { id: req.user.id } });
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });

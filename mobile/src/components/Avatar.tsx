@@ -3,6 +3,7 @@ import { Image, StyleSheet, Text, View } from "react-native";
 
 import { colorFor, initials } from "../lib/format";
 import { useThemeColors } from "../state/themeStore";
+import { resolveMediaUrl } from "../constants/config";
 
 interface AvatarProps {
   name: string;
@@ -16,11 +17,12 @@ export default function Avatar({ name, url, size = 44, presence }: AvatarProps) 
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const dimensionStyle = { width: size, height: size, borderRadius: size / 2 };
   const dotSize = Math.max(10, size * 0.28);
+  const resolvedUrl = resolveMediaUrl(url);
 
   return (
     <View>
-      {url ? (
-        <Image source={{ uri: url }} style={[styles.image, dimensionStyle]} />
+      {resolvedUrl ? (
+        <Image source={{ uri: resolvedUrl }} style={[styles.image, dimensionStyle]} />
       ) : (
         <View style={[styles.fallback, dimensionStyle, { backgroundColor: colorFor(name) }]}>
           <Text style={[styles.initials, { fontSize: size * 0.4 }]}>{initials(name)}</Text>

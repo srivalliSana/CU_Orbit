@@ -72,6 +72,7 @@ function MembersTab({ currentUser }) {
   const [promoteBusy, setPromoteBusy] = useState(false);
   const [promoteDone, setPromoteDone] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
+  const [statFilter, setStatFilter] = useState('all');
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [promoteModalOpen, setPromoteModalOpen] = useState(false);
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
@@ -156,6 +157,8 @@ function MembersTab({ currentUser }) {
   const adminCount = users.filter((u) => u.role === 'admin').length;
   const superadminCount = users.filter((u) => u.is_superadmin).length;
   const filteredUsers = users.filter((u) => {
+    if (statFilter === 'admin' && u.role !== 'admin') return false;
+    if (statFilter === 'superadmin' && !u.is_superadmin) return false;
     const q = memberSearch.trim().toLowerCase();
     if (!q) return true;
     return u.name?.toLowerCase().includes(q) || (u.campus_email || u.email || '').toLowerCase().includes(q);
@@ -164,10 +167,16 @@ function MembersTab({ currentUser }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Members" value={users.length} />
-        <StatCard label="Admins" value={adminCount} />
-        <StatCard label="Superadmin" value={superadminCount} accent />
+        <StatCard label="Members" value={users.length} active={statFilter === 'all'} onClick={() => setStatFilter('all')} />
+        <StatCard label="Admins" value={adminCount} active={statFilter === 'admin'} onClick={() => setStatFilter(statFilter === 'admin' ? 'all' : 'admin')} />
+        <StatCard label="Superadmin" value={superadminCount} accent active={statFilter === 'superadmin'} onClick={() => setStatFilter(statFilter === 'superadmin' ? 'all' : 'superadmin')} />
       </div>
+      {statFilter !== 'all' && (
+        <p className="text-xs text-slate-400">
+          Showing only {statFilter === 'admin' ? 'admins' : 'superadmins'}.{' '}
+          <button onClick={() => setStatFilter('all')} className="text-accent-600 hover:underline">Clear</button>
+        </p>
+      )}
 
       <div className="flex items-center gap-2">
         <input
@@ -267,6 +276,18 @@ function MembersTab({ currentUser }) {
                                 onClick={() => { setRowMenuId(null); onToggleSuperAdmin(u); }}
                               />
                             )}
+                            {isSuperAdmin && u.role === 'admin' && (
+                              <MenuItem
+                                label="Remove admin"
+                                onClick={() => { setRowMenuId(null); onRoleChange(u.id, 'student'); }}
+                              />
+                            )}
+                            {isSuperAdmin && u.role !== 'admin' && (
+                              <MenuItem
+                                label="Make admin"
+                                onClick={() => { setRowMenuId(null); onRoleChange(u.id, 'admin'); }}
+                              />
+                            )}
                             <MenuItem
                               label={u.is_active === false ? 'Reactivate' : 'Deactivate'}
                               onClick={() => { setRowMenuId(null); onToggleActive(u); }}
@@ -342,12 +363,19 @@ function MembersTab({ currentUser }) {
   );
 }
 
-function StatCard({ label, value, accent }) {
+function StatCard({ label, value, accent, active, onClick }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center dark:border-slate-700/60 dark:bg-slate-800/40">
+    <button
+      onClick={onClick}
+      className={`rounded-2xl border p-3 text-center transition ${
+        active
+          ? 'border-accent-500 bg-accent-50 dark:border-accent-500 dark:bg-accent-950/40'
+          : 'border-slate-200 bg-slate-50 hover:bg-slate-100 dark:border-slate-700/60 dark:bg-slate-800/40 dark:hover:bg-slate-800/70'
+      }`}
+    >
       <p className={`text-lg font-extrabold ${accent ? 'text-amber-500' : 'text-slate-800 dark:text-slate-100'}`}>{value}</p>
       <p className="text-[11px] font-semibold text-slate-400">{label}</p>
-    </div>
+    </button>
   );
 }
 
