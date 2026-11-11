@@ -10,11 +10,23 @@ const INLINE_PATTERNS = [
   { type: 'strike', regex: /~~([^~\n]+)~~/ },
   { type: 'italic', regex: /_([^_\n]+)_/ },
   { type: 'link', regex: /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/ },
+  // Must be checked before the bare-URL pattern below — otherwise
+  // "name@example.com" partially matches as a URL (just "example.com",
+  // silently dropping the "name@" half) since '@' isn't a word character.
+  { type: 'email', regex: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/ },
   // Bare URLs too, not just an explicit https:// scheme — "check
   // www.cutm.ac.in" or "visit cutm.ac.in/portal" has no scheme at all and
   // previously wasn't recognized as a link.
   { type: 'url', regex: /((?:https?:\/\/|www\.)[^\s<]+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?:\/[^\s<]*)?)/i },
 ];
+
+// Opens Gmail's own compose view in a new tab on web, rather than a
+// mailto: link, which would hand off to whatever desktop mail client is
+// configured (often nothing, on a shared lab machine) instead of the
+// webmail everyone on campus actually uses.
+function gmailComposeUrl(email) {
+  return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}`;
+}
 
 /** A matched "url" token may be missing its scheme (www.example.com,
  *  cutm.ac.in/portal) — an <a href> needs a real one to not be treated as
@@ -48,6 +60,12 @@ function parseInline(text, linkClassName, keyBase) {
       node = (
         <a key={key} href={match[2]} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className={linkClassName}>
           {match[1]}
+        </a>
+      );
+    } else if (type === 'email') {
+      node = (
+        <a key={key} href={gmailComposeUrl(match[0])} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className={linkClassName}>
+          {match[0]}
         </a>
       );
     } else {

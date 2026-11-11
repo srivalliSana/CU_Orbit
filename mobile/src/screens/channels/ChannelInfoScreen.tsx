@@ -154,7 +154,17 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
         .map((row) => row[0]?.trim().toLowerCase() || "")
         .filter((email) => email && EMAIL_RE.test(email) && email !== "email");
       if (!emails.length) {
-        setError("No email addresses found in that file.");
+        // A .xlsx/.xls file is a zip/binary format, not plain text — reading
+        // it as text just produces binary noise, so the generic "no emails
+        // found" message is actively misleading for the single most common
+        // mistake here (picking Excel's native format instead of actually
+        // exporting to CSV).
+        const looksLikeOffice = /\.xlsx?$/i.test(result.assets[0].name || "") || text.startsWith("PK");
+        setError(
+          looksLikeOffice
+            ? 'That looks like an Excel file, not a CSV. In Excel, use File → Save As → "CSV UTF-8 (Comma delimited)", then upload that .csv file.'
+            : "No email addresses found in that file."
+        );
         return;
       }
       const res = await bulkAddChannelMembers(channelId, emails);

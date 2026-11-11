@@ -12,6 +12,10 @@ const INLINE_PATTERNS: { type: string; regex: RegExp }[] = [
   { type: "strike", regex: /~~([^~\n]+)~~/ },
   { type: "italic", regex: /_([^_\n]+)_/ },
   { type: "link", regex: /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/ },
+  // Must be checked before the bare-URL pattern below — otherwise
+  // "name@example.com" partially matches as a URL (just "example.com",
+  // silently dropping the "name@" half) since '@' isn't a word character.
+  { type: "email", regex: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/ },
   // Bare URLs — not just an explicit https:// scheme. A message like
   // "check www.cutm.ac.in" or "visit cutm.ac.in/portal" has no scheme at
   // all, and previously wasn't recognized as a link; this also matches a
@@ -48,6 +52,11 @@ function parseInline(text: string, linkStyle: object, keyBase: string): (string 
       node = <Text key={key} style={{ fontStyle: "italic" }}>{parseInline(match[1], linkStyle, `${key}i`)}</Text>;
     } else if (type === "link") {
       node = <Text key={key} style={linkStyle} onPress={() => Linking.openURL(match[2])}>{match[1]}</Text>;
+    } else if (type === "email") {
+      // mailto: hands this to whatever mail app is set up on the device
+      // (Gmail, Outlook, …) via the OS's own chooser — unlike web, there's
+      // no single "the" webmail to deep-link into here.
+      node = <Text key={key} style={linkStyle} onPress={() => Linking.openURL(`mailto:${match[0]}`)}>{match[0]}</Text>;
     } else {
       node = <Text key={key} style={linkStyle} onPress={() => Linking.openURL(hrefFor(match[1]))}>{match[1]}</Text>;
     }

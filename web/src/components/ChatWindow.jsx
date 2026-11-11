@@ -387,10 +387,19 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
         </button>
         <button
           onClick={() => {
-            if (chat.kind === 'dm' && chat.email) onOpenContact?.({ email: chat.email, containerId: chat.id });
-            else if (chat.kind === 'channel') onOpenChannelInfo?.(chat.id);
+            if (chat.kind === 'dm') {
+              // DM chat objects from the home list/recents only ever carry
+              // other_user_id (set as the dm "otherId" below), never an
+              // email — getPerson() already supports looking a person up by
+              // id, so prefer that and only fall back to chat.email when
+              // something upstream does set it (e.g. opened from search).
+              const otherId = chat.id?.split('_').find((uid) => uid !== user?.id);
+              if (otherId || chat.email) onOpenContact?.({ id: otherId, email: chat.email, containerId: chat.id });
+            } else if (chat.kind === 'channel') {
+              onOpenChannelInfo?.(chat.id);
+            }
           }}
-          disabled={chat.kind === 'dm' && !chat.email}
+          disabled={chat.kind === 'dm' && !chat.email && !chat.id?.includes('_')}
           className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default"
         >
           <Avatar name={chat.title} kind={chat.kind === 'channel' ? 'channel' : undefined} presence={chat.presence} size={40} />

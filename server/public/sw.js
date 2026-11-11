@@ -36,7 +36,11 @@ self.addEventListener("fetch", (event) => {
       if (cached) return cached;
       try {
         const resp = await fetch(req);
-        if (resp.ok) cache.put(req, resp.clone());
+        // A 206 (partial content, e.g. a video range request) can't be
+        // cached — Cache.put() throws "Partial response is unsupported"
+        // and the fetch itself still succeeds, so only cache whole-body
+        // 200s and let a 206 just pass through uncached.
+        if (resp.ok && resp.status === 200) cache.put(req, resp.clone());
         return resp;
       } catch (e) {
         // Offline and never cached — nothing we can do for this one.
