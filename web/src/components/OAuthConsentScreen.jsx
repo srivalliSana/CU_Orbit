@@ -4,7 +4,7 @@ import { authorizeOAuthApp, getOAuthAuthorizeInfo } from '../api/admin';
 /**
  * The real OAuth consent screen — reached via a hard link a third-party
  * app's own "Install on CU Orbit" button points at
- * (https://cumess.cutm.ac.in/portal?oauth_client_id=...&oauth_redirect_uri=...),
+ * (https://letsconnect.cutm.ac.in/portal?oauth_client_id=...&oauth_redirect_uri=...),
  * mirroring the existing /join/:code -> /portal?join=... pattern rather than
  * adding client-side routing for a link that must work as a real hard link.
  */

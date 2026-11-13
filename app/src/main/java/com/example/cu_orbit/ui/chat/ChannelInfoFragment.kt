@@ -262,7 +262,7 @@ class ChannelInfoFragment : Fragment() {
 
     private fun shareInviteLink() {
         val code = currentChannel?.inviteCode ?: "orbit123"
-        val link = "https://cumess.cutm.ac.in/join/$code"
+        val link = "https://letsconnect.cutm.ac.in/join/$code"
         val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(android.content.Intent.EXTRA_TEXT, "Join our university channel on CU Orbit: $link")

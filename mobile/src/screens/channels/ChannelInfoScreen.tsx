@@ -486,10 +486,10 @@ export default function ChannelInfoScreen({ route, navigation }: Props) {
                     // cuorbit.app is only an App Links domain for native deep
                     // linking — it's never been hosted/DNS-pointed anywhere,
                     // so a link using it 404s with NXDOMAIN for anyone who
-                    // taps it. cumess.cutm.ac.in is the actual live server
+                    // taps it. letsconnect.cutm.ac.in is the actual live server
                     // and already serves GET /join/:code (same domain the
                     // email-invite and web share link already use).
-                    message: `Join #${channel.name} on Let's Connect: https://cumess.cutm.ac.in/join/${channel.invite_code}`,
+                    message: `Join #${channel.name} on Let's Connect: https://letsconnect.cutm.ac.in/join/${channel.invite_code}`,
                   })
                 }
               >

@@ -1,4 +1,4 @@
-export const API_BASE_URL = "https://cumess.cutm.ac.in/api";
+export const API_BASE_URL = "https://letsconnect.cutm.ac.in/api";
 
 export const APP_SCHEME = "cuorbit";
 

@@ -15,8 +15,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': { target: 'https://cumess.cutm.ac.in', changeOrigin: true },
-      '/uploads': { target: 'https://cumess.cutm.ac.in', changeOrigin: true },
+      '/api': { target: 'https://letsconnect.cutm.ac.in', changeOrigin: true },
+      '/uploads': { target: 'https://letsconnect.cutm.ac.in', changeOrigin: true },
     },
   },
 })

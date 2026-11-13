@@ -1497,20 +1497,20 @@ app.get('/', async (req, res) => {
                         <div class="reveal">
                             <h3 class="text-body flex items-center gap-2.5 font-semibold"><span class="step-num" style="font-size:20px; margin:0;">2</span> Send an admin to install it</h3>
                             <p class="text-muted-tok mt-1.5 mb-3 text-sm">Link your app's own "Install" button here, then trade the code you get back for tokens:</p>
-                            <pre class="code-block">GET https://cumess.cutm.ac.in/portal
+                            <pre class="code-block">GET https://letsconnect.cutm.ac.in/portal
   ?oauth_client_id=YOUR_CLIENT_ID
   &oauth_redirect_uri=YOUR_REDIRECT_URI
   &oauth_scope=chat:write commands
   &oauth_state=random-string
 
-POST https://cumess.cutm.ac.in/oauth/token
+POST https://letsconnect.cutm.ac.in/oauth/token
 { "grant_type": "authorization_code", "code": "...",
   "redirect_uri": "...", "client_id": "...", "client_secret": "..." }</pre>
                         </div>
                         <div class="reveal">
                             <h3 class="text-body flex items-center gap-2.5 font-semibold"><span class="step-num" style="font-size:20px; margin:0;">3</span> Post as your bot</h3>
                             <p class="text-muted-tok mt-1.5 mb-3 text-sm">Once an admin has added your bot to a channel:</p>
-                            <pre class="code-block">POST https://cumess.cutm.ac.in/api/app/messages
+                            <pre class="code-block">POST https://letsconnect.cutm.ac.in/api/app/messages
 Authorization: Bearer YOUR_ACCESS_TOKEN
 
 { "channelId": "...", "text": "hello from your app" }</pre>
@@ -3712,7 +3712,7 @@ async function sendDailyDigests() {
                         subject: mentionCount > 0
                             ? `${mentionCount} mention${mentionCount === 1 ? '' : 's'} and ${total} unread message${total === 1 ? '' : 's'} on Let's Connect`
                             : `${total} unread message${total === 1 ? '' : 's'} on Let's Connect`,
-                        text: `You have ${total} unread message${total === 1 ? '' : 's'}${mentionCount > 0 ? `, including ${mentionCount} mention${mentionCount === 1 ? '' : 's'}` : ''} waiting on Let's Connect.\n\nOpen the app to catch up: https://cumess.cutm.ac.in/portal\n\nTurn this email off any time in Settings.`,
+                        text: `You have ${total} unread message${total === 1 ? '' : 's'}${mentionCount > 0 ? `, including ${mentionCount} mention${mentionCount === 1 ? '' : 's'}` : ''} waiting on Let's Connect.\n\nOpen the app to catch up: https://letsconnect.cutm.ac.in/portal\n\nTurn this email off any time in Settings.`,
                     });
                 }
                 user.last_digest_sent_at = new Date();
@@ -6718,7 +6718,7 @@ app.post('/api/channels/:id/invite-email', auth.requireAuth, async (req, res) =>
             return res.status(403).json({ error: 'forbidden', message: 'Only channel admins or faculty can invite people' });
         }
 
-        const joinUrl = `${process.env.APP_URL || 'https://cumess.cutm.ac.in'}/join/${channel.invite_code}`;
+        const joinUrl = `${process.env.APP_URL || 'https://letsconnect.cutm.ac.in'}/join/${channel.invite_code}`;
         const inviter = await User.findByPk(req.user.id);
         await logAudit(req.user, 'channel.invited_by_email', 'channel', channel.id, email);
         res.json({ success: true });
