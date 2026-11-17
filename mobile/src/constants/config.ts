@@ -24,8 +24,27 @@ export const DEFAULT_WORKSPACE_ID = "default";
 // server-relative "/uploads/..." path, which must be resolved against the
 // bare origin (API_BASE_URL minus "/api"), not the API prefix itself.
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
+
+// Lazy require, not a static import — authStore itself pulls in api/push.ts,
+// which eventually imports this file for API_ORIGIN, and a static import
+// here would complete that cycle at module-eval time instead of call time.
+function currentSessionToken(): string | null {
+  try {
+    return require("../state/authStore").useAuthStore.getState().token;
+  } catch {
+    return null;
+  }
+}
+
+// /uploads/* now requires a session (see server.js) — a plain RN <Image>
+// can't send an Authorization header, so the token rides along as a query
+// param instead, same idea as a Slack file URL's signed token.
 export function resolveMediaUrl(path?: string | null): string | null {
   if (!path) return null;
-  if (path.startsWith("http")) return path;
-  return path.startsWith("/") ? `${API_ORIGIN}${path}` : `${API_ORIGIN}/${path}`;
+  const absolute = path.startsWith("http") ? path : path.startsWith("/") ? `${API_ORIGIN}${path}` : `${API_ORIGIN}/${path}`;
+  if (!absolute.includes("/uploads/")) return absolute;
+  const token = currentSessionToken();
+  if (!token) return absolute;
+  const sep = absolute.includes("?") ? "&" : "?";
+  return `${absolute}${sep}token=${encodeURIComponent(token)}`;
 }

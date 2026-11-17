@@ -18,8 +18,13 @@ const setToken = (t) => {
   try { t ? localStorage.setItem(KEY, t) : localStorage.removeItem(KEY); } catch { /* private mode */ }
 };
 
-/** Clears the local session; the app should show the sign-in screen afterward. */
-export const signOut = () => setToken(null);
+/** Clears the local session; the app should show the sign-in screen afterward.
+ *  Also tells the server to drop the orbit_session cookie that gates
+ *  /uploads/* — best-effort, since the local token is cleared either way. */
+export const signOut = () => {
+  setToken(null);
+  fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+};
 
 async function json(resOrPromise) {
   const res = await resOrPromise;   // accepts a Response or a still-pending fetch() call

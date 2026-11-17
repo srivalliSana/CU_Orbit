@@ -44,7 +44,51 @@ app.use((req, res, next) => {
 // STATIC FOLDERS
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
-app.use('/uploads', express.static(uploadDir));
+
+// Reads one cookie value without pulling in a cookie-parser dependency — all
+// we need is this one name.
+function readCookie(req, name) {
+    const header = req.headers.cookie;
+    if (!header) return null;
+    const pair = header.split(';').map((s) => s.trim()).find((s) => s.startsWith(`${name}=`));
+    return pair ? decodeURIComponent(pair.slice(name.length + 1)) : null;
+}
+
+// Issues a session the same way at every sign-in path (Google, OTP, 2FA) —
+// the JSON body for the mobile app's Authorization-header flow, plus an
+// httpOnly cookie so the web app's plain <img src="/uploads/..."> tags are
+// authenticated without every component having to append a token manually.
+function sendSession(req, res, user) {
+    const session = auth.issueSession(user);
+    res.cookie('orbit_session', session, {
+        httpOnly: true,
+        secure: req.secure,
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        path: '/',
+    });
+    res.json({ success: true, session, user });
+}
+
+// Previously plain express.static — anyone with an uploaded file's URL could
+// view it with no session at all, logged in or not, since the filename
+// (timestamp + random suffix) was the only thing standing between a stranger
+// and someone's photo. A plain <img src> / RN <Image> can't send an
+// Authorization header, so this accepts the session three ways: the bearer
+// header (used by nothing in-app today, but kept for parity with every other
+// route), the orbit_session cookie the web app now gets at sign-in, or a
+// ?token= query param the mobile app appends itself (see resolveMediaUrl).
+app.use('/uploads', (req, res, next) => {
+    const bearer = (req.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
+    const token = bearer || readCookie(req, 'orbit_session') || (typeof req.query.token === 'string' ? req.query.token : '');
+    if (!token) return res.status(401).end();
+    try {
+        auth.verifySession(token);
+    } catch (e) {
+        return res.status(401).end();
+    }
+    next();
+}, express.static(uploadDir));
 
 // CampusOne embeds the messenger in an iframe at /connect, so it must be
 // allowed to frame us — while everyone else is still refused. 'self' keeps the
@@ -2462,7 +2506,7 @@ app.post('/api/auth/google', async (req, res) => {
             return res.json({ twofa_required: true, twofa_token: auth.issuePendingTwoFactorToken(user) });
         }
 
-        res.json({ success: true, session: auth.issueSession(user), user });
+        return sendSession(req, res, user);
     } catch (e) {
         console.error('[google-signin] failed:', e.message);
         res.status(500).json({ error: 'server_error' });
@@ -2560,7 +2604,7 @@ app.post('/api/auth/otp/verify', async (req, res) => {
 
         await record.destroy();
         const user = await findOrCreateOrbitUser(email, null);
-        res.json({ success: true, session: auth.issueSession(user), user });
+        return sendSession(req, res, user);
     } catch (e) {
         console.error('[otp-verify] failed:', e.message);
         res.status(500).json({ error: 'server_error' });
@@ -2639,7 +2683,7 @@ app.post('/api/auth/2fa/verify', async (req, res) => {
             return res.status(401).json({ error: e.code || 'invalid_code', message: e.message });
         }
 
-        res.json({ success: true, session: auth.issueSession(user), user });
+        return sendSession(req, res, user);
     } catch (e) {
         console.error('[2fa-verify] failed:', e.message);
         res.status(500).json({ error: 'server_error' });
@@ -5780,8 +5824,17 @@ app.put('/api/users/me/push-token', auth.requireAuth, async (req, res) => {
 app.delete('/api/users/me/push-token', auth.requireAuth, async (req, res) => {
     try {
         await User.update({ push_token: null }, { where: { id: req.user.id } });
+        res.clearCookie('orbit_session', { path: '/' });
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+/** Clears the orbit_session cookie the web app picked up at sign-in (see
+ *  sendSession above) — no auth required since signing out has nothing left
+ *  to check once the client has dropped its own copy of the token. */
+app.post('/api/auth/logout', (req, res) => {
+    res.clearCookie('orbit_session', { path: '/' });
+    res.json({ success: true });
 });
 
 // WORKSPACES
