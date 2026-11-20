@@ -19,7 +19,7 @@ export default {
         accent: {
           50: '#eefbf6', 100: '#d3f3e6', 200: '#a6e6cd', 300: '#72d7b1',
           400: '#3dc496', 500: '#1a8e72', 600: '#167a62', 700: '#136350',
-          800: '#114f41', 900: '#0d3c32',
+          800: '#114f41', 900: '#0d3c32', 950: '#082019',
         },
         // Soft, mint-tinted neutrals for the app's largest surfaces (body,
         // message pane) — replaces stark white/slate-100 so light mode
