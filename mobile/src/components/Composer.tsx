@@ -248,13 +248,28 @@ export default function Composer({
 
   // Wraps the current selection (or, with nothing selected, inserts the pair
   // at the cursor) with a marker on each side — mirrors web/src/components/
-  // Composer.jsx's wrapSelection. Doesn't try to restore the exact cursor
-  // position afterward (RN's controlled `selection` prop fights typing if
-  // driven every keystroke), so the cursor lands wherever the native input
-  // defaults to after a value change — a minor UX gap versus web, not a bug.
+  // Composer.jsx's wrapSelection, including its toggle-off behavior (tapping
+  // the same button again removes the markers instead of stacking more
+  // around nothing, e.g. tapping Bold then Italic with nothing typed used to
+  // leave literal "_***_ " sitting in the box). Doesn't try to restore the
+  // exact cursor position afterward (RN's controlled `selection` prop fights
+  // typing if driven every keystroke), so the cursor lands wherever the
+  // native input defaults to after a value change — a minor UX gap versus
+  // web, not a bug.
   const wrapSelection = (before: string, after: string = before) => {
     const { start, end } = selection;
     const selected = text.slice(start, end);
+
+    if (selected.length >= before.length + after.length && selected.startsWith(before) && selected.endsWith(after)) {
+      const inner = selected.slice(before.length, selected.length - after.length);
+      setText(text.slice(0, start) + inner + text.slice(end));
+      return;
+    }
+    if (!selected && text.slice(start - before.length, start) === before && text.slice(end, end + after.length) === after) {
+      setText(text.slice(0, start - before.length) + text.slice(end + after.length));
+      return;
+    }
+
     setText(text.slice(0, start) + before + selected + after + text.slice(end));
   };
 

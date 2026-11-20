@@ -40,7 +40,13 @@ function ToolButton({ label, onClick, children }) {
 
 export default function Composer({ chatId, isChannel, onSend, onSchedule, onTyping, replyTo, onCancelReply, onCreatePoll }) {
   const [text, setText] = useState('');
-  const [file, setFile] = useState(null);
+  // Multiple attachments: picked/dropped files pile up here and are sent as
+  // one message per file (in order) on submit — there's no multi-attachment
+  // message on the server, so this is the practical equivalent.
+  const [files, setFiles] = useState([]);
+  const addFiles = (list) => setFiles((prev) => [...prev, ...Array.from(list || [])]);
+  const removeFileAt = (idx) => setFiles((prev) => prev.filter((_, i) => i !== idx));
+  const file = files[0] || null; // back-compat alias for the single-audio-preview path below
   const [members, setMembers] = useState([]);
   const [mentionQuery, setMentionQuery] = useState(null);
   const [emojiQuery, setEmojiQuery] = useState(null);
@@ -70,7 +76,7 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
   // Object URL for the pending file's playback preview — only meaningful
   // for a voice recording, and revoked whenever the file changes/clears so
   // recording several notes in a row doesn't leak blob URLs.
-  const fileObjectUrl = useMemo(() => (file && file.type.startsWith('audio/') ? URL.createObjectURL(file) : null), [file]);
+  const fileObjectUrl = useMemo(() => (files.length === 1 && file.type.startsWith('audio/') ? URL.createObjectURL(file) : null), [files]);
   useEffect(() => () => { if (fileObjectUrl) URL.revokeObjectURL(fileObjectUrl); }, [fileObjectUrl]);
 
   // Only channels have a fixed member list worth tagging from — a DM is
@@ -112,17 +118,26 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
 
   const submit = () => {
     const body = text.trim();
-    if (!body && !file) return;
+    if (!body && !files.length) return;
     // Only keep tags whose "@Name" text is still actually present — guards
     // against a mention surviving in state after the user deleted it.
     const enrichedMentions = taggedUsers.filter((t) => body.includes(`@${t.display_name}`));
-    onSend({
-      text: body, file,
-      enrichedMentions: enrichedMentions.length ? enrichedMentions : undefined,
-      replyToId: replyTo?.id,
-    });
+    const toSend = files.length ? files : [null];
+    // There's no multi-attachment message server-side, so several files
+    // become several messages — sent in order (sequentially, not raced)
+    // with the typed caption riding along on the first one.
+    (async () => {
+      for (let i = 0; i < toSend.length; i++) {
+        await onSend({
+          text: i === 0 ? body : '',
+          file: toSend[i],
+          enrichedMentions: i === 0 && enrichedMentions.length ? enrichedMentions : undefined,
+          replyToId: i === 0 ? replyTo?.id : undefined,
+        });
+      }
+    })();
     setText('');
-    setFile(null);
+    setFiles([]);
     setTaggedUsers([]);
     setMentionQuery(null);
     setEmojiQuery(null);
@@ -142,16 +157,19 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
 
   const scheduleSubmit = () => {
     const body = text.trim();
-    if ((!body && !file) || !scheduleAt) return;
+    if ((!body && !files.length) || !scheduleAt) return;
     const enrichedMentions = taggedUsers.filter((t) => body.includes(`@${t.display_name}`));
+    // A scheduled message is a single row server-side, so only the first
+    // staged file comes along — same limit as before multi-file picking
+    // existed, just no longer silently dropping the rest with no explanation.
     onSchedule({
-      text: body, file,
+      text: body, file: files[0] || null,
       enrichedMentions: enrichedMentions.length ? enrichedMentions : undefined,
       replyToId: replyTo?.id,
       sendAt: new Date(scheduleAt).toISOString(),
     });
     setText('');
-    setFile(null);
+    setFiles([]);
     setTaggedUsers([]);
     setMentionQuery(null);
     setSchedulingOpen(false);
@@ -176,11 +194,10 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
     const blob = item.getAsFile();
     if (!blob) return;
     const ext = item.type.split('/')[1] || 'png';
-    setFile(new File([blob], `pasted-image-${Date.now()}.${ext}`, { type: item.type }));
+    addFiles([new File([blob], `pasted-image-${Date.now()}.${ext}`, { type: item.type })]);
   };
 
-  // Dragging a file/image from the desktop over the composer attaches it,
-  // same single-attachment slot a picked file or pasted screenshot uses.
+  // Dragging files from the desktop over the composer attaches all of them —
   // dragDepth counts enter/leave across child elements so the overlay
   // doesn't flicker as the pointer crosses nested nodes.
   const onDragEnter = (e) => {
@@ -201,8 +218,8 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
     e.preventDefault();
     dragDepth.current = 0;
     setIsDragging(false);
-    const dropped = e.dataTransfer?.files?.[0];
-    if (dropped) { setFile(dropped); box.current?.focus(); }
+    const dropped = e.dataTransfer?.files;
+    if (dropped?.length) { addFiles(dropped); box.current?.focus(); }
   };
 
   const onChange = (e) => {
@@ -247,12 +264,36 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
   // Wraps the current selection (or, with nothing selected, just inserts the
   // pair at the cursor) with a marker on each side — the shared primitive
   // behind every inline formatting button (bold/italic/underline/strike/code).
+  // Toggle-aware: clicking the same button again removes the markers
+  // instead of stacking more around nothing, which is what used to leave
+  // garbage like "_***_" sitting in the box after a couple of clicks with
+  // no text selected.
   const wrapSelection = (before, after = before) => {
     const el = box.current;
     if (!el) return;
     const start = el.selectionStart;
     const end = el.selectionEnd;
     const selected = text.slice(start, end);
+
+    // Selected text is already wrapped — unwrap it.
+    if (selected.length >= before.length + after.length && selected.startsWith(before) && selected.endsWith(after)) {
+      const inner = selected.slice(before.length, selected.length - after.length);
+      const next = text.slice(0, start) + inner + text.slice(end);
+      setText(next);
+      grow(el);
+      requestAnimationFrame(() => { el.focus(); el.selectionStart = start; el.selectionEnd = start + inner.length; });
+      return;
+    }
+    // Nothing selected, but the cursor already sits inside an empty pair
+    // from the last click — collapse it rather than nesting another pair.
+    if (!selected && text.slice(start - before.length, start) === before && text.slice(end, end + after.length) === after) {
+      const next = text.slice(0, start - before.length) + text.slice(end + after.length);
+      setText(next);
+      grow(el);
+      requestAnimationFrame(() => { el.focus(); el.selectionStart = el.selectionEnd = start - before.length; });
+      return;
+    }
+
     const next = text.slice(0, start) + before + selected + after + text.slice(end);
     setText(next);
     grow(el);
@@ -341,7 +382,9 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
         streamRef.current?.getTracks().forEach((t) => t.stop());
         if (mr.keepRecording) {
           const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-          setFile(new File([blob], `Voice message (${formatDuration(secondsRef.current)}).webm`, { type: 'audio/webm' }));
+          // Replaces, not appends — a voice note is its own single-attachment
+          // send, not something you mix in with other staged files.
+          setFiles([new File([blob], `Voice message (${formatDuration(secondsRef.current)}).webm`, { type: 'audio/webm' })]);
         }
       };
       mr.start();
@@ -430,20 +473,27 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
           <button onClick={onCancelReply} className="ml-auto shrink-0 text-slate-400 hover:text-slate-600" aria-label="Cancel reply">✕</button>
         </div>
       )}
-      {file && file.type.startsWith('audio/') ? (
+      {files.length === 1 && file.type.startsWith('audio/') ? (
         // A voice recording gets a real playback preview — hearing it back
         // before sending is what actually prevents an accidental send,
         // not just having a delete button next to a filename.
         <div className="mb-2 flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-1.5 dark:bg-slate-800">
           <audio controls src={fileObjectUrl} className="h-8 min-w-0 flex-1" />
-          <button onClick={() => { setFile(null); if (fileInput.current) fileInput.current.value = ''; }}
+          <button onClick={() => { setFiles([]); if (fileInput.current) fileInput.current.value = ''; }}
                   className="shrink-0 text-slate-400 hover:text-slate-600" aria-label="Delete recording" title="Delete recording">🗑️</button>
         </div>
-      ) : file && (
-        <div className="mb-2 flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-1.5 text-xs dark:bg-slate-800">
-          <span className="truncate text-slate-600 dark:text-slate-300">📎 {file.name}</span>
-          <button onClick={() => { setFile(null); if (fileInput.current) fileInput.current.value = ''; }}
-                  className="ml-auto text-slate-400 hover:text-slate-600" aria-label="Remove attachment">✕</button>
+      ) : files.length > 0 && (
+        // Multiple files stage as a row of chips, each removable on its own
+        // — sent as one message per file, in this order, on submit.
+        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+          {files.map((f, i) => (
+            <div key={`${f.name}-${i}`} className="flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-xs dark:bg-slate-800">
+              <span className="max-w-[10rem] truncate text-slate-600 dark:text-slate-300">
+                {f.type.startsWith('image/') ? '🖼️' : f.type.startsWith('video/') ? '🎬' : '📎'} {f.name}
+              </span>
+              <button onClick={() => removeFileAt(i)} className="shrink-0 text-slate-400 hover:text-slate-600" aria-label={`Remove ${f.name}`}>✕</button>
+            </div>
+          ))}
         </div>
       )}
 
@@ -476,8 +526,9 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
           <input
             ref={fileInput}
             type="file"
+            multiple
             hidden
-            onChange={(e) => { setFile(e.target.files?.[0] || null); box.current?.focus(); }}
+            onChange={(e) => { addFiles(e.target.files); box.current?.focus(); }}
           />
           <input
             ref={cameraInput}
@@ -485,7 +536,7 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
             accept="image/*,video/*"
             capture="environment"
             hidden
-            onChange={(e) => { setFile(e.target.files?.[0] || null); box.current?.focus(); }}
+            onChange={(e) => { addFiles(e.target.files); box.current?.focus(); }}
           />
           {attachMenuOpen && (
             <>
@@ -626,7 +677,7 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
           <div className="relative shrink-0">
             <button
               onClick={() => setSchedulingOpen((v) => !v)}
-              disabled={!text.trim() && !file}
+              disabled={!text.trim() && !files.length}
               aria-label="Schedule for later"
               title="Schedule for later"
               className="hidden rounded-full p-2 text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-slate-800 sm:block"
@@ -662,7 +713,7 @@ export default function Composer({ chatId, isChannel, onSend, onSchedule, onTypi
 
         <button
           onClick={submit}
-          disabled={!text.trim() && !file}
+          disabled={!text.trim() && !files.length}
           aria-label="Send message"
           className="shrink-0 rounded-full bg-accent-600 p-2.5 text-white transition hover:bg-accent-700 disabled:cursor-not-allowed disabled:opacity-40"
         >

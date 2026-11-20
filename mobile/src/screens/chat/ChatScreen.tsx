@@ -51,6 +51,15 @@ export default function ChatScreen({ route, navigation }: Props) {
   const [scheduledOpen, setScheduledOpen] = useState(false);
   const loadScheduled = () => getScheduledMessages(containerId).then(setScheduled).catch(() => {});
   useEffect(() => { loadScheduled(); setScheduledOpen(false); }, [containerId]);
+  // A scheduled message that fires while this screen is open becomes a real
+  // message server-side, but nothing tells this list — it kept showing the
+  // now-sent entry until the screen was reopened. No socket event covers
+  // this case, so poll lightly, and only while there's something pending.
+  useEffect(() => {
+    if (!scheduled.length) return;
+    const t = setInterval(loadScheduled, 15000);
+    return () => clearInterval(t);
+  }, [containerId, scheduled.length]);
   const cancelScheduled = (id: string) => cancelScheduledMessage(id).catch(() => {}).finally(loadScheduled);
   const [forwarding, setForwarding] = useState<Message[]>([]);
   const [profileUserId, setProfileUserId] = useState<string | null>(null);

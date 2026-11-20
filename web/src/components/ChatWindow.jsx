@@ -188,6 +188,11 @@ export default function ChatWindow({ chat, user, onSent, onOpenContact, onOpenCh
           setLoading(false);
         }
       } catch { if (alive) setLoading(false); }
+      // A scheduled message that fires while this chat is open became a real
+      // message server-side, but nothing told the Scheduled panel — it kept
+      // showing the now-sent entry until the next chat switch. Riding the
+      // same poll tick as messages keeps it in sync without a second timer.
+      if (alive) loadScheduled();
     };
     load();
     const t = setInterval(load, POLL_MS);

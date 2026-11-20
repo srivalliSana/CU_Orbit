@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { clockLabel } from '../lib/format';
 import { renderInlineText, renderMessageText } from '../lib/markdown';
 import { deleteMessage, editMessage, getReads, hideMessage, reactToMessage, sendMessageAction, setMessagePinned, starMessage, unstarMessage, votePoll } from '../api/chat';
@@ -92,6 +92,30 @@ export default function MessageBubble({
   const [editText, setEditText] = useState(m.text || '');
   const [busy, setBusy] = useState(false);
   const [lightbox, setLightbox] = useState(false);
+  // Lightbox zoom/pan — Slack's image viewer supports both, this didn't
+  // support either (fit-to-screen only). zoom resets whenever the viewer
+  // (re)opens; pan only matters once zoomed in.
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const panStart = useRef(null);
+  useEffect(() => { if (lightbox) { setZoom(1); setPan({ x: 0, y: 0 }); } }, [lightbox]);
+  const clampZoom = (z) => Math.min(4, Math.max(1, z));
+  const zoomBy = (delta) => setZoom((z) => {
+    const next = clampZoom(z + delta);
+    if (next === 1) setPan({ x: 0, y: 0 });
+    return next;
+  });
+  const onWheelZoom = (e) => { e.preventDefault(); zoomBy(-e.deltaY * 0.0015); };
+  const onImagePointerDown = (e) => {
+    e.stopPropagation(); // don't let the overlay's click-to-close fire
+    if (zoom === 1) return;
+    panStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+  };
+  const onImagePointerMove = (e) => {
+    if (!panStart.current) return;
+    setPan({ x: e.clientX - panStart.current.x, y: e.clientY - panStart.current.y });
+  };
+  const onImagePointerUp = () => { panStart.current = null; };
   const [linkCopied, setLinkCopied] = useState(false);
   const [starred, setStarred] = useState(!!m.is_starred);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
@@ -593,10 +617,36 @@ export default function MessageBubble({
 
       {lightbox && media && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black/90 p-4"
           onClick={() => setLightbox(false)}
+          onWheel={onWheelZoom}
         >
-          <img src={media.url} alt={m.text || 'Shared image'} className="max-h-full max-w-full object-contain" />
+          <img
+            src={media.url}
+            alt={m.text || 'Shared image'}
+            draggable={false}
+            onPointerDown={onImagePointerDown}
+            onPointerMove={onImagePointerMove}
+            onPointerUp={onImagePointerUp}
+            onPointerLeave={onImagePointerUp}
+            className="max-h-full max-w-full select-none object-contain"
+            style={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transition: panStart.current ? 'none' : 'transform 0.1s ease-out',
+              cursor: zoom > 1 ? 'grab' : 'zoom-in',
+            }}
+          />
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-white backdrop-blur-sm"
+          >
+            <button onClick={() => zoomBy(-0.5)} aria-label="Zoom out" title="Zoom out" className="flex h-9 w-9 items-center justify-center rounded-full text-lg hover:bg-white/10">−</button>
+            <span className="min-w-[3.5rem] text-center text-xs tabular-nums">{Math.round(zoom * 100)}%</span>
+            <button onClick={() => zoomBy(0.5)} aria-label="Zoom in" title="Zoom in" className="flex h-9 w-9 items-center justify-center rounded-full text-lg hover:bg-white/10">+</button>
+            {zoom !== 1 && (
+              <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} aria-label="Reset zoom" title="Reset zoom" className="ml-1 rounded-full px-2 py-1 text-xs hover:bg-white/10">Reset</button>
+            )}
+          </div>
           <button
             onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(media.url).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1500); }); }}
             aria-label="Copy link"
