@@ -10,6 +10,7 @@ import AddToListModal from './AddToListModal';
 import { saveFile } from '../lib/saveFile';
 import { reportUser } from '../api/users';
 import { burstConfetti } from '../lib/confetti';
+import { absoluteMediaUrl } from '../utils/mediaUrl';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -648,7 +649,7 @@ export default function MessageBubble({
             )}
           </div>
           <button
-            onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(media.url).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1500); }); }}
+            onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(absoluteMediaUrl(media.url)).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1500); }); }}
             aria-label="Copy link"
             title={linkCopied ? 'Copied!' : 'Copy link'}
             className="absolute right-28 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition hover:bg-black/60"

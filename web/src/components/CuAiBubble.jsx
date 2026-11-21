@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { editAiImage, generateAiImage, getAiMessages, sendAiMessage } from '../api/ai';
 import { saveFile } from '../lib/saveFile';
+import { absoluteMediaUrl } from '../utils/mediaUrl';
 
 const SUGGESTIONS = ['How do I pin a message?', 'How do I schedule a message for later?', 'What can you help with?'];
 
@@ -52,7 +53,7 @@ function AiImageViewer({ image, onClose, onEdited }) {
         />
 
         <button
-          onClick={() => navigator.clipboard?.writeText(image.url).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1500); })}
+          onClick={() => navigator.clipboard?.writeText(absoluteMediaUrl(image.url)).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1500); })}
           aria-label="Copy link"
           title={linkCopied ? 'Copied!' : 'Copy link'}
           className="absolute right-28 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition hover:bg-white/20"

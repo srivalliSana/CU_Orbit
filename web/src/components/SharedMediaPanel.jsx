@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getSharedMedia } from '../api/chat';
 import { saveFile } from '../lib/saveFile';
+import { absoluteMediaUrl } from '../utils/mediaUrl';
 
 const TABS = [
   { key: 'media', label: 'Media' },
@@ -42,7 +43,7 @@ export default function SharedMediaPanel({ containerId, onJumpToMessage }) {
   const [copiedKey, setCopiedKey] = useState(null);
 
   const copyLink = async (url, key) => {
-    if (await copyToClipboard(url)) {
+    if (await copyToClipboard(absoluteMediaUrl(url))) {
       setCopiedKey(key);
       setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1500);
     }
