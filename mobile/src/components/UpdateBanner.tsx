@@ -40,6 +40,14 @@ export default function UpdateBanner() {
 
   if (Platform.OS !== "android" || !data?.available || !data.build_number) return null;
 
+  // nativeBuildVersion is Android's versionCode, baked in at build time from
+  // app.json's android.versionCode. That field went unset through builds
+  // 65-70, which Expo's prebuild silently defaults to 1 — so every one of
+  // those APKs reported "1" here regardless of which build it actually was,
+  // and this check (build_number > installedBuild) was true forever, even
+  // on the newest build. Fixed by setting android.versionCode explicitly
+  // (see app.json) and bumping it on every release — this logic was already
+  // correct, it just had nothing real to compare against.
   const installedBuild = Number(Application.nativeBuildVersion || 0);
   if (!installedBuild || data.build_number <= installedBuild) return null;
   if (dismissedBuild === data.build_number) return null;

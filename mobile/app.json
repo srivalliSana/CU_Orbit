@@ -19,6 +19,7 @@
     },
     "android": {
       "package": "ac.in.cutm.cuorbit",
+      "versionCode": 71,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#071B20",
