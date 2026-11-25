@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useIsFocused } from "@react-navigation/native";
 
+import { useAuthStore } from "../state/authStore";
 import {
   deleteMessage,
   editMessage,
@@ -57,6 +58,21 @@ export function useMessages(containerId: string) {
   );
 
   const queryClient = useQueryClient();
+  const currentUser = useAuthStore((s) => s.user);
+  const messagesKey = ["messages", containerId];
+
+  // Optimistic local echo, like WhatsApp's single-grey-tick bubble: the
+  // message appears the instant you tap send, instead of waiting out the
+  // round trip (which on a slow connection could be seconds). onMutate runs
+  // synchronously before the network call even starts, so it fires exactly
+  // the same whether we're online or the mutation is about to sit paused
+  // offline (React Query's default networkMode pauses rather than fails a
+  // mutation while there's no connection — onlineManager is wired to
+  // NetInfo in App.tsx — then fires it automatically on reconnect, which is
+  // the queueing behavior this needs for free). onSuccess swaps the
+  // temporary entry for the server's real row in place so nothing flashes
+  // or jumps; onError leaves it as a tappable "failed to send" bubble
+  // rather than silently discarding what the user typed.
   const send = useMutation({
     mutationFn: (params: {
       body: string;
@@ -67,12 +83,82 @@ export function useMessages(containerId: string) {
       enrichedMentions?: { user_id: string; display_name: string }[];
       replyToId?: string;
       forwardedFromName?: string;
+      retryTempId?: string;
     }) => sendMessage({ containerId, ...params }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["messages", containerId] });
+    onMutate: async (params) => {
+      await queryClient.cancelQueries({ queryKey: messagesKey });
+      const previous = queryClient.getQueryData(messagesKey);
+      const tempId = params.retryTempId || `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+      const optimistic: Message = {
+        id: tempId,
+        channel_id: containerId,
+        dm_id: null,
+        sender_id: currentUser?.id ?? "",
+        sender_name: currentUser?.name ?? "You",
+        sender_avatar_url: currentUser?.avatarUrl ?? null,
+        text: params.body,
+        sent_at: Date.now(),
+        type: params.type ?? "text",
+        attachments: params.mediaUrl
+          ? [{ type: params.type ?? "file", url: params.mediaUrl, name: params.mediaName, mimeType: params.mediaMimeType }]
+          : [],
+        reactions: [],
+        status: "sent",
+        pending: true,
+        reply_to: null,
+        forwarded_from: params.forwardedFromName ? { sender_name: params.forwardedFromName } : null,
+        enriched_mentions: params.enrichedMentions?.map((m) => ({ user_id: m.user_id, display_name: m.display_name, phone: "" })) ?? [],
+      };
+
+      queryClient.setQueryData(messagesKey, (old: any) => {
+        if (!old) return old;
+        const pages = [...old.pages];
+        // pages[0] is the newest page (see the comment on `messages` above),
+        // so a freshly-sent message is appended to its end.
+        const withoutRetried = params.retryTempId
+          ? pages[0].filter((m: Message) => m.id !== params.retryTempId)
+          : pages[0];
+        pages[0] = [...withoutRetried, optimistic];
+        return { ...old, pages };
+      });
+
+      return { previous, tempId };
+    },
+    onError: (_err, _params, context) => {
+      // A real failure (not an offline pause) — keep the bubble but mark it
+      // failed instead of rolling it back, so the user's text isn't lost.
+      queryClient.setQueryData(messagesKey, (old: any) => {
+        if (!old || !context?.tempId) return old;
+        const pages = old.pages.map((page: Message[]) =>
+          page.map((m) => (m.id === context.tempId ? { ...m, pending: false, failed: true } : m))
+        );
+        return { ...old, pages };
+      });
+    },
+    onSuccess: (data, _params, context) => {
+      queryClient.setQueryData(messagesKey, (old: any) => {
+        if (!old) return old;
+        const pages = old.pages.map((page: Message[]) =>
+          page.map((m) => (m.id === context?.tempId ? data : m))
+        );
+        return { ...old, pages };
+      });
       queryClient.invalidateQueries({ queryKey: ["home"] });
     },
   });
+
+  /** Re-sends a message that's showing as failed, reusing its bubble/id. */
+  const retrySend = (message: Message) =>
+    send.mutate({
+      body: message.text,
+      type: message.type,
+      mediaUrl: message.attachments?.[0]?.url,
+      mediaName: message.attachments?.[0]?.name,
+      mediaMimeType: message.attachments?.[0]?.mimeType,
+      forwardedFromName: message.forwarded_from?.sender_name,
+      retryTempId: message.id,
+    });
 
   const react = useMutation({
     mutationFn: (params: { messageId: string; emoji: string }) =>
@@ -144,6 +230,6 @@ export function useMessages(containerId: string) {
     loadOlder: query.fetchNextPage,
     hasOlder: !!query.hasNextPage,
     loadingOlder: query.isFetchingNextPage,
-    send, react, remove, hide, edit, pin, star, vote, action,
+    send, retrySend, react, remove, hide, edit, pin, star, vote, action,
   };
 }

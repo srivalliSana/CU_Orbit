@@ -77,6 +77,7 @@ export default function MessageBubble({
   showReactionBar = false,
   onEnterSelection,
   onToggleSelect,
+  onRetry,
 }: {
   message: Message;
   isOwn: boolean;
@@ -107,6 +108,9 @@ export default function MessageBubble({
   showReactionBar?: boolean;
   onEnterSelection?: () => void;
   onToggleSelect?: () => void;
+  // Tap-to-retry on a bubble that failed to send (message.failed) — see
+  // useMessages' retrySend, which resends with the same local id.
+  onRetry?: () => void;
 }) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -268,7 +272,13 @@ export default function MessageBubble({
           <Animated.View style={swipeBubbleStyle}>
       <Pressable
         onPress={handleTap}
-        style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther, highlighted && styles.bubbleHighlighted, selected && styles.bubbleSelected]}
+        style={[
+          styles.bubble,
+          isOwn ? styles.bubbleOwn : styles.bubbleOther,
+          highlighted && styles.bubbleHighlighted,
+          selected && styles.bubbleSelected,
+          message.pending && styles.bubblePending,
+        ]}
       >
         {message.forwarded_from ? (
           <Text style={styles.forwardedLabel}>➡️ Forwarded from {message.forwarded_from.sender_name}</Text>
@@ -456,15 +466,29 @@ export default function MessageBubble({
 
         <ActionButtonsRow message={message} isOwn={isOwn} onAction={onAction} styles={styles} colors={colors} />
 
-        <Pressable onPress={showReads} disabled={!isOwn || !isGroup} style={styles.metaRow}>
+        <Pressable
+          onPress={message.failed ? onRetry : showReads}
+          disabled={message.failed ? !onRetry : !isOwn || !isGroup}
+          style={styles.metaRow}
+        >
           {message.edited_at ? <Text style={[styles.edited, isOwn && styles.textOwn]}>edited</Text> : null}
-          <Text style={[styles.time, isOwn && styles.textOwn]}>{clockLabel(message.sent_at)}</Text>
+          {message.failed ? (
+            <Text style={[styles.time, styles.failedText]}>Tap to retry</Text>
+          ) : (
+            <Text style={[styles.time, isOwn && styles.textOwn]}>{clockLabel(message.sent_at)}</Text>
+          )}
           {isOwn ? (
-            <Ionicons
-              name={message.status === "sent" ? "checkmark" : "checkmark-done"}
-              size={13}
-              color={message.status === "read" ? "#60A5FA" : "#FFFFFF"}
-            />
+            message.failed ? (
+              <Ionicons name="alert-circle" size={13} color="#F87171" />
+            ) : message.pending ? (
+              <Ionicons name="time-outline" size={12} color="rgba(255,255,255,0.75)" />
+            ) : (
+              <Ionicons
+                name={message.status === "sent" ? "checkmark" : "checkmark-done"}
+                size={13}
+                color={message.status === "read" ? "#60A5FA" : "#FFFFFF"}
+              />
+            )
           ) : null}
         </Pressable>
 
@@ -717,6 +741,9 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   bubbleHighlighted: {
     borderWidth: 2,
     borderColor: colors.primary,
+  },
+  bubblePending: {
+    opacity: 0.72,
   },
   senderName: {
     fontSize: 12,
@@ -1046,6 +1073,11 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     fontSize: 11,
     color: colors.textMuted,
     opacity: 0.7,
+  },
+  failedText: {
+    fontSize: 11,
+    color: "#F87171",
+    opacity: 1,
   },
   reactionsRow: {
     flexDirection: "row",

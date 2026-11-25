@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Button, FlatList, Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { useMessages } from "../../hooks/useMessages";
@@ -40,7 +41,7 @@ export default function ChatScreen({ route, navigation }: Props) {
   const { containerId, title, kind, scrollToMessageId } = route.params;
   const [wallpaper, setWallpaper] = useState<string | null>(null);
   const [wallpaperPickerOpen, setWallpaperPickerOpen] = useState(false);
-  const { data: messages, isLoading, error, refetch, send, react, remove, hide, edit, pin, star, vote, action, loadOlder, hasOlder, loadingOlder } = useMessages(containerId);
+  const { data: messages, isLoading, error, refetch, send, retrySend, react, remove, hide, edit, pin, star, vote, action, loadOlder, hasOlder, loadingOlder } = useMessages(containerId);
   const { typingName, notifyTyping } = useTyping(containerId);
   const selfId = useAuthStore((s) => s.user?.id);
   const selfRole = useAuthStore((s) => s.user?.role);
@@ -175,6 +176,15 @@ export default function ChatScreen({ route, navigation }: Props) {
   };
   const singleReport = () => {
     if (singleSelected) setReportTarget(singleSelected);
+    exitSelection();
+  };
+  const singleCopyText = () => {
+    if (singleSelected?.text) Clipboard.setStringAsync(singleSelected.text);
+    exitSelection();
+  };
+  const singleCopyLink = () => {
+    const url = singleSelected ? resolveMediaUrl(singleSelected.attachments?.[0]?.url) : null;
+    if (url) Clipboard.setStringAsync(url);
     exitSelection();
   };
   const submitReport = async () => {
@@ -323,43 +333,56 @@ export default function ChatScreen({ route, navigation }: Props) {
                 <Pressable onPress={singleReply} hitSlop={8}>
                   <Ionicons name="arrow-undo-outline" size={21} color={colors.primary} />
                 </Pressable>
-                <Pressable onPress={singlePin} hitSlop={8}>
-                  <Ionicons name={singleSelected.is_pinned ? "pin" : "pin-outline"} size={20} color={colors.primary} />
-                </Pressable>
-                {singleSelected.channel_id ? (
-                  <Pressable onPress={singleAddToList} hitSlop={8}>
-                    <Ionicons name="list-outline" size={21} color={colors.primary} />
+                <View>
+                  <Pressable onPress={() => setOverflowOpen((v) => !v)} hitSlop={8}>
+                    <Ionicons name="ellipsis-vertical" size={20} color={colors.primary} />
                   </Pressable>
-                ) : null}
-                <Pressable onPress={singleRemind} hitSlop={8}>
-                  <Ionicons name="alarm-outline" size={21} color={colors.primary} />
-                </Pressable>
-                {canEditSingle || canReportSingle ? (
-                  <View>
-                    <Pressable onPress={() => setOverflowOpen((v) => !v)} hitSlop={8}>
-                      <Ionicons name="ellipsis-vertical" size={20} color={colors.primary} />
-                    </Pressable>
-                    {overflowOpen ? (
-                      <>
-                        <Pressable style={styles.overflowBackdrop} onPress={() => setOverflowOpen(false)} />
-                        <View style={styles.overflowMenu}>
-                          {canEditSingle ? (
-                            <Pressable style={styles.overflowItem} onPress={() => { setOverflowOpen(false); singleEdit(); }}>
-                              <Ionicons name="pencil-outline" size={16} color={colors.text} />
-                              <Text style={styles.overflowItemText}>Edit message</Text>
-                            </Pressable>
-                          ) : null}
-                          {canReportSingle ? (
-                            <Pressable style={styles.overflowItem} onPress={() => { setOverflowOpen(false); singleReport(); }}>
-                              <Ionicons name="flag-outline" size={16} color={colors.danger} />
-                              <Text style={[styles.overflowItemText, { color: colors.danger }]}>Report</Text>
-                            </Pressable>
-                          ) : null}
-                        </View>
-                      </>
-                    ) : null}
-                  </View>
-                ) : null}
+                  {overflowOpen ? (
+                    <>
+                      <Pressable style={styles.overflowBackdrop} onPress={() => setOverflowOpen(false)} />
+                      <View style={styles.overflowMenu}>
+                        <Pressable style={styles.overflowItem} onPress={() => { setOverflowOpen(false); singlePin(); }}>
+                          <Ionicons name={singleSelected.is_pinned ? "pin" : "pin-outline"} size={16} color={colors.text} />
+                          <Text style={styles.overflowItemText}>{singleSelected.is_pinned ? "Unpin" : "Pin to chat"}</Text>
+                        </Pressable>
+                        <Pressable style={styles.overflowItem} onPress={() => { setOverflowOpen(false); singleRemind(); }}>
+                          <Ionicons name="alarm-outline" size={16} color={colors.text} />
+                          <Text style={styles.overflowItemText}>Remind me</Text>
+                        </Pressable>
+                        {singleSelected.channel_id ? (
+                          <Pressable style={styles.overflowItem} onPress={() => { setOverflowOpen(false); singleAddToList(); }}>
+                            <Ionicons name="list-outline" size={16} color={colors.text} />
+                            <Text style={styles.overflowItemText}>Add to list</Text>
+                          </Pressable>
+                        ) : null}
+                        {singleSelected.type === "text" && singleSelected.text ? (
+                          <Pressable style={styles.overflowItem} onPress={() => { setOverflowOpen(false); singleCopyText(); }}>
+                            <Ionicons name="copy-outline" size={16} color={colors.text} />
+                            <Text style={styles.overflowItemText}>Copy text</Text>
+                          </Pressable>
+                        ) : null}
+                        {singleSelected.attachments?.[0]?.url ? (
+                          <Pressable style={styles.overflowItem} onPress={() => { setOverflowOpen(false); singleCopyLink(); }}>
+                            <Ionicons name="link-outline" size={16} color={colors.text} />
+                            <Text style={styles.overflowItemText}>Copy link</Text>
+                          </Pressable>
+                        ) : null}
+                        {canEditSingle ? (
+                          <Pressable style={styles.overflowItem} onPress={() => { setOverflowOpen(false); singleEdit(); }}>
+                            <Ionicons name="pencil-outline" size={16} color={colors.text} />
+                            <Text style={styles.overflowItemText}>Edit message</Text>
+                          </Pressable>
+                        ) : null}
+                        {canReportSingle ? (
+                          <Pressable style={styles.overflowItem} onPress={() => { setOverflowOpen(false); singleReport(); }}>
+                            <Ionicons name="flag-outline" size={16} color={colors.danger} />
+                            <Text style={[styles.overflowItemText, { color: colors.danger }]}>Report</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    </>
+                  ) : null}
+                </View>
               </>
             ) : null}
           </View>
@@ -529,6 +552,7 @@ export default function ChatScreen({ route, navigation }: Props) {
                 showReactionBar={selectionMode && selectedIds.size === 1 && selectedIds.has(item.id)}
                 onEnterSelection={() => enterSelection(item.id)}
                 onToggleSelect={() => toggleSelect(item.id)}
+                onRetry={() => retrySend(item)}
               />
             </>
           );

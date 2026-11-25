@@ -94,6 +94,11 @@ export interface Message {
   }>;
   reactions: Reaction[];
   status: string;
+  // Client-only: set while a just-sent message is still an optimistic local
+  // echo (not yet confirmed by the server) or failed to send at all. Never
+  // present on anything that came from the API.
+  pending?: boolean;
+  failed?: boolean;
   is_pinned?: boolean;
   is_starred?: boolean;
   edited_at?: string | null;

@@ -14,8 +14,38 @@ import { absoluteMediaUrl } from '../utils/mediaUrl';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
+// Replaces the old emoji-as-icon menu rows (↩️📋➡️...) with a real stroke-icon
+// set — emoji render inconsistently across OSes/fonts and read as decoration
+// rather than a meaningful glyph for the action.
+const MENU_ICON_PATHS = {
+  reply: 'M9 14 4 9l5-5 M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5V20',
+  forward: 'M15 14l5-5-5-5 M20 9H9.5A5.5 5.5 0 0 0 4 14.5V20',
+  copy: 'M9 9h11v11H9z M5 15H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1',
+  select: 'M5 12l4 4L19 6',
+  pin: 'M9 4h6l-.5 6L17 12v2H7v-2l2.5-2Z M12 14v6',
+  star: 'M12 4l2.4 5.1 5.6.6-4.2 3.8 1.2 5.5L12 16.7 6.9 19l1.3-5.5-4.2-3.8 5.6-.6Z',
+  starFilled: 'M12 4l2.4 5.1 5.6.6-4.2 3.8 1.2 5.5L12 16.7 6.9 19l1.3-5.5-4.2-3.8 5.6-.6Z',
+  flag: 'M6 4v16 M6 5h11l-2.5 3.5L17 12H6',
+  list: 'M8 6h12 M8 12h12 M8 18h12 M4 6h.01 M4 12h.01 M4 18h.01',
+  edit: 'M4 20l1-4.5L16 4.5 19.5 8 8.5 19Z M14 6.5 17.5 10',
+  trash: 'M5 7h14 M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2 M7 7l1 13h8l1-13',
+};
+
+/** Small stroke icon for a menu row — see MENU_ICON_PATHS. */
+function MenuIcon({ name, filled }) {
+  const d = MENU_ICON_PATHS[name];
+  if (!d) return null;
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {d.split(' M').map((seg, i) => (
+        <path key={i} d={i === 0 ? seg : `M${seg}`} />
+      ))}
+    </svg>
+  );
+}
+
 /** One row in the message actions dropdown — icon, label, optional danger styling. */
-function MenuItem({ icon, label, onClick, disabled, danger }) {
+function MenuItem({ icon, iconFilled, label, onClick, disabled, danger }) {
   return (
     <button
       onClick={onClick}
@@ -24,7 +54,9 @@ function MenuItem({ icon, label, onClick, disabled, danger }) {
         danger ? 'text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40' : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700'
       }`}
     >
-      <span className="w-4 text-center">{icon}</span>
+      <span className="flex w-4 justify-center">
+        <MenuIcon name={icon} filled={iconFilled} />
+      </span>
       <span>{label}</span>
     </button>
   );
@@ -307,20 +339,27 @@ export default function MessageBubble({
               </button>
             </div>
             <div className="border-t border-slate-100 dark:border-slate-700" />
-            <MenuItem icon="↩️" label="Reply" onClick={() => { setActionsOpen(false); onReply?.(m); }} />
-            {m.text && <MenuItem icon="📋" label="Copy" onClick={copyText} />}
-            <MenuItem icon="➡️" label="Forward" onClick={() => { setActionsOpen(false); onForward?.(m); }} />
-            <MenuItem icon="☑️" label="Select" onClick={() => { setActionsOpen(false); onEnterSelection?.(); }} />
-            <MenuItem icon="📌" label={m.is_pinned ? 'Unpin' : 'Pin'} onClick={togglePin} disabled={busy} />
-            <MenuItem icon={starred ? '⭐' : '☆'} label={starred ? 'Unstar' : 'Star'} onClick={toggleStar} />
-            {!own && <MenuItem icon="⚠️" label="Report" onClick={reportMessage} />}
+            <MenuItem icon="reply" label="Reply" onClick={() => { setActionsOpen(false); onReply?.(m); }} />
+            {m.text && <MenuItem icon="copy" label="Copy text" onClick={copyText} />}
+            {media?.url && (
+              <MenuItem
+                icon="copy"
+                label="Copy link"
+                onClick={() => { setActionsOpen(false); navigator.clipboard?.writeText(absoluteMediaUrl(media.url)); }}
+              />
+            )}
+            <MenuItem icon="forward" label="Forward" onClick={() => { setActionsOpen(false); onForward?.(m); }} />
+            <MenuItem icon="select" label="Select" onClick={() => { setActionsOpen(false); onEnterSelection?.(); }} />
+            <MenuItem icon="pin" label={m.is_pinned ? 'Unpin' : 'Pin'} onClick={togglePin} disabled={busy} />
+            <MenuItem icon="star" iconFilled={starred} label={starred ? 'Unstar' : 'Star'} onClick={toggleStar} />
+            {!own && <MenuItem icon="flag" label="Report" onClick={reportMessage} />}
             {m.channel_id && (
-              <MenuItem icon="📋" label="Add to list" onClick={() => { setActionsOpen(false); setAddingToList(true); }} />
+              <MenuItem icon="list" label="Add to list" onClick={() => { setActionsOpen(false); setAddingToList(true); }} />
             )}
             {canEdit && (
-              <MenuItem icon="✏️" label="Edit" onClick={() => { setActionsOpen(false); setEditText(m.text); setEditing(true); }} />
+              <MenuItem icon="edit" label="Edit" onClick={() => { setActionsOpen(false); setEditText(m.text); setEditing(true); }} />
             )}
-            <MenuItem icon="🗑️" label="Delete" danger onClick={() => { setActionsOpen(false); setDeleteMenuOpen(true); }} disabled={busy} />
+            <MenuItem icon="trash" label="Delete" danger onClick={() => { setActionsOpen(false); setDeleteMenuOpen(true); }} disabled={busy} />
           </div>
           </>
         )}
@@ -333,9 +372,9 @@ export default function MessageBubble({
             >
               <p className="px-4 pt-4 text-sm text-slate-500 dark:text-slate-400">Delete this message?</p>
               <div className="mt-2">
-                <MenuItem icon="🗑️" label="Delete for me" onClick={deleteForMe} disabled={busy} />
+                <MenuItem icon="trash" label="Delete for me" onClick={deleteForMe} disabled={busy} />
                 {canDelete && (
-                  <MenuItem icon="🗑️" label="Delete for everyone" danger onClick={deleteForEveryone} disabled={busy} />
+                  <MenuItem icon="trash" label="Delete for everyone" danger onClick={deleteForEveryone} disabled={busy} />
                 )}
               </div>
               <button
