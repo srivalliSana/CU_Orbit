@@ -13,6 +13,7 @@ import { getChannelMembers } from "../../api/channels";
 import { apiErrorMessage } from "../../api/client";
 import { useAuthStore } from "../../state/authStore";
 import MessageBubble from "../../components/MessageBubble";
+import ActionSheet, { type ActionSheetAction } from "../../components/ActionSheet";
 import Composer from "../../components/Composer";
 import ForwardModal from "../../components/ForwardModal";
 import UserProfileModal from "../../components/UserProfileModal";
@@ -147,45 +148,109 @@ export default function ChatScreen({ route, navigation }: Props) {
       buttons
     );
   };
-  const singleReply = () => {
-    if (singleSelected) setReplyTo(singleSelected);
-    exitSelection();
+  // Long-press a single message -> this sheet, tailored to its type (Slack's
+  // model: Text gets Copy, media gets Save/Copy link, everyone gets
+  // Reply/Forward/Star/Pin/Remind, "Select" is the door into the multi-
+  // message batch toolbar further down for forwarding/starring/deleting
+  // several at once).
+  const [actionSheetFor, setActionSheetFor] = useState<Message | null>(null);
+  const sheetSubtitle = (m: Message) => {
+    if (m.type === "text") return m.text;
+    if (m.type === "poll") return m.poll?.question;
+    const name = m.attachments?.[0]?.name;
+    if (name) return name;
+    if (m.type === "image") return "Photo";
+    if (m.type === "video") return "Video";
+    if (m.type === "audio") return "Voice message";
+    if (m.type === "file") return "File";
+    return undefined;
   };
-  const singlePin = () => {
-    if (singleSelected) pin.mutate({ messageId: singleSelected.id, pinned: !singleSelected.is_pinned });
-    exitSelection();
-  };
-  const singleAddToList = () => {
-    if (singleSelected) setAddToListTarget(singleSelected);
-    exitSelection();
-  };
-  const singleRemind = () => {
-    const target = singleSelected;
-    if (!target) return;
-    exitSelection();
-    Alert.alert("Remind me", undefined, [
-      { text: "In 1 hour", onPress: () => remindMessage(target.id, 60).catch(() => {}) },
-      { text: "In 3 hours", onPress: () => remindMessage(target.id, 180).catch(() => {}) },
-      { text: "Tomorrow", onPress: () => remindMessage(target.id, 24 * 60).catch(() => {}) },
-      { text: "Cancel", style: "cancel" },
-    ]);
-  };
-  const singleEdit = () => {
-    if (singleSelected) setEditTarget(singleSelected);
-    exitSelection();
-  };
-  const singleReport = () => {
-    if (singleSelected) setReportTarget(singleSelected);
-    exitSelection();
-  };
-  const singleCopyText = () => {
-    if (singleSelected?.text) Clipboard.setStringAsync(singleSelected.text);
-    exitSelection();
-  };
-  const singleCopyLink = () => {
-    const url = singleSelected ? resolveMediaUrl(singleSelected.attachments?.[0]?.url) : null;
-    if (url) Clipboard.setStringAsync(url);
-    exitSelection();
+  const buildActions = (m: Message): ActionSheetAction[] => {
+    const isOwn = m.sender_id === selfId;
+    const isMedia = ["image", "video", "file", "audio"].includes(m.type) && !!m.attachments?.[0]?.url;
+    const canEdit = (isOwn || isSuperAdmin) && m.type === "text";
+    const canReport = !isOwn;
+    const canDeleteEveryone = isOwn || canModerate;
+    const list: ActionSheetAction[] = [
+      { key: "reply", label: "Reply", icon: "arrow-undo-outline", onPress: () => setReplyTo(m) },
+    ];
+    if (m.type === "text" && m.text) {
+      list.push({ key: "copy", label: "Copy text", icon: "copy-outline", onPress: () => Clipboard.setStringAsync(m.text) });
+    }
+    if (isMedia) {
+      list.push({
+        key: "save",
+        label: "Save to device",
+        icon: "download-outline",
+        onPress: () => {
+          const att = m.attachments?.[0];
+          const url = resolveMediaUrl(att?.url);
+          if (url) saveFile(url, att?.name || "file", att?.mimeType);
+        },
+      });
+      list.push({
+        key: "copylink",
+        label: "Copy link",
+        icon: "link-outline",
+        onPress: () => {
+          const url = resolveMediaUrl(m.attachments?.[0]?.url);
+          if (url) Clipboard.setStringAsync(url);
+        },
+      });
+    }
+    list.push({ key: "forward", label: "Forward", icon: "arrow-redo-outline", onPress: () => setForwarding([m]) });
+    list.push({
+      key: "star",
+      label: m.is_starred ? "Unstar" : "Star",
+      icon: m.is_starred ? "star" : "star-outline",
+      onPress: () => star.mutate({ messageId: m.id, starred: !m.is_starred }),
+    });
+    list.push({
+      key: "pin",
+      label: m.is_pinned ? "Unpin" : "Pin to chat",
+      icon: m.is_pinned ? "pin" : "pin-outline",
+      onPress: () => pin.mutate({ messageId: m.id, pinned: !m.is_pinned }),
+    });
+    if (m.channel_id) {
+      list.push({ key: "addtolist", label: "Add to list", icon: "list-outline", onPress: () => setAddToListTarget(m) });
+    }
+    list.push({
+      key: "remind",
+      label: "Remind me",
+      icon: "alarm-outline",
+      onPress: () => {
+        Alert.alert("Remind me", undefined, [
+          { text: "In 1 hour", onPress: () => remindMessage(m.id, 60).catch(() => {}) },
+          { text: "In 3 hours", onPress: () => remindMessage(m.id, 180).catch(() => {}) },
+          { text: "Tomorrow", onPress: () => remindMessage(m.id, 24 * 60).catch(() => {}) },
+          { text: "Cancel", style: "cancel" },
+        ]);
+      },
+    });
+    if (canEdit) {
+      list.push({ key: "edit", label: "Edit message", icon: "pencil-outline", onPress: () => setEditTarget(m) });
+    }
+    list.push({ key: "select", label: "Select", icon: "checkmark-circle-outline", onPress: () => enterSelection(m.id) });
+    if (canReport) {
+      list.push({ key: "report", label: "Report", icon: "flag-outline", destructive: true, onPress: () => setReportTarget(m) });
+    }
+    list.push({
+      key: "delete",
+      label: "Delete",
+      icon: "trash-outline",
+      destructive: true,
+      onPress: () => {
+        const buttons: Parameters<typeof Alert.alert>[2] = [
+          { text: "Delete for me", onPress: () => hide.mutate(m.id) },
+        ];
+        if (canDeleteEveryone) {
+          buttons.push({ text: "Delete for everyone", style: "destructive", onPress: () => remove.mutate(m.id) });
+        }
+        buttons.push({ text: "Cancel", style: "cancel" });
+        Alert.alert("Delete this message?", undefined, buttons);
+      },
+    });
+    return list;
   };
   const submitReport = async () => {
     if (!reportTarget) return;
@@ -286,7 +351,6 @@ export default function ChatScreen({ route, navigation }: Props) {
   useChannelSocket(containerId);
 
   const [memberCount, setMemberCount] = useState<number | null>(null);
-  const [overflowOpen, setOverflowOpen] = useState(false);
 
   // "ADMIN: delete messages in own channels (from anyone)" — a channel's
   // own admin qualifies only for that channel; a workspace admin always does.
@@ -309,14 +373,11 @@ export default function ChatScreen({ route, navigation }: Props) {
   // extra lookup is needed to know who this chat is with.
   const otherUserId = kind === "dm" ? containerId.split("_").find((id) => id !== selfId) : undefined;
 
-  // Single-message-only actions — showing Reply/Pin/Add to list/Remind for
-  // a 2+ message selection wouldn't mean anything, so these (and the "⋮"
-  // overflow) only appear at exactly one selected.
-  const canEditSingle = !!singleSelected && (singleSelected.sender_id === selfId || isSuperAdmin) && singleSelected.type === "text";
-  const canReportSingle = !!singleSelected && singleSelected.sender_id !== selfId;
-
   useEffect(() => {
     if (selectionMode) {
+      // Every action lives in the long-press sheet now — this bar is just
+      // the multi-message batch mode ("Select" in that sheet gets here),
+      // so the header stays plain: a count and a way out.
       navigation.setOptions({
         headerTitle: () => (
           <Text style={styles.headerTitleText}>{selectedIds.size} selected</Text>
@@ -326,67 +387,7 @@ export default function ChatScreen({ route, navigation }: Props) {
             <Ionicons name="close" size={24} color={colors.text} />
           </Pressable>
         ),
-        headerRight: () => (
-          <View style={styles.headerActions}>
-            {singleSelected ? (
-              <>
-                <Pressable onPress={singleReply} hitSlop={8}>
-                  <Ionicons name="arrow-undo-outline" size={21} color={colors.primary} />
-                </Pressable>
-                <View>
-                  <Pressable onPress={() => setOverflowOpen((v) => !v)} hitSlop={8}>
-                    <Ionicons name="ellipsis-vertical" size={20} color={colors.primary} />
-                  </Pressable>
-                  {overflowOpen ? (
-                    <>
-                      <Pressable style={styles.overflowBackdrop} onPress={() => setOverflowOpen(false)} />
-                      <View style={styles.overflowMenu}>
-                        <Pressable style={styles.overflowItem} onPress={() => { setOverflowOpen(false); singlePin(); }}>
-                          <Ionicons name={singleSelected.is_pinned ? "pin" : "pin-outline"} size={16} color={colors.text} />
-                          <Text style={styles.overflowItemText}>{singleSelected.is_pinned ? "Unpin" : "Pin to chat"}</Text>
-                        </Pressable>
-                        <Pressable style={styles.overflowItem} onPress={() => { setOverflowOpen(false); singleRemind(); }}>
-                          <Ionicons name="alarm-outline" size={16} color={colors.text} />
-                          <Text style={styles.overflowItemText}>Remind me</Text>
-                        </Pressable>
-                        {singleSelected.channel_id ? (
-                          <Pressable style={styles.overflowItem} onPress={() => { setOverflowOpen(false); singleAddToList(); }}>
-                            <Ionicons name="list-outline" size={16} color={colors.text} />
-                            <Text style={styles.overflowItemText}>Add to list</Text>
-                          </Pressable>
-                        ) : null}
-                        {singleSelected.type === "text" && singleSelected.text ? (
-                          <Pressable style={styles.overflowItem} onPress={() => { setOverflowOpen(false); singleCopyText(); }}>
-                            <Ionicons name="copy-outline" size={16} color={colors.text} />
-                            <Text style={styles.overflowItemText}>Copy text</Text>
-                          </Pressable>
-                        ) : null}
-                        {singleSelected.attachments?.[0]?.url ? (
-                          <Pressable style={styles.overflowItem} onPress={() => { setOverflowOpen(false); singleCopyLink(); }}>
-                            <Ionicons name="link-outline" size={16} color={colors.text} />
-                            <Text style={styles.overflowItemText}>Copy link</Text>
-                          </Pressable>
-                        ) : null}
-                        {canEditSingle ? (
-                          <Pressable style={styles.overflowItem} onPress={() => { setOverflowOpen(false); singleEdit(); }}>
-                            <Ionicons name="pencil-outline" size={16} color={colors.text} />
-                            <Text style={styles.overflowItemText}>Edit message</Text>
-                          </Pressable>
-                        ) : null}
-                        {canReportSingle ? (
-                          <Pressable style={styles.overflowItem} onPress={() => { setOverflowOpen(false); singleReport(); }}>
-                            <Ionicons name="flag-outline" size={16} color={colors.danger} />
-                            <Text style={[styles.overflowItemText, { color: colors.danger }]}>Report</Text>
-                          </Pressable>
-                        ) : null}
-                      </View>
-                    </>
-                  ) : null}
-                </View>
-              </>
-            ) : null}
-          </View>
-        ),
+        headerRight: () => null,
       });
       return;
     }
@@ -421,7 +422,7 @@ export default function ChatScreen({ route, navigation }: Props) {
         </View>
       ),
     });
-  }, [navigation, title, kind, containerId, otherUserId, memberCount, selectionMode, selectedIds, singleSelected, overflowOpen, canEditSingle, canReportSingle]);
+  }, [navigation, title, kind, containerId, otherUserId, memberCount, selectionMode, selectedIds]);
 
   // Switching chats, or the last selected message getting removed out from
   // under the selection, should never leave a stale selection bar up.
@@ -550,7 +551,7 @@ export default function ChatScreen({ route, navigation }: Props) {
                 selectionMode={selectionMode}
                 selected={selectedIds.has(item.id)}
                 showReactionBar={selectionMode && selectedIds.size === 1 && selectedIds.has(item.id)}
-                onEnterSelection={() => enterSelection(item.id)}
+                onEnterSelection={() => setActionSheetFor(item)}
                 onToggleSelect={() => toggleSelect(item.id)}
                 onRetry={() => retrySend(item)}
               />
@@ -646,6 +647,14 @@ export default function ChatScreen({ route, navigation }: Props) {
         onClose={() => setCreatingPoll(false)}
       />
 
+      <ActionSheet
+        visible={!!actionSheetFor}
+        title={actionSheetFor?.sender_name ?? ""}
+        subtitle={actionSheetFor ? sheetSubtitle(actionSheetFor) : undefined}
+        actions={actionSheetFor ? buildActions(actionSheetFor) : []}
+        onClose={() => setActionSheetFor(null)}
+      />
+
       <ForwardModal
         messages={forwarding}
         visible={forwarding.length > 0}
@@ -739,39 +748,6 @@ const makeStyles = (colors: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     fontSize: 12,
     color: colors.textMuted,
     marginTop: 1,
-  },
-  overflowBackdrop: {
-    position: "absolute",
-    top: -1000, left: -1000, right: -1000, bottom: -1000,
-  },
-  overflowMenu: {
-    position: "absolute",
-    top: 28,
-    right: 0,
-    width: 180,
-    backgroundColor: colors.background,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    paddingVertical: 4,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-    zIndex: 10,
-  },
-  overflowItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  overflowItemText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: colors.text,
   },
   selectionBar: {
     flexDirection: "row",
