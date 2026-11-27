@@ -28,22 +28,31 @@ const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
 // Lazy require, not a static import — authStore itself pulls in api/push.ts,
 // which eventually imports this file for API_ORIGIN, and a static import
 // here would complete that cycle at module-eval time instead of call time.
-function currentSessionToken(): string | null {
+//
+// Prefers the short-lived, uploads-only media token (see authStore's
+// refreshMediaToken / server.js's /api/media/token) over the real session
+// token: a copied/forwarded attachment link only carries that scoped,
+// hours-long credential now, not the full 7-day session that could call any
+// other API route. Falls back to the session token for the brief window
+// right after sign-in before the first media token has landed, so images
+// don't break while that mint is still in flight.
+function currentMediaQueryToken(): string | null {
   try {
-    return require("../state/authStore").useAuthStore.getState().token;
+    const state = require("../state/authStore").useAuthStore.getState();
+    return state.mediaToken || state.token;
   } catch {
     return null;
   }
 }
 
 // /uploads/* now requires a session (see server.js) — a plain RN <Image>
-// can't send an Authorization header, so the token rides along as a query
+// can't send an Authorization header, so a token rides along as a query
 // param instead, same idea as a Slack file URL's signed token.
 export function resolveMediaUrl(path?: string | null): string | null {
   if (!path) return null;
   const absolute = path.startsWith("http") ? path : path.startsWith("/") ? `${API_ORIGIN}${path}` : `${API_ORIGIN}/${path}`;
   if (!absolute.includes("/uploads/")) return absolute;
-  const token = currentSessionToken();
+  const token = currentMediaQueryToken();
   if (!token) return absolute;
   const sep = absolute.includes("?") ? "&" : "?";
   return `${absolute}${sep}token=${encodeURIComponent(token)}`;

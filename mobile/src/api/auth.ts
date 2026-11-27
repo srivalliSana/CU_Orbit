@@ -39,6 +39,13 @@ export const verifyOtp = (email: string, code: string) =>
 export const verifyTwoFactor = (twofaToken: string, code: string) =>
   client.post<SignInResponse>("/auth/2fa/verify", { twofa_token: twofaToken, code }).then((res) => res.data);
 
+// A short-lived (2h), uploads-only token — see server.js's /api/media/token
+// and resolveMediaUrl. Distinct from the real session token so a forwarded
+// attachment link can't be used to call any other API route, and expires on
+// its own instead of staying valid for the session's full 7 days.
+export const getMediaToken = () =>
+  client.post<{ token: string; expires_in: number }>("/media/token").then((res) => res.data);
+
 export const resendTwoFactor = (twofaToken: string) =>
   client.post<{ success: boolean }>("/auth/2fa/resend", { twofa_token: twofaToken }).then((res) => res.data);
 

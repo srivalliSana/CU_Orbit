@@ -52,6 +52,29 @@ function verifyPendingTwoFactorToken(token) {
     return jwt.verify(token, ORBIT_SECRET, { algorithms: ['HS256'], audience: TWOFA_AUDIENCE });
 }
 
+// /uploads/* used to authenticate a shareable link by putting the viewer's
+// *real* session token in the query string (mobile's resolveMediaUrl) — a
+// full-privilege, 7-day credential, identical to the one used to call every
+// other API route. Forwarding one attachment link handed the recipient the
+// sender's whole account for up to a week, not just that one file. This is
+// the same distinct-audience trick as the 2FA token above: a token minted
+// here carries the 'cu-orbit-media' audience, so requireAuth's normal
+// verifySession (audience 'cu-orbit') rejects it outright — it is useless
+// anywhere but the one route that accepts this audience — and its TTL is
+// short enough that a leaked link stops working on its own.
+const MEDIA_AUDIENCE = 'cu-orbit-media';
+const MEDIA_TTL = '2h';
+
+function issueMediaToken(user) {
+    assertSecrets();
+    return jwt.sign({ sub: user.id }, ORBIT_SECRET, { algorithm: 'HS256', expiresIn: MEDIA_TTL, audience: MEDIA_AUDIENCE });
+}
+
+function verifyMediaToken(token) {
+    assertSecrets();
+    return jwt.verify(token, ORBIT_SECRET, { algorithms: ['HS256'], audience: MEDIA_AUDIENCE });
+}
+
 function bearer(req) {
     const h = req.get('authorization') || '';
     return h.startsWith('Bearer ') ? h.slice(7).trim() : null;
@@ -116,4 +139,5 @@ function requireRole(...roles) {
 module.exports = {
     issueSession, verifySession, requireAuth, requireRole, assertSecrets, setOnAuthenticated, setActiveCheck, AUDIENCE,
     issuePendingTwoFactorToken, verifyPendingTwoFactorToken,
+    issueMediaToken, verifyMediaToken,
 };

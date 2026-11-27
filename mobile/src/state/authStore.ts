@@ -2,6 +2,7 @@ import { create } from "zustand";
 import * as SecureStore from "expo-secure-store";
 
 import { unregisterPushToken } from "../api/push";
+import { getMediaToken } from "../api/auth";
 import type { User } from "../types/api";
 
 const SESSION_KEY = "orbit_session";
@@ -13,6 +14,11 @@ interface AuthState {
   status: AuthStatus;
   token: string | null;
   user: User | null;
+  // Short-lived uploads-only token — see getMediaToken/resolveMediaUrl.
+  // Not persisted: it's cheap to re-mint and short-lived enough that a
+  // stale copy from disk would often already be expired.
+  mediaToken: string | null;
+  refreshMediaToken: () => Promise<void>;
   // A join/:code deep link opened while signed out: AuthStack has no
   // JoinChannel route for React Navigation's own linking config to resolve
   // against, so the code is held here and consumed once signed in (see
@@ -25,11 +31,24 @@ interface AuthState {
   setPendingJoinCode: (code: string | null) => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   status: "hydrating",
   token: null,
   user: null,
+  mediaToken: null,
   pendingJoinCode: null,
+
+  refreshMediaToken: async () => {
+    if (!get().token) return;
+    try {
+      const { token } = await getMediaToken();
+      set({ mediaToken: token });
+    } catch {
+      // Best-effort — resolveMediaUrl falls back to the real session token
+      // when this hasn't landed yet, so a failed refresh degrades rather
+      // than breaks attachment viewing.
+    }
+  },
 
   hydrate: async () => {
     const token = await SecureStore.getItemAsync(SESSION_KEY);
@@ -41,6 +60,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const cachedUserJson = await SecureStore.getItemAsync(USER_KEY);
       const cachedUser = cachedUserJson ? (JSON.parse(cachedUserJson) as User) : null;
       set({ token, user: cachedUser, status: "signedIn" });
+      get().refreshMediaToken();
     } else {
       set({ status: "signedOut" });
     }
@@ -50,6 +70,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     await SecureStore.setItemAsync(SESSION_KEY, token);
     await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
     set({ token, user, status: "signedIn" });
+    get().refreshMediaToken();
   },
 
   // Refreshes the cached profile (e.g. after /me revalidates the token, or
@@ -68,7 +89,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch {}
     await SecureStore.deleteItemAsync(SESSION_KEY);
     await SecureStore.deleteItemAsync(USER_KEY);
-    set({ token: null, user: null, status: "signedOut" });
+    set({ token: null, user: null, mediaToken: null, status: "signedOut" });
   },
 
   setPendingJoinCode: (code) => set({ pendingJoinCode: code }),

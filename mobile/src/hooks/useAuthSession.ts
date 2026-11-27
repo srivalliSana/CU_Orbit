@@ -39,6 +39,16 @@ export function useAuthSession() {
     hydrate();
   }, [hydrate]);
 
+  // The media token (see authStore.refreshMediaToken) lasts 2h, shorter than
+  // a typical app session — re-mint it periodically so a long-running
+  // foreground session doesn't outlive it and start 401ing attachment
+  // loads. hydrate()/setSession() already cover app-launch and sign-in.
+  useEffect(() => {
+    if (status !== "signedIn") return;
+    const t = setInterval(() => useAuthStore.getState().refreshMediaToken(), 90 * 60 * 1000);
+    return () => clearInterval(t);
+  }, [status]);
+
   // Once hydrated with a stored token, validate it's still good. Only an
   // actual auth rejection (401/403 — the token really is invalid/expired)
   // signs the user out. A network failure (no response at all — dead wifi,

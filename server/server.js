@@ -80,15 +80,35 @@ function sendSession(req, res, user) {
 // ?token= query param the mobile app appends itself (see resolveMediaUrl).
 app.use('/uploads', (req, res, next) => {
     const bearer = (req.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
-    const token = bearer || readCookie(req, 'orbit_session') || (typeof req.query.token === 'string' ? req.query.token : '');
+    const cookie = readCookie(req, 'orbit_session');
+    const queryToken = typeof req.query.token === 'string' ? req.query.token : '';
+    const token = bearer || cookie || queryToken;
     if (!token) return res.status(401).end();
     try {
         auth.verifySession(token);
     } catch (e) {
+        // A query-string token (mobile's resolveMediaUrl) is a short-lived,
+        // uploads-only media token, not a real session — see issueMediaToken.
+        // Falls through to here rather than being tried first since the
+        // bearer/cookie paths are always real sessions.
+        if (queryToken && token === queryToken) {
+            try {
+                auth.verifyMediaToken(queryToken);
+                return next();
+            } catch (e2) { /* neither token type is valid */ }
+        }
         return res.status(401).end();
     }
     next();
 }, express.static(uploadDir));
+
+// Mints the short-lived, uploads-only token above for a signed-in user —
+// called by the mobile app so attachment links it shares/forwards carry a
+// credential that expires in hours and is useless against any other route,
+// instead of the viewer's real 7-day session token.
+app.post('/api/media/token', auth.requireAuth, (req, res) => {
+    res.json({ token: auth.issueMediaToken(req.user), expires_in: 7200 });
+});
 
 // CampusOne embeds the messenger in an iframe at /connect, so it must be
 // allowed to frame us — while everyone else is still refused. 'self' keeps the
